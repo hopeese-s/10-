@@ -337,63 +337,65 @@
 
   // ─── Stats Bar ───────────────────────────────────────────
   function renderStatsBar(day, checks) {
-    const totalStudyBlocks = day.blocks.filter(b => b.isStudyBlock).length;
+    const studyBlocks = day.blocks.filter(b => b.isStudyBlock);
+    const totalStudyBlocks = studyBlocks.length;
     const doneBlocks = Object.values(checks).filter(Boolean).length;
-    const pct = totalStudyBlocks > 0 ? Math.round((doneBlocks / totalStudyBlocks) * 100) : (day.studyMinutes === 0 ? 100 : 0);
+    const pct = totalStudyBlocks > 0
+      ? Math.round((doneBlocks / totalStudyBlocks) * 100)
+      : (day.studyMinutes === 0 ? 100 : 0);
+
     const sleepH = Math.floor(day.sleepMinutes / 60);
     const sleepM = day.sleepMinutes % 60;
     const studyH = Math.floor(day.studyMinutes / 60);
     const studyM = day.studyMinutes % 60;
+    const studyLabel = day.studyMinutes === 0 ? 'พักผ่อน'
+      : `${studyH > 0 ? studyH + ' ชม.' : ''}${studyM > 0 ? ' ' + studyM + ' น.' : ''}`;
 
-    const r = 22, circ = 2 * Math.PI * r, offset = circ - (pct / 100) * circ;
-    const color = pct === 100 ? '#10b981' : pct >= 50 ? '#60a5fa' : '#f59e0b';
-
-    // Weekly streak
-    const streak = calcWeeklyStreak();
+    const r = 20, circ = 2 * Math.PI * r;
+    const offset = circ - (pct / 100) * circ;
+    const ringColor = pct === 100 ? '#34c759' : pct >= 50 ? 'var(--accent)' : '#ff9500';
+    const weekStat = calcWeeklyStreak();
 
     return `
       <div class="stat-item">
-        <div class="stat-icon sleep">😴</div>
+        <div class="stat-icon">😴</div>
         <div class="stat-body">
           <div class="stat-label">นอน</div>
-          <div class="stat-value">${sleepH}<span style="font-size:12px;font-weight:500"> ชม.</span>${sleepM > 0 ? sleepM + 'น.' : ''}</div>
-          <div class="stat-sub">~8 ชม. เป้าหมาย</div>
+          <div class="stat-value">${sleepH}<span> ชม.${sleepM > 0 ? ' ' + sleepM + 'น.' : ''}</span></div>
+          <div class="stat-sub">เป้า ~8 ชม.</div>
         </div>
       </div>
-      <div class="stat-divider"></div>
       <div class="stat-item">
-        <div class="stat-icon study">📚</div>
+        <div class="stat-icon">📖</div>
         <div class="stat-body">
           <div class="stat-label">ทบทวน</div>
-          <div class="stat-value">${studyH > 0 ? studyH + ' ชม.' : ''}${studyM > 0 ? studyM + ' น.' : studyH === 0 ? 'พักผ่อน' : ''}</div>
-          <div class="stat-sub">${totalStudyBlocks} บล็อก · ${doneBlocks} ทำแล้ว</div>
+          <div class="stat-value">${studyLabel}</div>
+          <div class="stat-sub">${totalStudyBlocks} บล็อก · ${doneBlocks} เสร็จแล้ว</div>
         </div>
       </div>
-      <div class="stat-divider"></div>
-      <div class="stat-item progress-ring-wrap">
-        <svg class="progress-ring-svg" width="56" height="56" viewBox="0 0 56 56">
-          <circle class="progress-ring-bg" cx="28" cy="28" r="${r}"/>
-          <circle class="progress-ring-fg" cx="28" cy="28" r="${r}"
-            stroke="${color}"
+      <div class="progress-ring-wrap">
+        <svg width="48" height="48" viewBox="0 0 48 48">
+          <circle class="progress-ring-bg" cx="24" cy="24" r="${r}"/>
+          <circle class="progress-ring-fg" cx="24" cy="24" r="${r}"
+            stroke="${ringColor}"
             stroke-dasharray="${circ.toFixed(1)}"
             stroke-dashoffset="${offset.toFixed(1)}"
-            transform="rotate(-90 28 28)"
+            transform="rotate(-90 24 24)"
           />
-          <text class="progress-ring-text" x="28" y="28" fill="${color}" font-size="13">${pct}%</text>
+          <text class="progress-ring-text" x="24" y="24" fill="${ringColor}" font-size="11">${pct}%</text>
         </svg>
         <div class="stat-body">
-          <div class="stat-label">ความคืบหน้า</div>
-          <div class="stat-value" style="color:${color}">${pct === 100 ? 'ครบแล้ว! 🎉' : pct + '%'}</div>
-          <div class="stat-sub">วันนี้</div>
+          <div class="stat-label">วันนี้</div>
+          <div class="stat-value" style="color:${ringColor};font-size:15px">${pct === 100 ? 'ครบแล้ว!' : pct + '%'}</div>
+          <div class="stat-sub">${pct === 100 ? '🎉' : 'เสร็จ ' + doneBlocks + '/' + totalStudyBlocks}</div>
         </div>
       </div>
-      <div class="stat-divider"></div>
       <div class="stat-item">
-        <div class="stat-icon streak">🔥</div>
+        <div class="stat-icon">🔥</div>
         <div class="stat-body">
           <div class="stat-label">สัปดาห์นี้</div>
-          <div class="stat-value">${streak.done}/${streak.total}</div>
-          <div class="stat-sub">บล็อกที่ทำแล้ว</div>
+          <div class="stat-value">${weekStat.done}<span>/${weekStat.total}</span></div>
+          <div class="stat-sub">บล็อกสำเร็จ</div>
         </div>
       </div>
     `;
