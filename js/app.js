@@ -272,6 +272,7 @@
     if (remoteVersion > localVersion) {
       // Cloud is meaningfully newer: apply it
       applyCloudData(cloudData);
+      window.location.reload(); // Hard refresh as requested by user
       return 'pulled';
     } else if (localVersion > remoteVersion) {
       // Local is meaningfully newer: push up
@@ -301,6 +302,7 @@
         localStorage.setItem('sd-subjects',  JSON.stringify(state.subjects));
         touchUpdatedAt();
         if (window.CloudSync) CloudSync.pushToCloud(state);
+        window.location.reload(); // Hard refresh as requested by user
       }
       return changed ? 'merged' : 'equal';
     }
@@ -1256,7 +1258,7 @@
           <button class="btn btn-secondary" id="create-folder-btn" style="font-size:12.5px;padding:7px 14px;display:inline-flex;align-items:center;gap:6px">
             📁 สร้างโฟลเดอร์
           </button>
-          <button class="btn btn-primary" id="add-resource-btn" style="font-size:12.5px;padding:7px 16px;display:inline-flex;align-items:center;gap:6px">
+          <button class="btn btn-primary" id="add-resource-btn" style="font-size:12.5px;padding:7px 16px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;">
             ➕ เพิ่มชีทเรียน / ลิงค์
           </button>
         </div>
