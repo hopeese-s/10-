@@ -1655,13 +1655,13 @@
     document.body.style.overflow = 'hidden';
   }
 
-  // ─── PDF.js Multi-Page Canvas Renderer for iPad / Mobile / Desktop ─
+  // ─── High-Performance Page-by-Page PDF Viewer for iPad / Mobile / Desktop ─
   async function renderPdfWithPdfJs(url, bodyEl, title) {
     bodyEl.innerHTML = `
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;gap:12px;min-height:300px;text-align:center">
         <div style="font-size:32px">⏳</div>
         <div style="font-size:14px;font-weight:600;color:var(--label)">กำลังเปิดเอกสาร PDF...</div>
-        <div style="font-size:12px;color:var(--label-3)">กำลังเรนเดอร์ทุกหน้าให้เลื่อนดูได้บน iPad และทุกอุปกรณ์</div>
+        <div style="font-size:12px;color:var(--label-3)">เปิดดูทีละหน้าได้อย่างรวดเร็ว ไม่กระตุก ไม่กินแรม</div>
       </div>
     `;
 
@@ -1676,12 +1676,29 @@
       const pdf = await loadingTask.promise;
       const numPages = pdf.numPages;
 
+      let currentPage = 1;
+      let currentScale = 1.0;
+      let isRendering = false;
+
       bodyEl.innerHTML = `
-        <div class="pdf-viewer-bar" style="position:sticky;top:0;z-index:15;background:var(--bg-1);border-bottom:1px solid var(--sep);padding:8px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-          <div style="font-size:12.5px;font-weight:600;color:var(--label-2);display:flex;align-items:center;gap:6px">
-            <span>📄</span>
-            <span>ทั้งหมด <strong>${numPages}</strong> หน้า</span>
+        <div class="pdf-viewer-bar" style="position:sticky;top:0;z-index:15;background:var(--bg-1);border-bottom:1px solid var(--sep);padding:8px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+          <!-- Page Navigation -->
+          <div style="display:flex;align-items:center;gap:6px">
+            <button id="pdf-prev-btn" class="btn btn-secondary" style="padding:5px 12px;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:4px">
+              ◀️ ก่อนหน้า
+            </button>
+            <div style="display:flex;align-items:center;gap:4px;font-size:12.5px;font-weight:600;color:var(--label-2)">
+              <span>หน้า</span>
+              <input type="number" id="pdf-page-num-input" min="1" max="${numPages}" value="1" 
+                style="width:48px;padding:3px 6px;text-align:center;border:1px solid var(--sep);border-radius:var(--r-s);background:var(--bg-2);color:var(--label);font-weight:700;font-size:12px" />
+              <span>/ <strong>${numPages}</strong></span>
+            </div>
+            <button id="pdf-next-btn" class="btn btn-secondary" style="padding:5px 12px;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:4px">
+              ถัดไป ▶️
+            </button>
           </div>
+
+          <!-- Zoom Controls -->
           <div style="display:flex;align-items:center;gap:6px">
             <button id="pdf-zoom-out" class="btn btn-secondary" style="padding:4px 10px;font-size:12px;font-weight:600" title="ย่อ">🔍 -</button>
             <span id="pdf-zoom-val" style="font-size:12px;font-weight:600;min-width:42px;text-align:center;color:var(--label)">100%</span>
@@ -1689,35 +1706,39 @@
             <button id="pdf-zoom-fit" class="btn btn-secondary" style="padding:4px 10px;font-size:12px;font-weight:600" title="ปรับให้พอดีความกว้างหน้าจอ">📐 พอดีจอ</button>
           </div>
         </div>
-        <div id="pdf-pages-container" style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:16px 8px;background:var(--bg-3);overflow-y:auto;-webkit-overflow-scrolling:touch;max-height:calc(90vh - 170px)">
+
+        <div id="pdf-page-container" style="display:flex;align-items:center;justify-content:center;padding:16px 8px;background:var(--bg-3);overflow:auto;-webkit-overflow-scrolling:touch;min-height:350px;max-height:calc(90vh - 170px)">
+          <div id="pdf-single-page-wrapper" style="position:relative;background:#fff;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.15);overflow:hidden;transition:transform 0.1s ease">
+            <canvas id="pdf-canvas" style="display:block;max-width:100%;height:auto"></canvas>
+          </div>
         </div>
       `;
 
-      const pagesContainer = bodyEl.querySelector('#pdf-pages-container');
+      const canvas = bodyEl.querySelector('#pdf-canvas');
+      const pageInput = bodyEl.querySelector('#pdf-page-num-input');
       const zoomValEl = bodyEl.querySelector('#pdf-zoom-val');
+      const prevBtn = bodyEl.querySelector('#pdf-prev-btn');
+      const nextBtn = bodyEl.querySelector('#pdf-next-btn');
+      const container = bodyEl.querySelector('#pdf-page-container');
 
-      // Auto-fit scale based on container width so schedule sheets aren't excessively huge
+      // Calculate initial auto-fit scale
       const firstPage = await pdf.getPage(1);
       const initialVp = firstPage.getViewport({ scale: 1.0 });
-      const availableWidth = Math.max(300, (bodyEl.clientWidth || window.innerWidth * 0.9) - 40);
-      let currentScale = Math.min(1.4, Math.max(0.45, availableWidth / initialVp.width));
-
+      const availableWidth = Math.max(280, (container.clientWidth || window.innerWidth * 0.9) - 40);
+      currentScale = Math.min(1.3, Math.max(0.4, availableWidth / initialVp.width));
       if (zoomValEl) zoomValEl.textContent = `${Math.round(currentScale * 100)}%`;
 
-      async function renderPages(scale) {
-        pagesContainer.innerHTML = '';
-        for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-          const page = await pdf.getPage(pageNum);
-          const viewport = page.getViewport({ scale });
+      async function renderCurrentPage() {
+        if (isRendering) return;
+        isRendering = true;
 
-          const wrapper = document.createElement('div');
-          wrapper.className = 'pdf-page-wrapper';
-          wrapper.style.cssText = 'position:relative;background:#fff;border-radius:6px;box-shadow:0 3px 12px rgba(0,0,0,0.12);margin-bottom:6px;max-width:100%;overflow:hidden';
+        if (prevBtn) prevBtn.disabled = (currentPage <= 1);
+        if (nextBtn) nextBtn.disabled = (currentPage >= numPages);
+        if (pageInput) pageInput.value = currentPage;
 
-          const canvas = document.createElement('canvas');
-          canvas.style.display = 'block';
-          canvas.style.maxWidth = '100%';
-          canvas.style.height = 'auto';
+        try {
+          const page = await pdf.getPage(currentPage);
+          const viewport = page.getViewport({ scale: currentScale });
 
           const outputScale = window.devicePixelRatio || 1;
           canvas.width = Math.floor(viewport.width * outputScale);
@@ -1728,49 +1749,84 @@
           const context = canvas.getContext('2d');
           const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null;
 
-          const badge = document.createElement('div');
-          badge.style.cssText = 'position:absolute;bottom:6px;right:8px;background:rgba(0,0,0,0.55);color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;pointer-events:none;font-weight:600';
-          badge.textContent = `${pageNum} / ${numPages}`;
-
-          wrapper.appendChild(canvas);
-          wrapper.appendChild(badge);
-          pagesContainer.appendChild(wrapper);
-
           const renderContext = {
             canvasContext: context,
             transform: transform,
             viewport: viewport
           };
+
           await page.render(renderContext).promise;
+          container.scrollTop = 0;
+        } catch (e) {
+          console.error('Error rendering page:', e);
+        } finally {
+          isRendering = false;
         }
       }
 
-      await renderPages(currentScale);
+      await renderCurrentPage();
 
-      // Event listeners for zoom controls
+      // Page change handlers
+      prevBtn?.addEventListener('click', async () => {
+        if (currentPage > 1) {
+          currentPage--;
+          await renderCurrentPage();
+        }
+      });
+
+      nextBtn?.addEventListener('click', async () => {
+        if (currentPage < numPages) {
+          currentPage++;
+          await renderCurrentPage();
+        }
+      });
+
+      pageInput?.addEventListener('change', async () => {
+        let val = parseInt(pageInput.value, 10);
+        if (isNaN(val) || val < 1) val = 1;
+        if (val > numPages) val = numPages;
+        currentPage = val;
+        await renderCurrentPage();
+      });
+
+      // Zoom handlers
       bodyEl.querySelector('#pdf-zoom-in')?.addEventListener('click', async () => {
         currentScale = Math.min(2.5, currentScale + 0.15);
         if (zoomValEl) zoomValEl.textContent = `${Math.round(currentScale * 100)}%`;
-        await renderPages(currentScale);
+        await renderCurrentPage();
       });
 
       bodyEl.querySelector('#pdf-zoom-out')?.addEventListener('click', async () => {
-        currentScale = Math.max(0.35, currentScale - 0.15);
+        currentScale = Math.max(0.3, currentScale - 0.15);
         if (zoomValEl) zoomValEl.textContent = `${Math.round(currentScale * 100)}%`;
-        await renderPages(currentScale);
+        await renderCurrentPage();
       });
 
       bodyEl.querySelector('#pdf-zoom-fit')?.addEventListener('click', async () => {
-        const p1 = await pdf.getPage(1);
-        const vp = p1.getViewport({ scale: 1.0 });
-        const cW = Math.max(300, (pagesContainer.clientWidth || window.innerWidth * 0.9) - 36);
-        currentScale = Math.max(0.35, Math.min(2.0, cW / vp.width));
+        const page = await pdf.getPage(currentPage);
+        const vp = page.getViewport({ scale: 1.0 });
+        const cW = Math.max(280, (container.clientWidth || window.innerWidth * 0.9) - 40);
+        currentScale = Math.max(0.3, Math.min(2.0, cW / vp.width));
         if (zoomValEl) zoomValEl.textContent = `${Math.round(currentScale * 100)}%`;
-        await renderPages(currentScale);
+        await renderCurrentPage();
       });
 
+      // Keyboard left/right arrows for page turning
+      const handleKey = async (e) => {
+        if (!document.getElementById('preview-modal')?.classList.contains('open')) return;
+        if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+        if (e.key === 'ArrowLeft' && currentPage > 1) {
+          currentPage--;
+          await renderCurrentPage();
+        } else if (e.key === 'ArrowRight' && currentPage < numPages) {
+          currentPage++;
+          await renderCurrentPage();
+        }
+      };
+      document.addEventListener('keydown', handleKey);
+
     } catch (err) {
-      console.warn('PDF.js rendering fallback:', err);
+      console.warn('PDF.js fallback to iframe:', err);
       bodyEl.innerHTML = `
         <div style="width:100%;height:70vh;display:flex;flex-direction:column">
           <iframe
