@@ -1077,7 +1077,7 @@
     }).join('');
 
     container.innerHTML = `
-      <div style="background:var(--bg-2);border-radius:var(--r-l);border:1px solid var(--sep);padding:20px;margin-bottom:20px;box-shadow:var(--shadow-1)">
+      <div style="background:var(--mat-card);backdrop-filter:var(--blur-m);-webkit-backdrop-filter:var(--blur-m);border:1px solid rgba(255,255,255,0.55);border-radius:var(--r-l);padding:20px;margin-bottom:20px;box-shadow:var(--shadow-2)">
         <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
           <div>
             <div style="font-size:12px;color:var(--label-3);font-weight:600;text-transform:uppercase;letter-spacing:.5px">สรุปสัปดาห์นี้</div>
@@ -1092,10 +1092,6 @@
         </div>
       </div>
       <div class="week-grid">${dayCards}</div>
-      <div class="week-classes-section">
-        <h3>📚 วิชาทั้งหมดประจำสัปดาห์</h3>
-        <div class="week-class-list">${allClassItems}</div>
-      </div>
     `;
 
     container.querySelectorAll('.week-day-card').forEach(card => {
@@ -1626,6 +1622,93 @@
 
     document.getElementById('resource-modal-close')?.addEventListener('click', () => closeModal('resource-modal'));
     document.getElementById('res-cancel-btn')?.addEventListener('click', () => closeModal('resource-modal'));
+
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  // ─── In-App Resource Preview ──────────────────────────────
+  function openResourcePreview(item) {
+    const modal = document.getElementById('preview-modal');
+    if (!modal) return;
+
+    // Set title and badge
+    const titleEl = document.getElementById('preview-modal-title');
+    if (titleEl) titleEl.textContent = item.title || 'ตัวอย่างเอกสาร';
+
+    const badge = document.getElementById('preview-badge');
+    if (badge) {
+      const typeMap = { pdf: '📄 PDF', drive: '📁 Drive', classroom: '🎓 Classroom', image: '🖼️ Image', link: '🔗 Link' };
+      badge.textContent = typeMap[item.type] || '🔗 LINK';
+    }
+
+    // Meta info
+    const metaEl = document.getElementById('preview-meta-info');
+    if (metaEl) metaEl.textContent = item.sub || item.desc || '';
+
+    // External open button
+    const extBtn = document.getElementById('preview-open-ext-btn');
+    if (extBtn) extBtn.href = item.url || '#';
+
+    // Copy link button
+    const copyBtn = document.getElementById('preview-copy-link-btn');
+    if (copyBtn) {
+      copyBtn.onclick = () => {
+        navigator.clipboard.writeText(item.url || '').then(() => showToast('📋 คัดลอกลิงค์แล้ว', 'success'));
+      };
+    }
+
+    // Back button
+    const backBtn = document.getElementById('preview-back-btn');
+    if (backBtn) {
+      backBtn.onclick = () => closeModal('preview-modal');
+    }
+
+    // Populate preview body
+    const body = document.getElementById('preview-modal-body');
+    if (body) {
+      body.innerHTML = '';
+
+      if (item.type === 'pdf' && item.url) {
+        // PDF: try iframe first (works on desktop), canvas fallback for iOS
+        body.innerHTML = `
+          <div style="width:100%;height:70vh;display:flex;flex-direction:column">
+            <iframe
+              src="${escHtml(item.url)}"
+              style="flex:1;border:none;border-radius:0 0 var(--r-m) var(--r-m);width:100%"
+              allow="fullscreen"
+              title="PDF Preview"
+              id="preview-pdf-iframe"
+            ></iframe>
+            <div style="padding:10px 16px;font-size:11.5px;color:var(--label-3);text-align:center">
+              ถ้า PDF ไม่โหลด กด <strong>🚀 เปิดในแท็บใหม่</strong> ด้านล่าง
+            </div>
+          </div>`;
+      } else if (item.type === 'image' && item.url) {
+        body.innerHTML = `
+          <div style="display:flex;align-items:center;justify-content:center;padding:20px;min-height:300px">
+            <img src="${escHtml(item.url)}" alt="${escHtml(item.title)}" style="max-width:100%;max-height:65vh;border-radius:var(--r-m);box-shadow:var(--shadow-2)" />
+          </div>`;
+      } else {
+        // Google Drive / Classroom / generic link — show rich card + open button
+        const typeEmoji = { drive: '📁', classroom: '🎓', link: '🔗' };
+        const emoji = typeEmoji[item.type] || '🔗';
+        body.innerHTML = `
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;gap:20px;min-height:280px;text-align:center">
+            <div style="font-size:52px">${emoji}</div>
+            <div>
+              <div style="font-size:17px;font-weight:700;color:var(--label);margin-bottom:6px">${escHtml(item.title)}</div>
+              ${item.sub ? `<div style="font-size:13px;color:var(--label-3);margin-bottom:4px">${escHtml(item.sub)}</div>` : ''}
+              ${item.desc ? `<div style="font-size:13px;color:var(--label-2)">${escHtml(item.desc)}</div>` : ''}
+            </div>
+            <div style="font-size:12px;color:var(--label-3);background:var(--bg-3);border-radius:var(--r-m);padding:10px 16px;word-break:break-all;max-width:100%">${escHtml(item.url)}</div>
+            <a href="${escHtml(item.url)}" target="_blank" rel="noopener noreferrer"
+               style="display:inline-flex;align-items:center;gap:8px;padding:12px 28px;background:var(--accent);color:#fff;border-radius:var(--r-pill);font-weight:700;font-size:14px;text-decoration:none;box-shadow:0 4px 14px rgba(196,90,27,0.3);transition:transform 0.15s"
+               onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"
+            >🚀 เปิด ${item.type === 'classroom' ? 'Google Classroom' : item.type === 'drive' ? 'Google Drive' : 'ลิงค์'}</a>
+          </div>`;
+      }
+    }
 
     modal.classList.add('open');
     document.body.style.overflow = 'hidden';
