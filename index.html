@@ -3,31 +3,32 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="description" content="EgBE Memory Engine · Mahidol BME Study Dashboard" />
-  <meta name="theme-color" content="#FDFBF7" />
+  <meta name="description" content="EgBE Memory Engine · BME Mahidol Daily Study Dashboard — ตารางกิจกรรม Cloud Sync Curriculum Graph" />
+  <meta name="theme-color" content="#FDFBF7" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#12100E" media="(prefers-color-scheme: dark)" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <title>EgBE Memory Engine · Mahidol BME</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;0,700;1,400;1,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
 
   <div id="app">
 
-    <!-- ─── Header (3rd EgBE Memory Engine Top Sticky Bar) ─── -->
+    <!-- ─── Global Header (3rd EgBE style) ─── -->
     <header class="app-header" role="banner">
       <div class="header-brand">
-        <a href="#" class="brand-logo" data-view="home">
+        <a href="#" class="brand-logo" id="brand-logo-btn">
           <span class="brand-dot"></span>EgBE
         </a>
-
         <nav class="header-nav" aria-label="เมนูหลัก">
           <button class="nav-link active" data-view="home">Home</button>
           <button class="nav-link" data-view="dashboard">Daily Dashboard</button>
           <button class="nav-link" data-view="curriculum">Curriculum</button>
           <button class="nav-link" data-view="study">Study</button>
-          <button class="nav-link" data-view="scenarios">Scenarios</button>
           <button class="nav-link" data-view="graph">Graph</button>
         </nav>
       </div>
@@ -36,17 +37,33 @@
         <div class="online-pill" title="System Online">
           <span class="online-dot"></span>ONLINE
         </div>
-        <button class="btn-pill" id="cloud-sync-btn">Sync Now</button>
-        <span id="clock" style="font-family:var(--font-mono);font-size:12px;color:var(--text-muted)">00:00:00</span>
-        <button class="btn-pill" id="theme-toggle" title="Toggle Dark/Light">🌙</button>
+        <button class="btn-pill" id="cloud-sync-btn">☁️ Sync Now</button>
+        <span id="clock" aria-live="polite" aria-label="เวลาปัจจุบัน">00:00:00</span>
+        <button class="icon-btn" id="theme-toggle" title="Dark / Light mode" aria-label="Toggle theme">🌙</button>
       </div>
     </header>
+
+    <!-- ─── Dashboard Sub-Nav (only shown when dashboard is active) ─── -->
+    <div class="sub-nav-bar" id="sub-nav-bar" style="display:none;" aria-label="Dashboard sub navigation">
+      <!-- Day tabs (only for timeline/week subviews) -->
+      <div class="day-tabs-wrapper" id="day-tabs-wrapper">
+        <div class="day-tabs" id="day-tabs" role="tablist" aria-label="เลือกวัน"></div>
+      </div>
+      <!-- Sub-segmented pill control -->
+      <div class="sub-seg-wrap">
+        <div class="seg-ctrl" role="tablist">
+          <button class="nav-btn active" data-view="timeline" role="tab">ตารางวัน</button>
+          <button class="nav-btn" data-view="week" role="tab">สัปดาห์</button>
+          <button class="nav-btn" data-view="schedule" role="tab">ตารางเรียน</button>
+        </div>
+      </div>
+    </div>
 
     <!-- ─── Main Content ─── -->
     <main class="main-content" id="main-content" role="main">
 
-      <!-- VIEW 0: HOME LANDING PAGE (Exact Copy from 3rd https://bme-revision-tools-w2oj.vercel.app/) -->
-      <div id="view-home" class="view active" role="tabpanel">
+      <!-- VIEW 0: HOME LANDING PAGE (3rd EgBE Memory Engine exact copy) -->
+      <div id="view-egbe-home" class="view view-page active" role="tabpanel">
         <div class="hero-section">
           <div class="hero-badge">
             <span class="hero-badge-dot"></span>
@@ -68,70 +85,45 @@
           </div>
 
           <div class="hero-features-grid">
-            <div class="feature-card">
+            <div class="feature-card" role="button" tabindex="0" data-view="dashboard">
               <div class="feature-icon">🗓️</div>
-              <h3 class="feature-title">Daily Routine & Timeline</h3>
-              <p class="feature-desc">ตารางกิจกรรมประจำวันสำหรับนักศึกษา BME Mahidol ตรวจสอบและติ๊กความคืบหน้าพร้อมระบบ Cloud Sync</p>
+              <h3 class="feature-title">Daily Routine &amp; Timeline</h3>
+              <p class="feature-desc">ตารางกิจกรรมประจำวันสำหรับนักศึกษา BME Mahidol พร้อมระบบ Cloud Sync ข้ามเครื่อง</p>
             </div>
-
-            <div class="feature-card">
-              <div class="feature-icon">🎴</div>
-              <h3 class="feature-title">FSRS-5 Spaced Repetition</h3>
-              <p class="feature-desc">อัลกอริทึมทบทวนการ์ดความรู้ที่ปรับแต่งอัตราการจดจำ 90% ตามเป้าหมายวิศวกรรมชีวแพทย์</p>
+            <div class="feature-card" role="button" tabindex="0" data-view="study">
+              <div class="feature-icon">📂</div>
+              <h3 class="feature-title">Study Resources</h3>
+              <p class="feature-desc">รวม Link Sheet Drive คลิป และไฟล์เรียนทุกวิชา BME ปี 1 เข้าไว้ในที่เดียว</p>
             </div>
-
-            <div class="feature-card">
-              <div class="feature-icon">🩺</div>
-              <h3 class="feature-title">Clinical Scenarios</h3>
-              <p class="feature-desc">จำลองการตัดสินใจแก้ปัญหาสัญญาณชีวแพทย์และการสอบเทียบเครื่องมือแพทย์แบบ Interactive Decision Tree</p>
+            <div class="feature-card" role="button" tabindex="0" data-view="curriculum">
+              <div class="feature-icon">📚</div>
+              <h3 class="feature-title">BME Curriculum 2026</h3>
+              <p class="feature-desc">โครงสร้างรายวิชา ตารางเรียน และข้อมูลหลักสูตรวิศวกรรมชีวแพทย์ Mahidol ปีที่ 1</p>
             </div>
-
-            <div class="feature-card">
+            <div class="feature-card" role="button" tabindex="0" data-view="graph">
               <div class="feature-icon">🕸️</div>
               <h3 class="feature-title">Concept Knowledge Graph</h3>
-              <p class="feature-desc">ผังเชื่อมโยงความสัมพันธ์ของหัวข้อวิชา BME 2026 เพื่อมองเห็นภาพรวมวิชาบังคับก่อน</p>
+              <p class="feature-desc">ผังเชื่อมโยงความสัมพันธ์ของหัวข้อวิชา BME 2026 เพื่อมองเห็นภาพรวมและ prerequisite</p>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- VIEW 1: DAILY DASHBOARD (9th Complete Workspace with Sub-Segmented Pill Control) -->
-      <div id="view-dashboard" class="view" role="tabpanel">
-        
-        <!-- 9th Sub-Segmented Pill Navigation (ตารางวัน | สัปดาห์ | ตารางเรียน) -->
-        <div class="sub-header-bar" style="border-radius:var(--r-l);margin-bottom:1.5rem">
-          <div style="font-weight:700;font-size:14px;display:flex;align-items:center;gap:6px">
-            <span>📅 BME Mahidol Daily Dashboard</span>
-          </div>
-          <div class="seg-ctrl">
-            <button class="seg-btn active" data-subview="timeline">ตารางวัน</button>
-            <button class="seg-btn" data-subview="week">สัปดาห์</button>
-            <button class="seg-btn" data-subview="schedule">ตารางเรียน</button>
-          </div>
-        </div>
-
-        <!-- Day Tabs for Timeline/Week -->
-        <div class="day-tabs-wrapper" id="day-tabs-wrapper" style="border-radius:var(--r-l);margin-bottom:1.5rem">
-          <div class="day-tabs" id="day-tabs" role="tablist" aria-label="เลือกวัน"></div>
-        </div>
-
-        <!-- Subviews of 9th -->
-        <div id="subview-timeline" class="subview active"></div>
-        <div id="subview-week" class="subview" style="display:none"></div>
-        <div id="subview-schedule" class="subview" style="display:none"></div>
+      <!-- VIEW 1: DAILY DASHBOARD (9th full workspace — views rendered by 9th app.js into these exact IDs) -->
+      <div id="view-egbe-dashboard" class="view view-page" role="tabpanel">
+        <div id="view-timeline" class="view active" role="tabpanel"></div>
+        <div id="view-week"     class="view"        role="tabpanel"></div>
+        <div id="view-schedule" class="view"        role="tabpanel"></div>
       </div>
 
-      <!-- VIEW 2: CURRICULUM (3rd Core) -->
-      <div id="view-curriculum" class="view" role="tabpanel"></div>
+      <!-- VIEW 2: CURRICULUM -->
+      <div id="view-egbe-curriculum" class="view view-page" role="tabpanel"></div>
 
-      <!-- VIEW 3: STUDY (3rd FSRS-5) -->
-      <div id="view-study" class="view" role="tabpanel"></div>
+      <!-- VIEW 3: STUDY (resource links / sheets) -->
+      <div id="view-egbe-study" class="view view-page" role="tabpanel"></div>
 
-      <!-- VIEW 4: SCENARIOS (3rd Clinical Decision Trees) -->
-      <div id="view-scenarios" class="view" role="tabpanel"></div>
-
-      <!-- VIEW 5: GRAPH (3rd Knowledge Concept Graph - /graph) -->
-      <div id="view-graph" class="view" role="tabpanel"></div>
+      <!-- VIEW 4: GRAPH (concept knowledge graph) -->
+      <div id="view-egbe-graph" class="view view-page" role="tabpanel"></div>
 
     </main>
 
@@ -140,89 +132,93 @@
       EgBE Memory Engine · Mahidol University · Biomedical Engineering
     </footer>
 
-    <!-- ─── Mobile Nav ─── -->
+    <!-- ─── Mobile Bottom Navigation ─── -->
     <nav class="mobile-nav" aria-label="เมนูล่าง">
       <button class="mob-nav-btn active" data-view="home">
-        <span style="font-size:18px">🏠</span>
+        <span class="mob-icon">🏠</span>
         <span>Home</span>
       </button>
       <button class="mob-nav-btn" data-view="dashboard">
-        <span style="font-size:18px">🗓</span>
+        <span class="mob-icon">🗓</span>
         <span>Dashboard</span>
       </button>
       <button class="mob-nav-btn" data-view="curriculum">
-        <span style="font-size:18px">📚</span>
+        <span class="mob-icon">📚</span>
         <span>Curriculum</span>
       </button>
       <button class="mob-nav-btn" data-view="study">
-        <span style="font-size:18px">🎴</span>
+        <span class="mob-icon">📂</span>
         <span>Study</span>
       </button>
       <button class="mob-nav-btn" data-view="graph">
-        <span style="font-size:18px">🕸️</span>
+        <span class="mob-icon">🕸️</span>
         <span>Graph</span>
+      </button>
+      <button class="mob-nav-btn" id="mob-theme-toggle">
+        <span class="mob-icon">🌙</span>
+        <span>Theme</span>
       </button>
     </nav>
 
-    <!-- ─── Edit Modal ─── -->
-    <div class="modal-overlay" id="edit-modal" role="dialog" aria-modal="true">
+    <!-- ─── Edit Modal (9th verbatim) ─── -->
+    <div class="modal-overlay" id="edit-modal" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">
       <div class="modal-box">
         <div class="modal-header">
           <span class="modal-title" id="edit-modal-title">แก้ไขกิจกรรม</span>
-          <button class="modal-close" id="edit-cancel-btn">✕</button>
+          <button class="modal-close" id="edit-cancel-btn" aria-label="ปิด">✕</button>
         </div>
         <div class="modal-body"></div>
-        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
-          <button class="btn-pill" id="edit-delete-btn" style="color:#ef4444;border-color:rgba(239,68,68,0.3)">ลบ</button>
-          <button class="btn-pill" id="edit-cancel-btn-footer">ยกเลิก</button>
-          <button class="btn-pill" id="edit-save-btn" style="background:var(--accent);color:#fff">บันทึก</button>
+        <div class="modal-actions">
+          <button class="btn btn-danger"    id="edit-delete-btn">ลบ</button>
+          <button class="btn btn-secondary" id="edit-cancel-btn-footer">ยกเลิก</button>
+          <button class="btn btn-primary"   id="edit-save-btn">บันทึก</button>
         </div>
       </div>
     </div>
 
-    <!-- ─── Add Modal ─── -->
-    <div class="modal-overlay" id="add-modal" role="dialog" aria-modal="true">
+    <!-- ─── Add Modal (9th verbatim) ─── -->
+    <div class="modal-overlay" id="add-modal" role="dialog" aria-modal="true" aria-labelledby="add-modal-title">
       <div class="modal-box">
         <div class="modal-header">
           <span class="modal-title" id="add-modal-title">เพิ่มกิจกรรม</span>
-          <button class="modal-close" id="add-cancel-btn">✕</button>
+          <button class="modal-close" id="add-cancel-btn" aria-label="ปิด">✕</button>
         </div>
         <div class="modal-body"></div>
-        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
-          <button class="btn-pill" id="add-cancel-btn-footer">ยกเลิก</button>
-          <button class="btn-pill" id="add-save-btn" style="background:var(--accent);color:#fff">เพิ่ม</button>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="add-cancel-btn-footer">ยกเลิก</button>
+          <button class="btn btn-primary"   id="add-save-btn">เพิ่ม</button>
         </div>
       </div>
     </div>
 
-    <!-- ─── Cloud Sync Modal ─── -->
-    <div class="modal-overlay" id="sync-modal" role="dialog" aria-modal="true">
+    <!-- ─── Cloud Sync Modal (9th verbatim) ─── -->
+    <div class="modal-overlay" id="sync-modal" role="dialog" aria-modal="true" aria-labelledby="sync-modal-title">
       <div class="modal-box">
         <div class="modal-header">
           <span class="modal-title" id="sync-modal-title">☁️ Cloud Sync (ซิงค์ข้ามเครื่อง)</span>
-          <button class="modal-close" id="sync-cancel-btn">✕</button>
+          <button class="modal-close" id="sync-cancel-btn" aria-label="ปิด">✕</button>
         </div>
-        <div class="modal-body" style="font-size:13px;line-height:1.5">
-          <p style="margin-bottom:12px;color:var(--text-muted)">
-            ตั้งค่า <strong>Sync Key</strong> เพื่อซิงค์ตารางเรียนและการทบทวนการ์ดข้ามเครื่อง (iPad, Mac, Mobile)
+        <div class="modal-body">
+          <p style="font-size:12.5px;color:var(--text-muted);line-height:1.5;margin-bottom:14px">
+            ตั้งค่า <strong>Sync Key</strong> (เช่น <code>my-bme-2026</code>) เพื่อซิงค์ตารางและการติ๊กหนังสือข้ามเครื่อง iPad, iPhone และ Mac!
           </p>
-          <div style="margin-bottom:12px;font-size:12px" id="modal-sync-status" class="online-pill">⚪ ข้อมูลเก็บในเครื่องนี้เท่านั้น</div>
-          <div style="display:flex;flex-direction:column;gap:6px">
-            <label style="font-weight:600;font-size:12px">Sync Key / รหัสประจำตัว</label>
-            <input id="sync-key-input" style="padding:8px 12px;border-radius:var(--r-m);border:1px solid var(--border-dark);background:var(--bg-primary);color:var(--text-main);font-family:var(--font-mono)" type="text" placeholder="เช่น bme-study-pass-99" />
+          <div style="margin-bottom:14px" id="modal-sync-status" class="status-badge">⚪ ข้อมูลเก็บในเครื่องนี้เท่านั้น</div>
+          <div class="form-group">
+            <label class="form-label">Sync Key / รหัสประจำตัว</label>
+            <input id="sync-key-input" class="form-input" type="text" placeholder="เช่น bme-study-pass-99" />
           </div>
         </div>
-        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
-          <button class="btn-pill" id="sync-disconnect-btn" style="color:#ef4444">ยกเลิก Sync Key</button>
-          <button class="btn-pill" id="sync-connect-btn" style="background:var(--accent);color:#fff">เชื่อมต่อ & Sync</button>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="sync-disconnect-btn">ยกเลิก Sync Key</button>
+          <button class="btn btn-primary" id="sync-connect-btn">เชื่อมต่อ &amp; Sync</button>
         </div>
       </div>
     </div>
 
     <!-- ─── Toast ─── -->
-    <div class="toast-container" id="toast-container"></div>
+    <div class="toast-container" id="toast-container" role="status" aria-live="polite"></div>
 
-  </div>
+  </div><!-- #app -->
 
   <script src="js/data.js"></script>
   <script src="js/sync.js"></script>
