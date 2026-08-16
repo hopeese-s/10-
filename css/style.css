@@ -1381,6 +1381,29 @@ body {
   overflow-y: auto;
 }
 
+.modal-box-large {
+  max-width: 900px;
+  width: 92vw;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.resource-preview-body {
+  flex: 1;
+  min-height: 320px;
+  max-height: 70vh;
+  overflow: auto;
+  border-radius: var(--r-m);
+  background: var(--bg-1);
+  border: 1px solid var(--sep);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  position: relative;
+}
+
 @keyframes modalIn {
   from { transform: scale(0.96) translateY(8px); opacity: 0; }
   to { transform: scale(1) translateY(0); opacity: 1; }

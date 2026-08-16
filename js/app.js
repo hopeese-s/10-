@@ -24,13 +24,124 @@
     // Curriculum View Mode ('grid' | 'list')
     curriculumViewMode: 'grid',
 
-    // Study Resource Links (Custom user links saved in localStorage)
-    studyLinks: [
-      { id: 'link-1', title: '📘 BME Undergraduate Handbook 2026', type: 'pdf', url: '2026_Handbok for Biomedical Engineering Undergraduate Student.pdf', desc: 'คู่มือนักศึกษาหลักสูตรวิศวกรรมชีวแพทย์ ม.มหิดล' },
-      { id: 'link-2', title: '🏥 EGBI100 Lecture 1: Intro to BME', type: 'pdf', url: '2026-EGBI100_Lecture1_Intro_PN.pdf', desc: 'เอกสารประกอบการสอน BME in the Real World' },
-      { id: 'link-3', title: '📆 ตารางเรียนปี 1 ภาคเรียนที่ 1/2026', type: 'image', url: 'egmu-class-schedule-2026-1-program_B-BI.png', desc: 'Class Schedule Program B-BI' }
-    ]
+    // Active category filter in Study view ('all' | 'classroom' | 'drive' | 'pdf')
+    studyFilter: 'all',
+
+    // Study Resource Links (Classroom, Drive, PDF documents, and custom links)
+    studyLinks: []
   };
+
+  const DEFAULT_STUDY_LINKS = [
+    // ─── Google Classroom (จากบนลงล่างตามภาพ) ───
+    {
+      id: 'gc-1',
+      title: 'SCCH161 General Chemistry',
+      sub: 'EGBI/EGCG/EGII Year 1 - 1/2026',
+      type: 'classroom',
+      url: 'https://classroom.google.com/u/6/c/ODcwMjc5NzAyMjcy',
+      desc: 'Google Classroom วิชาเคมีทั่วไป (SCCH161)'
+    },
+    {
+      id: 'gc-2',
+      title: 'SCPY111/114/115-(2026-1) Physics Laboratory I',
+      sub: 'EGBI, EGCG, EGII, ENNM, SCCT, SCI...',
+      type: 'classroom',
+      url: 'https://classroom.google.com/u/6/c/ODU1NzE4MDAyNzE5',
+      desc: 'Google Classroom ปฏิบัติการฟิสิกส์ 1 (SCPY111)'
+    },
+    {
+      id: 'gc-3',
+      title: 'SCMA101 Mathematics I',
+      sub: 'SECTION 2',
+      type: 'classroom',
+      url: 'https://classroom.google.com/u/6/c/ODcxNjY1MDM2MTY2',
+      desc: 'Google Classroom วิชาคณิตศาสตร์ 1 (SCMA101 Sec 2)'
+    },
+    {
+      id: 'gc-4',
+      title: 'SCSL 190 Wonderful Life (Biology)',
+      sub: 'EGBI',
+      type: 'classroom',
+      url: 'https://classroom.google.com/u/6/c/Nzk4Mzk2MTI3MDI1',
+      desc: 'Google Classroom วิชา Wonderful Life (SCSL190)'
+    },
+    {
+      id: 'gc-5',
+      title: '2026/27_EGBI 100 Biomedical Engineering in the Real World',
+      sub: 'EGBI Year 1',
+      type: 'classroom',
+      url: 'https://classroom.google.com/u/6/c/ODcwMzEwOTI0OTg2',
+      desc: 'Google Classroom วิชา BME in the Real World (EGBI100)'
+    },
+    {
+      id: 'gc-6',
+      title: 'SCPY 161 General Physics I',
+      sub: 'EGBI Year 1 - 1/2026',
+      type: 'classroom',
+      url: 'https://classroom.google.com/u/6/c/ODcxMTQzMDA0NzAw',
+      desc: 'Google Classroom วิชาฟิสิกส์ทั่วไป 1 (SCPY161)'
+    },
+    {
+      id: 'gc-7',
+      title: 'SCBE102 General Biology Laboratory 1',
+      sub: 'EGBI, SCBE, SCIN, SCBM, SCME, SC...',
+      type: 'classroom',
+      url: 'https://classroom.google.com/u/6/c/ODY3NjU2OTgwNDEz',
+      desc: 'Google Classroom ปฏิบัติการชีววิทยาทั่วไป 1 (SCBE102)'
+    },
+    {
+      id: 'gc-8',
+      title: '2026_SCCH 159/169 & SCCT Chemistry Laboratory',
+      sub: 'SCBE#1, ENNM#1, EGBI#1, EGCG#1,...',
+      type: 'classroom',
+      url: 'https://classroom.google.com/u/6/c/ODU1NTg5NDU4MDQ1',
+      desc: 'Google Classroom ปฏิบัติการเคมี (SCCH169)'
+    },
+
+    // ─── Google Drive ───
+    {
+      id: 'gd-eng',
+      title: 'LAEN182 English for General Academic Purposes',
+      sub: 'Google Drive Folder',
+      type: 'drive',
+      url: 'https://drive.google.com/drive/folders/1mT_NMiY6c0j8mCyVBvsO4ceUFQfgZwri',
+      desc: 'โฟลเดอร์ Google Drive ชีทและเอกสารวิชาภาษาอังกฤษ LAEN182'
+    },
+    {
+      id: 'gd-comppro',
+      title: 'EGBI122 Computer Programming (คอมโปร)',
+      sub: 'Google Drive Folder',
+      type: 'drive',
+      url: 'https://drive.google.com/drive/u/0/mobile/folders/1XqQUjsxsj8VvhchExhS44nEJOL20WFto?usp=sharing',
+      desc: 'โฟลเดอร์ Google Drive ชีท สไลด์ และโค้ดตัวอย่างวิชา Computer Programming'
+    },
+
+    // ─── PDF & Schedule Documents (In-App Preview) ───
+    {
+      id: 'doc-handbook',
+      title: '📘 BME Undergraduate Student Handbook 2026',
+      sub: 'PDF Document (In-App Preview)',
+      type: 'pdf',
+      url: '2026_Handbok for Biomedical Engineering Undergraduate Student.pdf',
+      desc: 'คู่มือนักศึกษาหลักสูตรวิศวกรรมชีวแพทย์ มหาวิทยาลัยมหิดล'
+    },
+    {
+      id: 'doc-egbi100-l1',
+      title: '🏥 EGBI100 Lecture 1: Intro to BME',
+      sub: 'PDF Lecture Slides (In-App Preview)',
+      type: 'pdf',
+      url: '2026-EGBI100_Lecture1_Intro_PN.pdf',
+      desc: 'เอกสารประกอบการสอน BME in the Real World คาบที่ 1'
+    },
+    {
+      id: 'doc-schedule',
+      title: '📆 ตารางเรียนปี 1 ภาคเรียนที่ 1/2026 (Program B-BI)',
+      sub: 'Image Schedule (In-App Preview)',
+      type: 'image',
+      url: 'egmu-class-schedule-2026-1-program_B-BI.png',
+      desc: 'ภาพตารางเรียนหลักสูตร BME ภาคเรียนที่ 1/2026 ความละเอียดสูง'
+    }
+  ];
 
   // ─── Init ────────────────────────────────────────────────
   async function init() {
@@ -107,9 +218,25 @@
       state.subjects     = JSON.parse(localStorage.getItem('sd-subjects') || '{}');
       state.customBlocks = JSON.parse(localStorage.getItem('sd-custom-blocks') || '{}');
       const savedLinks   = localStorage.getItem('sd-study-links');
-      if (savedLinks) state.studyLinks = JSON.parse(savedLinks);
+      if (savedLinks) {
+        const parsed = JSON.parse(savedLinks);
+        if (Array.isArray(parsed) && parsed.length >= DEFAULT_STUDY_LINKS.length) {
+          state.studyLinks = parsed;
+        } else {
+          // Merge custom items with updated DEFAULT_STUDY_LINKS
+          const defaultIds = new Set(DEFAULT_STUDY_LINKS.map(l => l.id));
+          const customOnly = (Array.isArray(parsed) ? parsed : []).filter(l => !defaultIds.has(l.id) && !l.id.startsWith('link-'));
+          state.studyLinks = [...DEFAULT_STUDY_LINKS, ...customOnly];
+          saveStudyLinks();
+        }
+      } else {
+        state.studyLinks = [...DEFAULT_STUDY_LINKS];
+        saveStudyLinks();
+      }
       state.curriculumViewMode = localStorage.getItem('sd-curriculum-mode') || 'grid';
-    } catch (e) {}
+    } catch (e) {
+      state.studyLinks = [...DEFAULT_STUDY_LINKS];
+    }
   }
 
   function saveChecklist() {
@@ -867,35 +994,100 @@
     const container = document.getElementById('view-egbe-study');
     if (!container) return;
 
+    const currentFilter = state.studyFilter || 'all';
+
+    // Count statistics
+    const totalCount     = state.studyLinks.length;
+    const classroomCount = state.studyLinks.filter(l => l.type === 'classroom').length;
+    const driveCount     = state.studyLinks.filter(l => l.type === 'drive').length;
+    const docCount       = state.studyLinks.filter(l => l.type === 'pdf' || l.type === 'image' || l.type === 'sheet').length;
+
+    // Filter items
+    const filteredLinks = state.studyLinks.filter(item => {
+      if (currentFilter === 'classroom') return item.type === 'classroom';
+      if (currentFilter === 'drive') return item.type === 'drive';
+      if (currentFilter === 'pdf') return item.type === 'pdf' || item.type === 'image' || item.type === 'sheet';
+      return true;
+    });
+
     container.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2rem;flex-wrap:wrap;gap:1rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem">
         <div>
-          <h2 style="font-family:var(--font-serif);font-size:1.6rem;font-weight:700;margin-bottom:6px">Study Resources & Files</h2>
-          <p style="font-size:13.5px;color:var(--label-2)">คลังเก็บชีทสรุป ลิงค์ Google Drive คลิปบรรยาย และเอกสารประกอบการเรียน BME ปี 1</p>
+          <h2 style="font-family:var(--font-serif);font-size:1.6rem;font-weight:700;margin-bottom:4px">Study Resources & Files</h2>
+          <p style="font-size:13.5px;color:var(--label-2)">คลังรวม Google Classroom, Google Drive, สไลด์บรรยาย และคู่มือนักศึกษา BME ปี 1</p>
         </div>
         <button class="btn-pill" id="add-resource-btn" style="background:var(--accent);color:#FFFFFF;border-color:var(--accent)">
           ＋ เพิ่มลิงค์ / ชีทเรียน
         </button>
       </div>
 
+      <!-- Category Filter Tabs -->
+      <div style="display:flex;gap:8px;overflow-x:auto;margin-bottom:1.75rem;padding-bottom:4px" id="study-filter-tabs">
+        <button class="view-mode-btn ${currentFilter === 'all' ? 'active' : ''}" data-filter="all">
+          ทั้งหมด (${totalCount})
+        </button>
+        <button class="view-mode-btn ${currentFilter === 'classroom' ? 'active' : ''}" data-filter="classroom">
+          🎓 Google Classroom (${classroomCount})
+        </button>
+        <button class="view-mode-btn ${currentFilter === 'drive' ? 'active' : ''}" data-filter="drive">
+          📁 Google Drive (${driveCount})
+        </button>
+        <button class="view-mode-btn ${currentFilter === 'pdf' ? 'active' : ''}" data-filter="pdf">
+          📄 เอกสาร &amp; PDF (${docCount})
+        </button>
+      </div>
+
       <div class="cards-grid" id="study-links-grid">
-        ${state.studyLinks.map((item, idx) => `
-          <div class="card-item" style="display:flex;flex-direction:column;justify-content:space-between">
-            <div>
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-                <span class="online-pill" style="background:var(--accent-bg);color:var(--accent)">${escHtml(item.type.toUpperCase())}</span>
-                <button class="delete-resource-btn" data-idx="${idx}" style="background:none;border:none;cursor:pointer;color:var(--label-4);font-size:13px" title="ลบ">✕</button>
+        ${filteredLinks.map((item, idx) => {
+          let badgeColor = 'var(--accent)';
+          let badgeBg = 'var(--accent-bg)';
+          let typeIcon = '🔗';
+          if (item.type === 'classroom') {
+            badgeColor = '#2563eb';
+            badgeBg = 'rgba(59, 130, 246, 0.12)';
+            typeIcon = '🎓';
+          } else if (item.type === 'drive') {
+            badgeColor = '#059669';
+            badgeBg = 'rgba(16, 185, 129, 0.12)';
+            typeIcon = '📁';
+          } else if (item.type === 'pdf') {
+            badgeColor = '#dc2626';
+            badgeBg = 'rgba(239, 68, 68, 0.12)';
+            typeIcon = '📄';
+          } else if (item.type === 'image') {
+            badgeColor = '#d97706';
+            badgeBg = 'rgba(217, 119, 6, 0.12)';
+            typeIcon = '🖼️';
+          }
+
+          const isDefault = DEFAULT_STUDY_LINKS.some(d => d.id === item.id);
+
+          return `
+            <div class="card-item study-resource-card" data-id="${item.id}" style="display:flex;flex-direction:column;justify-content:space-between;cursor:pointer">
+              <div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                  <span class="tag-chip" style="background:${badgeBg};color:${badgeColor};font-weight:700">
+                    ${typeIcon} ${escHtml((item.type || 'LINK').toUpperCase())}
+                  </span>
+                  ${!isDefault ? `
+                    <button class="delete-resource-btn" data-id="${item.id}" style="background:none;border:none;cursor:pointer;color:var(--label-4);font-size:13px;padding:2px 6px" title="ลบ">✕</button>
+                  ` : ''}
+                </div>
+                <h3 style="font-size:15px;font-weight:700;margin-bottom:4px;color:var(--label);line-height:1.35">${escHtml(item.title)}</h3>
+                ${item.sub ? `<div style="font-size:11.5px;color:var(--label-3);font-weight:600;margin-bottom:6px">${escHtml(item.sub)}</div>` : ''}
+                <p style="font-size:12.5px;color:var(--label-2);line-height:1.5">${escHtml(item.desc || '')}</p>
               </div>
-              <h3 style="font-size:15px;font-weight:700;margin-bottom:6px;color:var(--label)">${escHtml(item.title)}</h3>
-              <p style="font-size:12.5px;color:var(--label-2);line-height:1.5">${escHtml(item.desc || '')}</p>
+              <div style="margin-top:14px;border-top:1px solid var(--sep);padding-top:10px;display:flex;align-items:center;justify-content:space-between">
+                <button class="btn btn-secondary preview-trigger-btn" data-id="${item.id}" style="font-size:11.5px;padding:6px 12px;border-radius:var(--r-pill);flex:none">
+                  👁️ ดูตัวอย่าง
+                </button>
+                <a href="${escHtml(item.url)}" target="_blank" rel="noopener" class="resource-open-link" style="font-size:11.5px;color:var(--accent);font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:4px">
+                  เปิดตรง ↗
+                </a>
+              </div>
             </div>
-            <div>
-              <a href="${escHtml(item.url)}" target="_blank" rel="noopener" class="resource-link-btn">
-                🔗 เปิดไฟล์ / ลิงค์
-              </a>
-            </div>
-          </div>
-        `).join('')}
+          `;
+        }).join('')}
       </div>
 
       <!-- Add Link Modal Embedded -->
@@ -912,15 +1104,16 @@
           <div class="form-group">
             <label class="form-label">ประเภท</label>
             <select id="res-type" class="form-select">
+              <option value="classroom">Google Classroom</option>
               <option value="drive">Google Drive</option>
-              <option value="sheet">ชีทสรุป / PDF</option>
-              <option value="video">คลิปวิดีโอ / YouTube</option>
+              <option value="pdf">ชีทสรุป / PDF</option>
+              <option value="image">รูปภาพ</option>
               <option value="link">ลิงค์เว็บไซต์ทั่วไป</option>
             </select>
           </div>
           <div class="form-group">
             <label class="form-label">URL / ลิงค์</label>
-            <input type="text" id="res-url" class="form-input" placeholder="https://drive.google.com/..." />
+            <input type="text" id="res-url" class="form-input" placeholder="https://..." />
           </div>
           <div class="form-group">
             <label class="form-label">คำอธิบายเพิ่มเติม</label>
@@ -933,6 +1126,49 @@
         </div>
       </div>
     `;
+
+    // Filter tabs listeners
+    container.querySelectorAll('#study-filter-tabs .view-mode-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const filter = e.currentTarget.dataset.filter;
+        if (filter) {
+          state.studyFilter = filter;
+          renderStudyView();
+        }
+      });
+    });
+
+    // Card click -> In-App Preview
+    container.querySelectorAll('.study-resource-card').forEach(card => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('.delete-resource-btn') || e.target.closest('.resource-open-link')) return;
+        const id = card.dataset.id;
+        const item = state.studyLinks.find(l => l.id === id);
+        if (item) openResourcePreview(item);
+      });
+    });
+
+    // Preview button click
+    container.querySelectorAll('.preview-trigger-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.id;
+        const item = state.studyLinks.find(l => l.id === id);
+        if (item) openResourcePreview(item);
+      });
+    });
+
+    // Delete custom item
+    container.querySelectorAll('.delete-resource-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.id;
+        state.studyLinks = state.studyLinks.filter(l => l.id !== id);
+        saveStudyLinks();
+        renderStudyView();
+        showToast('🗑️ ลบลิงค์แล้ว', 'info');
+      });
+    });
 
     // Modal listeners
     const modal = document.getElementById('resource-modal');
@@ -961,16 +1197,93 @@
       showToast('✅ เพิ่มชีทเรียนแล้ว!', 'success');
       renderStudyView();
     });
+  }
 
-    container.querySelectorAll('.delete-resource-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const idx = parseInt(e.currentTarget.dataset.idx, 10);
-        state.studyLinks.splice(idx, 1);
-        saveStudyLinks();
-        renderStudyView();
-        showToast('🗑️ ลบลิงค์แล้ว', 'info');
-      });
-    });
+  // ─── In-App Resource Preview ──────────────────────────────
+  function openResourcePreview(item) {
+    const modal = document.getElementById('preview-modal');
+    if (!modal) return;
+
+    const badge = document.getElementById('preview-badge');
+    const title = document.getElementById('preview-modal-title');
+    const body = document.getElementById('preview-modal-body');
+    const metaInfo = document.getElementById('preview-meta-info');
+    const extBtn = document.getElementById('preview-open-ext-btn');
+    const copyBtn = document.getElementById('preview-copy-link-btn');
+
+    if (title) title.textContent = item.title;
+    if (metaInfo) metaInfo.textContent = item.sub || item.desc || item.url;
+    if (extBtn) {
+      extBtn.href = item.url;
+      extBtn.textContent = '🚀 เปิดในแท็บใหม่';
+    }
+
+    if (badge) {
+      badge.textContent = (item.type || 'link').toUpperCase();
+      if (item.type === 'classroom') {
+        badge.style.background = 'rgba(59, 130, 246, 0.15)';
+        badge.style.color = '#2563eb';
+      } else if (item.type === 'drive') {
+        badge.style.background = 'rgba(16, 185, 129, 0.15)';
+        badge.style.color = '#059669';
+      } else if (item.type === 'pdf') {
+        badge.style.background = 'rgba(239, 68, 68, 0.15)';
+        badge.style.color = '#dc2626';
+      } else if (item.type === 'image') {
+        badge.style.background = 'rgba(217, 119, 6, 0.15)';
+        badge.style.color = '#d97706';
+      } else {
+        badge.style.background = 'var(--accent-bg)';
+        badge.style.color = 'var(--accent)';
+      }
+    }
+
+    if (body) {
+      if (item.type === 'pdf') {
+        body.innerHTML = `
+          <iframe src="${escHtml(item.url)}#toolbar=1" style="width:100%;height:68vh;border:none;border-radius:var(--r-m);background:#ffffff"></iframe>
+        `;
+      } else if (item.type === 'image') {
+        body.innerHTML = `
+          <img src="${escHtml(item.url)}" alt="${escHtml(item.title)}" style="max-width:100%;max-height:68vh;object-fit:contain;border-radius:var(--r-m);display:block;margin:0 auto" />
+        `;
+      } else {
+        // Classroom or Drive or Web Link
+        const isClassroom = item.type === 'classroom';
+        const isDrive = item.type === 'drive';
+        const icon = isClassroom ? '🎓' : isDrive ? '📁' : '🔗';
+        const typeLabel = isClassroom ? 'Google Classroom' : isDrive ? 'Google Drive Folder' : 'External Link';
+
+        body.innerHTML = `
+          <div style="padding:2.5rem 1.5rem;text-align:center;max-width:560px;margin:0 auto">
+            <div style="font-size:52px;margin-bottom:14px">${icon}</div>
+            <h3 style="font-family:var(--font-serif);font-size:1.35rem;font-weight:700;color:var(--label);margin-bottom:8px">
+              ${escHtml(item.title)}
+            </h3>
+            ${item.sub ? `<div style="font-size:12.5px;color:var(--label-3);font-weight:600;margin-bottom:12px">${escHtml(item.sub)}</div>` : ''}
+            <p style="font-size:13.5px;color:var(--label-2);line-height:1.6;margin-bottom:20px">
+              ${escHtml(item.desc || 'คลิกปุ่มด้านล่างเพื่อเข้าสู่เนื้อหาบทเรียน')}
+            </p>
+            <div style="background:var(--bg-3);padding:10px 14px;border-radius:var(--r-m);border:1px solid var(--sep);font-family:var(--font-mono);font-size:11.5px;color:var(--label-3);word-break:break-all;margin-bottom:24px;text-align:left">
+              🔗 ${escHtml(item.url)}
+            </div>
+            <a href="${escHtml(item.url)}" target="_blank" rel="noopener" class="btn btn-primary" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 28px;font-size:14px;text-decoration:none;border-radius:var(--r-pill);box-shadow:0 4px 14px rgba(196,90,27,0.3)">
+              🚀 เข้าสู่ ${typeLabel}
+            </a>
+          </div>
+        `;
+      }
+    }
+
+    if (copyBtn) {
+      copyBtn.onclick = () => {
+        navigator.clipboard.writeText(item.url);
+        showToast('📋 คัดลอกลิงค์แล้ว!', 'success');
+      };
+    }
+
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
   }
 
   // ─── View 4: Concept Knowledge Graph (Year 1 BME) ─────────
@@ -1470,12 +1783,20 @@
       closeModal('sync-modal');
     });
 
+    // In-App Preview modal
+    document.getElementById('preview-close-btn')?.addEventListener('click', () => closeModal('preview-modal'));
+    document.getElementById('preview-modal')?.addEventListener('click', e => {
+      if (e.target === e.currentTarget) closeModal('preview-modal');
+    });
+
     // Global keyboard shortcuts
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') {
         closeModal('edit-modal');
         closeModal('add-modal');
         closeModal('sync-modal');
+        closeModal('preview-modal');
+        closeModal('resource-modal');
       }
     });
   }
