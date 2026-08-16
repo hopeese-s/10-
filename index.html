@@ -11,7 +11,7 @@
   <title>Study Dashboard · BME Mahidol</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;0,700;1,400;1,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -36,6 +36,7 @@
 
       <nav class="header-nav" aria-label="เมนูหลัก">
         <div class="seg-ctrl">
+          <button class="nav-btn" data-view="home">🏠 หน้าแรก (3rd)</button>
           <button class="nav-btn active" data-view="timeline">ตารางวัน</button>
           <button class="nav-btn" data-view="week">สัปดาห์</button>
           <button class="nav-btn" data-view="schedule">ตารางเรียน</button>
@@ -57,14 +58,66 @@
     <!-- ─── Main ─── -->
     <main class="main-content" id="main-content" role="main">
 
+      <!-- VIEW 0: HOME LANDING PAGE (Exact 3rd Hero Page) -->
+      <div id="view-home" class="view" role="tabpanel">
+        <div class="hero-section">
+          <div class="hero-badge">
+            <span class="hero-badge-dot"></span>
+            <span class="hero-badge-text">MAHIDOL BME CURRICULUM</span>
+          </div>
+
+          <h1 class="hero-title">
+            Master biomedical engineering with <span class="hero-italic">intelligent workflows</span>
+          </h1>
+
+          <p class="hero-subtitle">
+            The all-in-one platform that helps BME students conquer their curriculum in record time. Powered by FSRS-5, designed for clinical excellence.
+          </p>
+
+          <div class="hero-ctas">
+            <button class="btn-hero-accent" data-view="timeline">Daily Dashboard →</button>
+            <button class="btn-hero-outline" data-view="schedule">Explore Schedule</button>
+          </div>
+
+          <div class="hero-features-grid">
+            <div class="feature-card">
+              <div class="feature-icon">🗓️</div>
+              <h3 class="feature-title">ตารางวัน (Day Timeline)</h3>
+              <p class="feature-desc">ตารางกิจกรรมประจำวัน เช็คลิสต์ และนาฬิกา Real-time</p>
+            </div>
+
+            <div class="feature-card">
+              <div class="feature-icon">📊</div>
+              <h3 class="feature-title">สัปดาห์ (Week Routine)</h3>
+              <p class="feature-desc">ภาพรวมตารางกิจกรรมตลอดสัปดาห์ 7 วัน</p>
+            </div>
+
+            <div class="feature-card">
+              <div class="feature-icon">📚</div>
+              <h3 class="feature-title">ตารางเรียน (BME Schedule)</h3>
+              <p class="feature-desc">รายวิชาเรียน และรูปตารางเรียนต้นฉบับ BME 2026-1</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW 1: TIMELINE (9th Original View 1) -->
       <div id="view-timeline" class="view active" role="tabpanel"></div>
+
+      <!-- VIEW 2: WEEK (9th Original View 2) -->
       <div id="view-week"     class="view"        role="tabpanel"></div>
+
+      <!-- VIEW 3: SCHEDULE (9th Original View 3) -->
       <div id="view-schedule" class="view"        role="tabpanel"></div>
 
     </main>
 
     <!-- ─── Mobile Nav ─── -->
     <nav class="mobile-nav" aria-label="เมนูล่าง">
+      <button class="mob-nav-btn" data-view="home">
+        <span class="icon">🏠</span>
+        <span class="label">หน้าแรก</span>
+      </button>
       <button class="mob-nav-btn active" data-view="timeline">
         <span class="icon">🗓</span>
         <span class="label">วันนี้</span>

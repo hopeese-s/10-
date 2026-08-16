@@ -175,10 +175,13 @@
     document.querySelectorAll('.mob-nav-btn').forEach(b => {
       b.classList.toggle('active', b.dataset.view === viewName);
     });
+    const dTabs = document.getElementById('day-tabs-wrapper');
+    if (dTabs) dTabs.style.display = (viewName === 'timeline' || viewName === 'week') ? 'block' : 'none';
     renderCurrentView();
   }
   function renderCurrentView() {
-    if (state.currentView === 'timeline') renderTimeline(state.currentDay);
+    if (state.currentView === 'home') return;
+    else if (state.currentView === 'timeline') renderTimeline(state.currentDay);
     else if (state.currentView === 'schedule') renderSchedule();
     else if (state.currentView === 'week') renderWeek();
   }
