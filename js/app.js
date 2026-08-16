@@ -249,60 +249,26 @@
 
   // ─── Storage & Smart Cloud Sync ──────────────────────────
   function touchUpdatedAt() {
-    state.version = Date.now();
-    localStorage.setItem('sd-version', String(state.version));
     state.updatedAt = new Date().toISOString();
     localStorage.setItem('sd-updated-at', state.updatedAt);
   }
 
   function syncSmartWithCloud(cloudData) {
-    if (!cloudData) return 'no-data';
+    if (!cloudData) return;
 
-    const localVersion  = Number(state.version) || 0;
-    const remoteVersion = Number(cloudData.version) || 0;
+    // Check if cloud data is different from current local state
+    const currentChecklistJson = JSON.stringify(state.checklist || {});
+    const cloudChecklistJson   = JSON.stringify(cloudData.checklist || {});
+    const currentSubjectsJson  = JSON.stringify(state.subjects || {});
+    const cloudSubjectsJson    = JSON.stringify(cloudData.subjects || {});
 
-    if (remoteVersion > localVersion) {
-      // Cloud is newer: apply it immediately
+    const isDifferent = (cloudData.updatedAt && cloudData.updatedAt !== state.updatedAt) ||
+                        (currentChecklistJson !== cloudChecklistJson) ||
+                        (currentSubjectsJson !== cloudSubjectsJson);
+
+    if (isDifferent) {
       applyCloudData(cloudData);
       reRenderCurrentView();
-      return 'pulled';
-    } else if (localVersion > remoteVersion) {
-      // Local is newer: push up
-      if (window.CloudSync) CloudSync.pushToCloud(state);
-      return 'pushed';
-    } else {
-      // Equal version: merge checklist/subjects field-by-field
-      let changed = false;
-      if (cloudData.checklist) {
-        for (const [day, dayObj] of Object.entries(cloudData.checklist)) {
-          if (!state.checklist[day]) state.checklist[day] = {};
-          for (const [k, v] of Object.entries(dayObj)) {
-            if (state.checklist[day][k] !== v) {
-              state.checklist[day][k] = v;
-              changed = true;
-            }
-          }
-        }
-      }
-      if (cloudData.subjects) {
-        for (const [day, dayObj] of Object.entries(cloudData.subjects)) {
-          if (!state.subjects[day]) state.subjects[day] = {};
-          for (const [k, v] of Object.entries(dayObj)) {
-            if (state.subjects[day][k] !== v) {
-              state.subjects[day][k] = v;
-              changed = true;
-            }
-          }
-        }
-      }
-      if (changed) {
-        localStorage.setItem('sd-checklist', JSON.stringify(state.checklist));
-        localStorage.setItem('sd-subjects',  JSON.stringify(state.subjects));
-        touchUpdatedAt();
-        if (window.CloudSync) CloudSync.pushToCloud(state);
-        reRenderCurrentView();
-      }
-      return changed ? 'merged' : 'equal';
     }
   }
 
@@ -405,31 +371,66 @@
   function saveChecklist() {
     touchUpdatedAt();
     localStorage.setItem('sd-checklist', JSON.stringify(state.checklist));
-    if (window.CloudSync) CloudSync.pushToCloud(state);
+    if (window.CloudSync) {
+      CloudSync.pushToCloud(state).then(res => {
+        if (res && res.ok && res.updatedAt) {
+          state.updatedAt = res.updatedAt;
+          localStorage.setItem('sd-updated-at', state.updatedAt);
+        }
+      });
+    }
   }
 
   function saveSubjects() {
     touchUpdatedAt();
     localStorage.setItem('sd-subjects', JSON.stringify(state.subjects));
-    if (window.CloudSync) CloudSync.pushToCloud(state);
+    if (window.CloudSync) {
+      CloudSync.pushToCloud(state).then(res => {
+        if (res && res.ok && res.updatedAt) {
+          state.updatedAt = res.updatedAt;
+          localStorage.setItem('sd-updated-at', state.updatedAt);
+        }
+      });
+    }
   }
 
   function saveCustomBlocks() {
     touchUpdatedAt();
     localStorage.setItem('sd-custom-blocks', JSON.stringify(state.customBlocks));
-    if (window.CloudSync) CloudSync.pushToCloud(state);
+    if (window.CloudSync) {
+      CloudSync.pushToCloud(state).then(res => {
+        if (res && res.ok && res.updatedAt) {
+          state.updatedAt = res.updatedAt;
+          localStorage.setItem('sd-updated-at', state.updatedAt);
+        }
+      });
+    }
   }
 
   function saveStudyFolders() {
     touchUpdatedAt();
     localStorage.setItem('sd-study-folders', JSON.stringify(state.studyFolders));
-    if (window.CloudSync) CloudSync.pushToCloud(state);
+    if (window.CloudSync) {
+      CloudSync.pushToCloud(state).then(res => {
+        if (res && res.ok && res.updatedAt) {
+          state.updatedAt = res.updatedAt;
+          localStorage.setItem('sd-updated-at', state.updatedAt);
+        }
+      });
+    }
   }
 
   function saveStudyLinks() {
     touchUpdatedAt();
     localStorage.setItem('sd-study-links', JSON.stringify(state.studyLinks));
-    if (window.CloudSync) CloudSync.pushToCloud(state);
+    if (window.CloudSync) {
+      CloudSync.pushToCloud(state).then(res => {
+        if (res && res.ok && res.updatedAt) {
+          state.updatedAt = res.updatedAt;
+          localStorage.setItem('sd-updated-at', state.updatedAt);
+        }
+      });
+    }
   }
 
   function saveTheme() {

@@ -1,25 +1,25 @@
 // ============================================================
-// sync.js — Cloud Sync Module  (Key: "1")
-// Ultra-fast, robust real-time cloud sync engine
+// sync.js — Real-Time Cloud Sync Module  (Key: "1")
+// Simple, ultra-reliable, real-time server-timestamp sync
 // ============================================================
 
 const CloudSync = (function () {
   'use strict';
 
   const API = 'https://daily-study-dashboard-production.up.railway.app/api/sync';
-  const PUSH_DEBOUNCE_MS = 100;    // 100ms rapid debounce
-  const POLL_INTERVAL_MS = 2500;   // Poll every 2.5 seconds for instant multi-device sync
+  const PUSH_DEBOUNCE_MS = 50;     // 50ms instant batching
+  const POLL_INTERVAL_MS = 2000;   // Poll every 2 seconds for real-time responsiveness
 
   let syncKey      = localStorage.getItem('sd-sync-key') || '1';
   let syncStatus   = syncKey ? 'synced' : 'local';
   let lastSyncTime = parseInt(localStorage.getItem('sd-last-sync-time') || '0', 10);
 
-  let isPushing      = false;
-  let isPulling      = false;
-  let pendingPushData= null;
-  let pushDebounceId = null;
-  let pollTimer      = null;
-  let listenersAdded = false;
+  let isPushing       = false;
+  let isPulling       = false;
+  let pendingPushData = null;
+  let pushDebounceId  = null;
+  let pollTimer       = null;
+  let listenersAdded  = false;
 
   let _onRemoteUpdate = null;
 
@@ -50,20 +50,23 @@ const CloudSync = (function () {
     }
   }
 
-  // ─── Push (Queued & Instant) ────────────────────────────────
+  // ─── Push (Queued & Real-Time) ──────────────────────────────
   function pushToCloud(data) {
+    const cleanData = _sanitize(data);
+
+    // Instant cross-tab broadcast (0ms)
     if (bc) {
       try {
         bc.postMessage({
           type: 'DATA_UPDATED',
-          data: _sanitize(data)
+          data: cleanData
         });
       } catch (_) {}
     }
 
     if (!syncKey) return Promise.resolve({ ok: false, reason: 'no-key' });
 
-    pendingPushData = data;
+    pendingPushData = cleanData;
     clearTimeout(pushDebounceId);
 
     return new Promise(resolve => {
@@ -85,8 +88,9 @@ const CloudSync = (function () {
     syncStatus = 'syncing';
     updateUIStatus();
 
-    const payload = JSON.stringify(_sanitize(dataToSend));
+    const payload = JSON.stringify(dataToSend);
     let ok = false;
+    let serverUpdatedAt = null;
 
     try {
       const ctrl = new AbortController();
@@ -98,7 +102,12 @@ const CloudSync = (function () {
         signal: ctrl.signal
       });
       clearTimeout(tid);
-      ok = res.ok;
+
+      if (res.ok) {
+        ok = true;
+        const json = await res.json();
+        serverUpdatedAt = json.updatedAt;
+      }
     } catch (_) {
       ok = false;
     }
@@ -119,7 +128,7 @@ const CloudSync = (function () {
       _executePush();
     }
 
-    return { ok };
+    return { ok, updatedAt: serverUpdatedAt };
   }
 
   // ─── Pull ───────────────────────────────────────────────────
@@ -172,7 +181,7 @@ const CloudSync = (function () {
     }
   }
 
-  // ─── Auto Sync ──────────────────────────────────────────────
+  // ─── Auto Sync (Background Polling + Listeners) ─────────────
   function startAutoSync(onRemoteUpdate) {
     _onRemoteUpdate = onRemoteUpdate;
 
@@ -207,7 +216,7 @@ const CloudSync = (function () {
       });
     }
 
-    // Background polling (every 2.5 seconds)
+    // High frequency 2-second background poll
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(async () => {
       if (!syncKey || document.visibilityState !== 'visible' || isPushing) return;
@@ -250,9 +259,7 @@ const CloudSync = (function () {
       subjects:     data.subjects     || {},
       customBlocks: data.customBlocks || {},
       studyFolders: data.studyFolders || [],
-      studyLinks:   data.studyLinks   || [],
-      updatedAt:    data.updatedAt    || new Date().toISOString(),
-      version:      Number(data.version) || Date.now()
+      studyLinks:   data.studyLinks   || []
     };
   }
 
