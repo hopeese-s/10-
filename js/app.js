@@ -18,15 +18,41 @@
   };
 
   // ─── Init ────────────────────────────────────────────────
-  function init() {
+  async function init() {
     loadFromStorage();
     detectTheme();
     applyTheme();
     state.currentDay = getDayKey(new Date().getDay());
+
+    // Pull from Cloud if Sync Key exists
+    if (CloudSync.getSyncKey()) {
+      const cloudData = await CloudSync.pullFromCloud();
+      if (cloudData) applyCloudData(cloudData);
+    }
+    CloudSync.updateUIStatus();
+
     renderAll();
     setupEventListeners();
     startClock();
     startTimeIndicator();
+
+    // Start auto sync background polling
+    CloudSync.startAutoSync(cloudData => {
+      if (cloudData) {
+        applyCloudData(cloudData);
+        renderCurrentView();
+      }
+    });
+  }
+
+  function applyCloudData(cloudData) {
+    if (cloudData.checklist) state.checklist = cloudData.checklist;
+    if (cloudData.subjects) state.subjects = cloudData.subjects;
+    if (cloudData.customBlocks) state.customBlocks = cloudData.customBlocks;
+
+    localStorage.setItem('sd-checklist', JSON.stringify(state.checklist));
+    localStorage.setItem('sd-subjects', JSON.stringify(state.subjects));
+    localStorage.setItem('sd-custom-blocks', JSON.stringify(state.customBlocks));
   }
 
   // ─── Storage ─────────────────────────────────────────────
@@ -40,12 +66,15 @@
   }
   function saveChecklist() {
     localStorage.setItem('sd-checklist', JSON.stringify(state.checklist));
+    CloudSync.pushToCloud(state);
   }
   function saveSubjects() {
     localStorage.setItem('sd-subjects', JSON.stringify(state.subjects));
+    CloudSync.pushToCloud(state);
   }
   function saveCustomBlocks() {
     localStorage.setItem('sd-custom-blocks', JSON.stringify(state.customBlocks));
+    CloudSync.pushToCloud(state);
   }
   function saveTheme() {
     localStorage.setItem('sd-theme', state.theme);
@@ -968,6 +997,49 @@
     document.getElementById('add-cancel-btn-footer')?.addEventListener('click', () => closeModal('add-modal'));
     document.getElementById('add-modal')?.addEventListener('click', e => {
       if (e.target === e.currentTarget) closeModal('add-modal');
+    });
+
+    // Cloud Sync modal
+    document.getElementById('cloud-sync-btn')?.addEventListener('click', () => {
+      const modal = document.getElementById('sync-modal');
+      const input = document.getElementById('sync-key-input');
+      if (input) input.value = CloudSync.getSyncKey();
+      CloudSync.updateUIStatus();
+      if (modal) modal.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    });
+
+    document.getElementById('sync-cancel-btn')?.addEventListener('click', () => closeModal('sync-modal'));
+    document.getElementById('sync-modal')?.addEventListener('click', e => {
+      if (e.target === e.currentTarget) closeModal('sync-modal');
+    });
+
+    document.getElementById('sync-connect-btn')?.addEventListener('click', async () => {
+      const input = document.getElementById('sync-key-input');
+      const key = input?.value.trim();
+      if (!key) {
+        showToast('⚠️ กรุณากรอก Sync Key', 'warning');
+        return;
+      }
+      CloudSync.setSyncKey(key);
+      showToast('🔄 กำลังเชื่อมต่อ Cloud...', 'info');
+
+      const cloudData = await CloudSync.pullFromCloud();
+      if (cloudData) {
+        applyCloudData(cloudData);
+        renderCurrentView();
+        showToast('✅ ซิงค์ข้อมูลสำเร็จ!', 'success');
+      } else {
+        await CloudSync.pushToCloud(state);
+        showToast('✅ สร้าง Sync Key บน Cloud แล้ว!', 'success');
+      }
+      closeModal('sync-modal');
+    });
+
+    document.getElementById('sync-disconnect-btn')?.addEventListener('click', () => {
+      CloudSync.setSyncKey('');
+      showToast('⚪ ยกเลิกการซิงค์ Cloud แล้ว', 'info');
+      closeModal('sync-modal');
     });
 
     // Keyboard

@@ -43,6 +43,7 @@
       </nav>
 
       <div class="header-actions">
+        <button class="nav-btn" id="cloud-sync-btn" title="Cloud Sync Settings" style="padding: 4px 10px; font-size: 11.5px;">☁️ Cloud</button>
         <span id="clock" aria-live="polite" aria-label="เวลาปัจจุบัน">00:00:00</span>
         <button class="icon-btn" id="theme-toggle" title="Dark / Light mode" aria-label="Toggle theme">🌙</button>
       </div>
@@ -113,12 +114,37 @@
       </div>
     </div>
 
+    <!-- ─── Cloud Sync Modal ─── -->
+    <div class="modal-overlay" id="sync-modal" role="dialog" aria-modal="true" aria-labelledby="sync-modal-title">
+      <div class="modal-box">
+        <div class="modal-header">
+          <span class="modal-title" id="sync-modal-title">☁️ Cloud Sync (ซิงค์ข้ามเครื่อง)</span>
+          <button class="modal-close" id="sync-cancel-btn" aria-label="ปิด">✕</button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size:12.5px;color:var(--label-2);line-height:1.5;margin-bottom:14px">
+            ตั้งค่า <strong>Sync Key</strong> (เช่น <code>my-bme-2026</code> หรือรหัสผ่านอะไรก็ได้ที่คุณคิดขึ้นเอง) เพื่อซิงค์ตารางและการติ๊กหนังสือข้ามเครื่อง เช่น iPad, iPhone และ Mac!
+          </p>
+          <div style="margin-bottom:14px" id="modal-sync-status" class="status-badge">⚪ ข้อมูลเก็บในเครื่องนี้เท่านั้น</div>
+          <div class="form-group">
+            <label class="form-label">Sync Key / รหัสประจำตัว</label>
+            <input id="sync-key-input" class="form-input" type="text" placeholder="เช่น bme-study-pass-99" />
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="sync-disconnect-btn">ยกเลิก Sync Key</button>
+          <button class="btn btn-primary" id="sync-connect-btn">เชื่อมต่อ & Sync</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ─── Toast ─── -->
     <div class="toast-container" id="toast-container" role="status" aria-live="polite"></div>
 
   </div>
 
   <script src="js/data.js"></script>
+  <script src="js/sync.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
