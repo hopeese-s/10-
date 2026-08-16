@@ -1,15 +1,14 @@
 // ============================================================
 // sync.js — Cloud Sync Module  (Key: "1")
+// Ultra-fast, robust real-time cloud sync engine
 // ============================================================
 
 const CloudSync = (function () {
   'use strict';
 
   const API = 'https://daily-study-dashboard-production.up.railway.app/api/sync';
-  const PUSH_DEBOUNCE_MS = 1200;   // batch rapid saves into one push
-  const POLL_INTERVAL_MS = 8000;   // poll every 8s (was 2.5s — too aggressive)
-  const PUSH_COOL_MS     = 3000;   // skip pull for 3s after we pushed (avoid echo)
-  const TS_TOLERANCE_MS  = 500;    // treat timestamps within 500ms as equal
+  const PUSH_DEBOUNCE_MS = 100;    // 100ms rapid debounce
+  const POLL_INTERVAL_MS = 2500;   // Poll every 2.5 seconds for instant multi-device sync
 
   let syncKey      = localStorage.getItem('sd-sync-key') || '1';
   let syncStatus   = syncKey ? 'synced' : 'local';
@@ -17,32 +16,42 @@ const CloudSync = (function () {
 
   let isPushing      = false;
   let isPulling      = false;
+  let pendingPushData= null;
   let pushDebounceId = null;
-  let lastPushAt     = 0;          // timestamp of last successful push
   let pollTimer      = null;
-  let listenersAdded = false;      // guard: add DOM listeners only once
+  let listenersAdded = false;
 
   let _onRemoteUpdate = null;
 
   // BroadcastChannel (same-device cross-tab, 0ms)
   let bc = null;
-  try { if (typeof BroadcastChannel !== 'undefined') bc = new BroadcastChannel('egbe-sync'); } catch (_) {}
+  try {
+    if (typeof BroadcastChannel !== 'undefined') {
+      bc = new BroadcastChannel('egbe-sync');
+    }
+  } catch (_) {}
 
   // ─── Public API ─────────────────────────────────────────────
-  function getSyncKey()     { return syncKey; }
-  function getLastSyncTime(){ return lastSyncTime; }
+  function getSyncKey()      { return syncKey; }
+  function getLastSyncTime() { return lastSyncTime; }
 
   function setSyncKey(key) {
     syncKey = (key || '').trim();
-    if (syncKey) { localStorage.setItem('sd-sync-key', syncKey); syncStatus = 'synced'; }
-    else         { localStorage.removeItem('sd-sync-key');         syncStatus = 'local'; }
+    if (syncKey) {
+      localStorage.setItem('sd-sync-key', syncKey);
+      syncStatus = 'synced';
+    } else {
+      localStorage.removeItem('sd-sync-key');
+      syncStatus = 'local';
+    }
     updateUIStatus();
-    if (bc) try { bc.postMessage({ type: 'KEY_CHANGED', syncKey }); } catch (_) {}
+    if (bc) {
+      try { bc.postMessage({ type: 'KEY_CHANGED', syncKey }); } catch (_) {}
+    }
   }
 
-  // ─── Push (debounced) ───────────────────────────────────────
+  // ─── Push (Queued & Instant) ────────────────────────────────
   function pushToCloud(data) {
-    // Broadcast to other tabs instantly (0ms)
     if (bc) {
       try {
         bc.postMessage({
@@ -54,25 +63,34 @@ const CloudSync = (function () {
 
     if (!syncKey) return Promise.resolve({ ok: false, reason: 'no-key' });
 
-    // Debounce: cancel previous pending push and restart timer
+    pendingPushData = data;
     clearTimeout(pushDebounceId);
+
     return new Promise(resolve => {
-      pushDebounceId = setTimeout(() => _doPush(data).then(resolve), PUSH_DEBOUNCE_MS);
+      pushDebounceId = setTimeout(async () => {
+        const res = await _executePush();
+        resolve(res);
+      }, PUSH_DEBOUNCE_MS);
     });
   }
 
-  async function _doPush(data) {
-    if (isPushing) return { ok: false, reason: 'busy' };
+  async function _executePush() {
+    if (isPushing) return { ok: false, reason: 'queued' };
+    if (!pendingPushData) return { ok: true };
+
+    const dataToSend = pendingPushData;
+    pendingPushData = null;
+
     isPushing = true;
     syncStatus = 'syncing';
     updateUIStatus();
 
-    const payload = JSON.stringify(_sanitize(data));
+    const payload = JSON.stringify(_sanitize(dataToSend));
     let ok = false;
 
     try {
       const ctrl = new AbortController();
-      const tid = setTimeout(() => ctrl.abort(), 15000);
+      const tid = setTimeout(() => ctrl.abort(), 12000);
       const res = await fetch(`${API}/${encodeURIComponent(syncKey)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -81,19 +99,26 @@ const CloudSync = (function () {
       });
       clearTimeout(tid);
       ok = res.ok;
-    } catch (_) {}
+    } catch (_) {
+      ok = false;
+    }
 
     isPushing = false;
 
     if (ok) {
-      lastPushAt   = Date.now();
-      lastSyncTime = lastPushAt;
+      lastSyncTime = Date.now();
       localStorage.setItem('sd-last-sync-time', String(lastSyncTime));
       syncStatus = 'synced';
     } else {
       syncStatus = 'error';
     }
     updateUIStatus();
+
+    // If more changes arrived while pushing, push again immediately!
+    if (pendingPushData) {
+      _executePush();
+    }
+
     return { ok };
   }
 
@@ -102,27 +127,28 @@ const CloudSync = (function () {
     if (!syncKey) return { ok: false, reason: 'no-key' };
     if (isPulling) return { ok: false, reason: 'busy' };
 
-    // Skip pull if we just pushed (avoid echo-loop)
-    if (isBackground && (Date.now() - lastPushAt) < PUSH_COOL_MS) {
-      return { ok: false, reason: 'just-pushed' };
-    }
-
     isPulling = true;
-    if (!isBackground) { syncStatus = 'syncing'; updateUIStatus(); }
+    if (!isBackground) {
+      syncStatus = 'syncing';
+      updateUIStatus();
+    }
 
     let foundData = null;
     let is404 = false;
 
     try {
       const ctrl = new AbortController();
-      const tid = setTimeout(() => ctrl.abort(), 15000);
+      const tid = setTimeout(() => ctrl.abort(), 12000);
       const res = await fetch(`${API}/${encodeURIComponent(syncKey)}?t=${Date.now()}`, {
         signal: ctrl.signal
       });
       clearTimeout(tid);
 
-      if (res.status === 404) { is404 = true; }
-      else if (res.ok)        { foundData = await res.json(); }
+      if (res.status === 404) {
+        is404 = true;
+      } else if (res.ok) {
+        foundData = await res.json();
+      }
     } catch (_) {}
 
     isPulling = false;
@@ -138,7 +164,10 @@ const CloudSync = (function () {
       updateUIStatus();
       return { ok: true, notFound: true, data: null };
     } else {
-      if (!isBackground) { syncStatus = 'error'; updateUIStatus(); }
+      if (!isBackground) {
+        syncStatus = 'error';
+        updateUIStatus();
+      }
       return { ok: false, data: null };
     }
   }
@@ -147,7 +176,7 @@ const CloudSync = (function () {
   function startAutoSync(onRemoteUpdate) {
     _onRemoteUpdate = onRemoteUpdate;
 
-    // BroadcastChannel handler (other tabs on same device)
+    // Cross-tab broadcast listener
     if (bc) {
       bc.onmessage = (e) => {
         if (!e.data) return;
@@ -160,7 +189,6 @@ const CloudSync = (function () {
       };
     }
 
-    // Register DOM listeners only once to prevent stacking
     if (!listenersAdded) {
       listenersAdded = true;
 
@@ -179,16 +207,18 @@ const CloudSync = (function () {
       });
     }
 
-    // Background poll
+    // Background polling (every 2.5 seconds)
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(async () => {
       if (!syncKey || document.visibilityState !== 'visible' || isPushing) return;
       const r = await pullFromCloud(true);
-      if (r.ok && r.data && _onRemoteUpdate) _onRemoteUpdate(r.data);
+      if (r.ok && r.data && _onRemoteUpdate) {
+        _onRemoteUpdate(r.data);
+      }
     }, POLL_INTERVAL_MS);
   }
 
-  // ─── UI ─────────────────────────────────────────────────────
+  // ─── UI Status ──────────────────────────────────────────────
   function updateUIStatus() {
     const btn        = document.getElementById('cloud-sync-btn');
     const modalBadge = document.getElementById('modal-sync-status');
@@ -214,7 +244,6 @@ const CloudSync = (function () {
     }
   }
 
-  // ─── Helpers ────────────────────────────────────────────────
   function _sanitize(data) {
     return {
       checklist:    data.checklist    || {},
@@ -223,11 +252,19 @@ const CloudSync = (function () {
       studyFolders: data.studyFolders || [],
       studyLinks:   data.studyLinks   || [],
       updatedAt:    data.updatedAt    || new Date().toISOString(),
-      version:      data.version      || 0
+      version:      Number(data.version) || Date.now()
     };
   }
 
   function _pad(n) { return String(n).padStart(2, '0'); }
 
-  return { getSyncKey, setSyncKey, getLastSyncTime, pushToCloud, pullFromCloud, startAutoSync, updateUIStatus };
+  return {
+    getSyncKey,
+    setSyncKey,
+    getLastSyncTime,
+    pushToCloud,
+    pullFromCloud,
+    startAutoSync,
+    updateUIStatus
+  };
 })();

@@ -234,15 +234,7 @@
     if (window.CloudSync) {
       CloudSync.startAutoSync(cloudData => {
         if (cloudData) {
-          const syncResult = syncSmartWithCloud(cloudData);
-          if (syncResult === 'pulled' || syncResult === 'merged') {
-            const isTyping = document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
-            if (state.currentTopView === 'dashboard') {
-              if (!isTyping) renderDashboardCurrentView();
-            } else if (state.currentTopView === 'study' && !isTyping) {
-              renderStudyView();
-            }
-          }
+          syncSmartWithCloud(cloudData);
         }
       });
     }
@@ -257,8 +249,8 @@
 
   // ─── Storage & Smart Cloud Sync ──────────────────────────
   function touchUpdatedAt() {
-    state.version = (state.version || 0) + 1;
-    localStorage.setItem('sd-version', state.version);
+    state.version = Date.now();
+    localStorage.setItem('sd-version', String(state.version));
     state.updatedAt = new Date().toISOString();
     localStorage.setItem('sd-updated-at', state.updatedAt);
   }
@@ -266,26 +258,29 @@
   function syncSmartWithCloud(cloudData) {
     if (!cloudData) return 'no-data';
 
-    const localVersion  = state.version || 0;
-    const remoteVersion = cloudData.version || 0;
+    const localVersion  = Number(state.version) || 0;
+    const remoteVersion = Number(cloudData.version) || 0;
 
     if (remoteVersion > localVersion) {
-      // Cloud is meaningfully newer: apply it
+      // Cloud is newer: apply it immediately
       applyCloudData(cloudData);
-      window.location.reload(); // Hard refresh as requested by user
+      reRenderCurrentView();
       return 'pulled';
     } else if (localVersion > remoteVersion) {
-      // Local is meaningfully newer: push up
+      // Local is newer: push up
       if (window.CloudSync) CloudSync.pushToCloud(state);
       return 'pushed';
     } else {
-      // Within tolerance: merge checklist/subjects field-by-field
+      // Equal version: merge checklist/subjects field-by-field
       let changed = false;
       if (cloudData.checklist) {
         for (const [day, dayObj] of Object.entries(cloudData.checklist)) {
           if (!state.checklist[day]) state.checklist[day] = {};
           for (const [k, v] of Object.entries(dayObj)) {
-            if (state.checklist[day][k] !== v) { state.checklist[day][k] = v; changed = true; }
+            if (state.checklist[day][k] !== v) {
+              state.checklist[day][k] = v;
+              changed = true;
+            }
           }
         }
       }
@@ -293,7 +288,10 @@
         for (const [day, dayObj] of Object.entries(cloudData.subjects)) {
           if (!state.subjects[day]) state.subjects[day] = {};
           for (const [k, v] of Object.entries(dayObj)) {
-            if (state.subjects[day][k] !== v) { state.subjects[day][k] = v; changed = true; }
+            if (state.subjects[day][k] !== v) {
+              state.subjects[day][k] = v;
+              changed = true;
+            }
           }
         }
       }
@@ -302,9 +300,24 @@
         localStorage.setItem('sd-subjects',  JSON.stringify(state.subjects));
         touchUpdatedAt();
         if (window.CloudSync) CloudSync.pushToCloud(state);
-        window.location.reload(); // Hard refresh as requested by user
+        reRenderCurrentView();
       }
       return changed ? 'merged' : 'equal';
+    }
+  }
+
+  function reRenderCurrentView() {
+    const isTyping = document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
+    if (isTyping) return;
+
+    if (state.currentTopView === 'dashboard') {
+      renderDashboardCurrentView();
+    } else if (state.currentTopView === 'study') {
+      renderStudyView();
+    } else if (state.currentTopView === 'curriculum') {
+      renderCurriculumView();
+    } else if (state.currentTopView === 'graph') {
+      renderGraphView();
     }
   }
 
