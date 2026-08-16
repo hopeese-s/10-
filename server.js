@@ -78,7 +78,7 @@ const server = http.createServer((req, res) => {
           const parsed = JSON.parse(body);
           store[key] = {
             ...parsed,
-            updatedAt: new Date().toISOString()
+            updatedAt: parsed.updatedAt || new Date().toISOString()
           };
           saveStore();
           res.writeHead(200, { 'Content-Type': 'application/json' });

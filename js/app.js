@@ -2118,39 +2118,30 @@
     });
 
     // Cloud Sync header button
-    document.getElementById('cloud-sync-btn')?.addEventListener('click', async (e) => {
+    document.getElementById('cloud-sync-btn')?.addEventListener('click', async () => {
       const modal = document.getElementById('sync-modal');
       const input = document.getElementById('sync-key-input');
       const key = CloudSync.getSyncKey();
 
-      if (!key || e.shiftKey || e.altKey) {
-        // Open setup modal
-        if (input) input.value = key;
-        CloudSync.updateUIStatus();
-        if (modal) modal.classList.add('open');
-        document.body.style.overflow = 'hidden';
-      } else {
-        // Fast instant smart sync
-        showToast('🔄 กำลังซิงค์ข้อมูลกับ Cloud...', 'info');
+      if (input) input.value = key;
+      CloudSync.updateUIStatus();
+      if (modal) modal.classList.add('open');
+      document.body.style.overflow = 'hidden';
+
+      if (key) {
+        showToast('🔄 กำลังเชื่อมต่อและซิงค์ข้อมูลกับ Cloud...', 'info');
         const pullRes = await CloudSync.pullFromCloud();
-        if (pullRes.ok) {
-          if (pullRes.data) {
-            const syncRes = syncSmartWithCloud(pullRes.data);
-            if (syncRes === 'pulled' || syncRes === 'merged') {
-              if (state.currentTopView === 'dashboard') renderDashboardCurrentView();
-              else if (state.currentTopView === 'study') renderStudyView();
-              showToast('✅ ดึงข้อมูลล่าสุดจาก Cloud มาอัปเดตเครื่องนี้แล้ว!', 'success');
-            } else if (syncRes === 'pushed') {
-              showToast('✅ ข้อมูลในเครื่องนี้ล่าสุดกว่า! อัปเดตขึ้น Cloud เรียบร้อย', 'success');
-            } else {
-              showToast('✅ ข้อมูลตรงกันกับ Cloud เรียบร้อย', 'success');
-            }
+        if (pullRes && pullRes.ok && pullRes.data) {
+          const syncRes = syncSmartWithCloud(pullRes.data);
+          if (syncRes === 'pulled' || syncRes === 'merged') {
+            if (state.currentTopView === 'dashboard') renderDashboardCurrentView();
+            else if (state.currentTopView === 'study') renderStudyView();
+            showToast('✅ ดึงข้อมูลล่าสุดจาก Cloud มาอัปเดตเครื่องนี้แล้ว!', 'success');
+          } else if (syncRes === 'pushed') {
+            showToast('✅ ข้อมูลในเครื่องนี้ล่าสุดกว่า! อัปเดตขึ้น Cloud เรียบร้อย', 'success');
           } else {
-            await CloudSync.pushToCloud(state);
-            showToast('✅ ส่งข้อมูลเครื่องนี้ขึ้น Cloud สำเร็จ!', 'success');
+            showToast('✅ ข้อมูลตรงกันกับ Cloud เรียบร้อย', 'success');
           }
-        } else {
-          showToast('⚠️ ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ Cloud ได้ในขณะนี้', 'warning');
         }
       }
     });

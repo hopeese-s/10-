@@ -15,6 +15,8 @@ const CloudSync = (function() {
     }
   } catch (e) {}
 
+  const PRIMARY_CLOUD_API = 'https://daily-study-dashboard-production.up.railway.app/api/sync';
+
   let syncKey = localStorage.getItem('sd-sync-key') || '';
   let syncStatus = syncKey ? 'synced' : 'local'; // 'local' | 'synced' | 'syncing' | 'error'
   let autoSyncTimer = null;
@@ -23,7 +25,7 @@ const CloudSync = (function() {
   let isPushing = false;
   let hasPendingPush = false;
   let pendingData = null;
-  let cachedWorkingBaseUrl = null;
+  let cachedWorkingBaseUrl = PRIMARY_CLOUD_API;
   let isPulling = false;
 
   function getSyncKey() { return syncKey; }
@@ -31,7 +33,7 @@ const CloudSync = (function() {
 
   function setSyncKey(key) {
     syncKey = (key || '').trim();
-    cachedWorkingBaseUrl = null; // reset cache on key change
+    cachedWorkingBaseUrl = PRIMARY_CLOUD_API; // always target primary cloud on key change
     if (syncKey) {
       localStorage.setItem('sd-sync-key', syncKey);
       syncStatus = 'synced';
@@ -53,23 +55,28 @@ const CloudSync = (function() {
     if (cachedWorkingBaseUrl) {
       urls.push(cachedWorkingBaseUrl);
     }
-    if (window.location.protocol.startsWith('http')) {
+    // 1. ALWAYS use the primary central Cloud API so all devices share the exact same data!
+    if (!urls.includes(PRIMARY_CLOUD_API)) {
+      urls.push(PRIMARY_CLOUD_API);
+    }
+    // 2. Fallbacks (current origin / local server)
+    if (window.location.protocol.startsWith('http') && !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1')) {
       const originUrl = `${window.location.origin}/api/sync`;
       if (!urls.includes(originUrl)) urls.push(originUrl);
     }
     const local1 = 'http://localhost:3000/api/sync';
     const local2 = 'http://127.0.0.1:3000/api/sync';
-    const cloud1 = 'https://daily-study-dashboard-production.up.railway.app/api/sync';
 
     if (!urls.includes(local1)) urls.push(local1);
     if (!urls.includes(local2)) urls.push(local2);
-    if (!urls.includes(cloud1)) urls.push(cloud1);
 
     return urls;
   }
 
   // Push local state to Cloud with Queuing & Immediate Tab Broadcast
   async function pushToCloud(data) {
+    const currentUpdatedAt = data.updatedAt || new Date().toISOString();
+
     // 1. Broadcast locally to all other tabs on this device immediately (0ms)
     if (syncChannel) {
       try {
@@ -80,7 +87,7 @@ const CloudSync = (function() {
             subjects: data.subjects || {},
             customBlocks: data.customBlocks || {},
             studyLinks: data.studyLinks || [],
-            updatedAt: new Date().toISOString()
+            updatedAt: currentUpdatedAt
           }
         });
       } catch (e) {}
@@ -104,7 +111,7 @@ const CloudSync = (function() {
       subjects: data.subjects || {},
       customBlocks: data.customBlocks || {},
       studyLinks: data.studyLinks || [],
-      updatedAt: new Date().toISOString()
+      updatedAt: currentUpdatedAt
     });
 
     const candidateUrls = getCandidateBaseUrls();
