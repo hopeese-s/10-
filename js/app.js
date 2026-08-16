@@ -265,28 +265,24 @@
 
     const localTime  = new Date(state.updatedAt || 0).getTime();
     const remoteTime = new Date(cloudData.updatedAt || 0).getTime();
+    const TOLERANCE  = 2000; // 2s — same-device rapid push/pull can differ by ~ms
 
-    // 1. Remote is newer: apply cloud data
-    if (remoteTime > localTime) {
+    if (remoteTime > localTime + TOLERANCE) {
+      // Cloud is meaningfully newer: apply it
       applyCloudData(cloudData);
       return 'pulled';
-    }
-    // 2. Local is newer: push local data up to cloud
-    else if (localTime > remoteTime) {
+    } else if (localTime > remoteTime + TOLERANCE) {
+      // Local is meaningfully newer: push up
       if (window.CloudSync) CloudSync.pushToCloud(state);
       return 'pushed';
-    }
-    // 3. Timestamps equal or close: merge checklist safely
-    else {
+    } else {
+      // Within tolerance: merge checklist/subjects field-by-field
       let changed = false;
       if (cloudData.checklist) {
         for (const [day, dayObj] of Object.entries(cloudData.checklist)) {
           if (!state.checklist[day]) state.checklist[day] = {};
           for (const [k, v] of Object.entries(dayObj)) {
-            if (state.checklist[day][k] !== v) {
-              state.checklist[day][k] = v;
-              changed = true;
-            }
+            if (state.checklist[day][k] !== v) { state.checklist[day][k] = v; changed = true; }
           }
         }
       }
@@ -294,20 +290,17 @@
         for (const [day, dayObj] of Object.entries(cloudData.subjects)) {
           if (!state.subjects[day]) state.subjects[day] = {};
           for (const [k, v] of Object.entries(dayObj)) {
-            if (state.subjects[day][k] !== v) {
-              state.subjects[day][k] = v;
-              changed = true;
-            }
+            if (state.subjects[day][k] !== v) { state.subjects[day][k] = v; changed = true; }
           }
         }
       }
       if (changed) {
         localStorage.setItem('sd-checklist', JSON.stringify(state.checklist));
-        localStorage.setItem('sd-subjects', JSON.stringify(state.subjects));
+        localStorage.setItem('sd-subjects',  JSON.stringify(state.subjects));
         touchUpdatedAt();
         if (window.CloudSync) CloudSync.pushToCloud(state);
       }
-      return 'merged';
+      return changed ? 'merged' : 'equal';
     }
   }
 
@@ -316,20 +309,32 @@
       state.updatedAt = cloudData.updatedAt;
       localStorage.setItem('sd-updated-at', state.updatedAt);
     }
-    if (cloudData.checklist) state.checklist = cloudData.checklist;
-    if (cloudData.subjects) state.subjects = cloudData.subjects;
-    if (cloudData.customBlocks) state.customBlocks = cloudData.customBlocks;
+    if (cloudData.checklist)    state.checklist    = cloudData.checklist;
+    if (cloudData.subjects)     state.subjects      = cloudData.subjects;
+    if (cloudData.customBlocks) state.customBlocks  = cloudData.customBlocks;
+
+    // Folders: take cloud version if non-empty, else keep local
     if (cloudData.studyFolders && Array.isArray(cloudData.studyFolders) && cloudData.studyFolders.length > 0) {
       state.studyFolders = cloudData.studyFolders;
       localStorage.setItem('sd-study-folders', JSON.stringify(state.studyFolders));
     }
+
+    // Links: merge cloud links with DEFAULT_STUDY_LINKS so defaults are never lost
     if (cloudData.studyLinks && Array.isArray(cloudData.studyLinks) && cloudData.studyLinks.length > 0) {
-      state.studyLinks = cloudData.studyLinks;
+      const cloudIds   = new Set(cloudData.studyLinks.map(l => l.id));
+      const defaultIds = new Set(DEFAULT_STUDY_LINKS.map(l => l.id));
+      // Defaults not in cloud (new defaults added since last sync)
+      const missingDefaults = DEFAULT_STUDY_LINKS.filter(l => !cloudIds.has(l.id));
+      // Custom links from cloud (user-added)
+      const cloudCustom = cloudData.studyLinks.filter(l => !defaultIds.has(l.id));
+      // Cloud versions of defaults
+      const cloudDefaults = cloudData.studyLinks.filter(l => defaultIds.has(l.id));
+      state.studyLinks = [...cloudDefaults, ...missingDefaults, ...cloudCustom];
       localStorage.setItem('sd-study-links', JSON.stringify(state.studyLinks));
     }
 
-    localStorage.setItem('sd-checklist', JSON.stringify(state.checklist));
-    localStorage.setItem('sd-subjects', JSON.stringify(state.subjects));
+    localStorage.setItem('sd-checklist',     JSON.stringify(state.checklist));
+    localStorage.setItem('sd-subjects',      JSON.stringify(state.subjects));
     localStorage.setItem('sd-custom-blocks', JSON.stringify(state.customBlocks));
   }
 
