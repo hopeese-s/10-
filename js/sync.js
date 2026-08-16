@@ -277,3 +277,7 @@ const CloudSync = (function () {
     updateUIStatus
   };
 })();
+
+// Expose on window so app.js can reference it
+// (top-level `const` does NOT create a `window` property in browsers)
+window.CloudSync = CloudSync;
