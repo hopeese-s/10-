@@ -178,6 +178,7 @@ body {
   letter-spacing: -0.02em;
   cursor: pointer;
   user-select: none;
+  white-space: nowrap;
 }
 
 .brand-dot {
@@ -1859,6 +1860,9 @@ body {
   }
   .app-header {
     padding: 0 1rem;
+  }
+  #clock, .online-pill {
+    display: none !important;
   }
   .main-content {
     padding: 1.25rem 1rem 5.5rem;
