@@ -451,6 +451,16 @@ body {
   padding: 1.75rem 1.5rem 6rem;
 }
 
+/* ─── Dashboard Subview Panels ─── */
+.sub-view-panel {
+  display: none;
+}
+
+.sub-view-panel.active {
+  display: block;
+  animation: pageIn 0.2s ease both;
+}
+
 .view-page {
   display: none;
 }
@@ -1799,10 +1809,24 @@ body {
   -webkit-backdrop-filter: blur(16px);
   border-top: 1px solid var(--sep);
   padding: 6px 0 max(6px, env(safe-area-inset-bottom));
-  justify-content: space-around;
 }
 
-.mob-nav-btn {
+.mobile-nav-inner {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  max-width: 480px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.mob-lbl {
+  font-size: 9.5px;
+  font-weight: 500;
+  color: inherit;
+}
+
+.mob-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1816,11 +1840,11 @@ body {
   padding: 4px 8px;
 }
 
-.mob-nav-btn .mob-icon {
+.mob-btn .mob-icon {
   font-size: 18px;
 }
 
-.mob-nav-btn.active {
+.mob-btn.active {
   color: var(--accent);
   font-weight: 700;
 }

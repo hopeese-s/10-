@@ -448,7 +448,7 @@
     });
 
     // Update mobile nav buttons
-    document.querySelectorAll('.mob-nav-btn').forEach(btn => {
+    document.querySelectorAll('.mob-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.view === viewName);
     });
 
@@ -2277,7 +2277,7 @@
     });
 
     // Mobile Navigation Links
-    document.querySelectorAll('.mob-nav-btn[data-view]').forEach(btn => {
+    document.querySelectorAll('.mob-btn[data-view]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const view = e.currentTarget.dataset.view;
         if (view) switchTopView(view);
