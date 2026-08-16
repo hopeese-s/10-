@@ -222,7 +222,8 @@ const CloudSync = (function () {
       customBlocks: data.customBlocks || {},
       studyFolders: data.studyFolders || [],
       studyLinks:   data.studyLinks   || [],
-      updatedAt:    data.updatedAt    || new Date().toISOString()
+      updatedAt:    data.updatedAt    || new Date().toISOString(),
+      version:      data.version      || 0
     };
   }
 

@@ -15,6 +15,7 @@
 
     // 9th Core Dashboard State
     theme: 'light',
+    version: 0,
     updatedAt: new Date().toISOString(),
     checklist: {},      // { 'monday-2026-08-17': { 'mon-11-0': true } }
     subjects: {},       // { 'monday-2026-08-17': { 'mon-11-0': 'GenPhy' } }
@@ -256,6 +257,8 @@
 
   // ─── Storage & Smart Cloud Sync ──────────────────────────
   function touchUpdatedAt() {
+    state.version = (state.version || 0) + 1;
+    localStorage.setItem('sd-version', state.version);
     state.updatedAt = new Date().toISOString();
     localStorage.setItem('sd-updated-at', state.updatedAt);
   }
@@ -263,15 +266,14 @@
   function syncSmartWithCloud(cloudData) {
     if (!cloudData) return 'no-data';
 
-    const localTime  = new Date(state.updatedAt || 0).getTime();
-    const remoteTime = new Date(cloudData.updatedAt || 0).getTime();
-    const TOLERANCE  = 2000; // 2s — same-device rapid push/pull can differ by ~ms
+    const localVersion  = state.version || 0;
+    const remoteVersion = cloudData.version || 0;
 
-    if (remoteTime > localTime + TOLERANCE) {
+    if (remoteVersion > localVersion) {
       // Cloud is meaningfully newer: apply it
       applyCloudData(cloudData);
       return 'pulled';
-    } else if (localTime > remoteTime + TOLERANCE) {
+    } else if (localVersion > remoteVersion) {
       // Local is meaningfully newer: push up
       if (window.CloudSync) CloudSync.pushToCloud(state);
       return 'pushed';
@@ -305,6 +307,10 @@
   }
 
   function applyCloudData(cloudData) {
+    if (cloudData.version !== undefined) {
+      state.version = cloudData.version;
+      localStorage.setItem('sd-version', state.version);
+    }
     if (cloudData.updatedAt) {
       state.updatedAt = cloudData.updatedAt;
       localStorage.setItem('sd-updated-at', state.updatedAt);
@@ -341,6 +347,7 @@
   function loadFromStorage() {
     try {
       state.theme        = localStorage.getItem('sd-theme') || 'light';
+      state.version      = parseInt(localStorage.getItem('sd-version') || '0', 10);
       state.updatedAt    = localStorage.getItem('sd-updated-at') || new Date().toISOString();
       state.checklist    = JSON.parse(localStorage.getItem('sd-checklist') || '{}');
       state.subjects     = JSON.parse(localStorage.getItem('sd-subjects') || '{}');
