@@ -460,7 +460,9 @@
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     // Render view-specific content
-    if (viewName === 'dashboard') {
+    if (viewName === 'home') {
+      renderHomeView();
+    } else if (viewName === 'dashboard') {
       renderDashboardCurrentView();
     } else if (viewName === 'curriculum') {
       renderCurriculumView();
@@ -469,6 +471,76 @@
     } else if (viewName === 'graph') {
       renderGraphView();
     }
+  }
+
+  // ─── View 0: Home Landing Page (E-Calendar for personal use) ─
+  function renderHomeView() {
+    const container = document.getElementById('view-egbe-home');
+    if (!container) return;
+
+    container.innerHTML = `
+      <div class="hero-section">
+        <div class="hero-badge">
+          <span class="hero-badge-dot"></span>
+          <span class="hero-badge-text">Personal Productivity &amp; Study Suite</span>
+        </div>
+
+        <h1 class="hero-title">
+          E-Calendar<br />
+          <span class="hero-italic">for personal use</span>
+        </h1>
+
+        <p class="hero-subtitle">
+          ระบบจัดการเวลา แผนการศึกษา ตารางเรียน และคลังความรู้ส่วนตัว พร้อมระบบ Real-Time Cloud Sync ทุกอุปกรณ์
+        </p>
+
+        <div class="hero-ctas">
+          <button class="btn-hero-accent" data-view="dashboard">
+            <span>📅 เปิด Daily Dashboard</span>
+          </button>
+          <button class="btn-hero-dark" data-view="study">
+            <span>📝 คลังชีท &amp; โฟลเดอร์</span>
+          </button>
+          <button class="btn-hero-outline" data-view="graph">
+            <span>🕸️ Knowledge Graph</span>
+          </button>
+        </div>
+
+        <div class="hero-features-grid">
+          <div class="feature-card" data-view="dashboard">
+            <div style="font-size:28px;margin-bottom:12px">📅</div>
+            <h3 style="font-size:16px;font-weight:700;margin-bottom:6px;color:var(--label)">Daily Study &amp; Checklist</h3>
+            <p style="font-size:13px;color:var(--label-2);line-height:1.5">ตารางเรียนรายวัน รูทีนชีวิต ติ๊กงาน Check-off อัตโนมัติ พร้อม Real-Time Clock</p>
+          </div>
+
+          <div class="feature-card" data-view="curriculum">
+            <div style="font-size:28px;margin-bottom:12px">📚</div>
+            <h3 style="font-size:16px;font-weight:700;margin-bottom:6px;color:var(--label)">BME Curriculum 139 Credits</h3>
+            <p style="font-size:13px;color:var(--label-2);line-height:1.5">โครงสร้างหลักสูตร 4 ชั้นปี เลือกระหว่าง Grid และ List View พร้อมสรุปหน่วยกิต</p>
+          </div>
+
+          <div class="feature-card" data-view="study">
+            <div style="font-size:28px;margin-bottom:12px">📂</div>
+            <h3 style="font-size:16px;font-weight:700;margin-bottom:6px;color:var(--label)">Study Folders &amp; Files</h3>
+            <p style="font-size:13px;color:var(--label-2);line-height:1.5">จัดระเบียบโฟลเดอร์ ลากไฟล์ Drag &amp; Drop บน iPad และพรีวิว PDF ต่อเนื่องทุกหน้า</p>
+          </div>
+
+          <div class="feature-card" data-view="graph">
+            <div style="font-size:28px;margin-bottom:12px">🕸️</div>
+            <h3 style="font-size:16px;font-weight:700;margin-bottom:6px;color:var(--label)">4-Year Prerequisite Graph</h3>
+            <p style="font-size:13px;color:var(--label-2);line-height:1.5">แผนผังวิชาต่อเนื่อง Interactive SVG ลากโยงวิชาบังคับก่อนตั้งแต่ปี 1 ถึงปี 4</p>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Click handlers for hero elements
+    container.querySelectorAll('[data-view]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        const targetView = e.currentTarget.dataset.view;
+        if (targetView) switchTopView(targetView);
+      });
+    });
   }
 
   function switchDashboardView(subviewName) {

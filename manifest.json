@@ -1,0 +1,30 @@
+{
+  "name": "E-Calendar for personal use",
+  "short_name": "E-Calendar",
+  "description": "E-Calendar for personal use",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#FDFBF7",
+  "theme_color": "#C45A1B",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

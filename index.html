@@ -3,12 +3,32 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="description" content="EgBE Memory Engine · BME Mahidol Daily Study Dashboard — ตารางกิจกรรม Cloud Sync Curriculum Graph" />
+  <title>E-Calendar for personal use</title>
+  <meta name="description" content="E-Calendar for personal use" />
+
+  <!-- OpenGraph & Social Sharing Meta (Link Preview) -->
+  <meta property="og:title" content="E-Calendar for personal use" />
+  <meta property="og:description" content="E-Calendar for personal use" />
+  <meta property="og:image" content="icons/icon-512.png" />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="E-Calendar for personal use" />
+  <meta name="twitter:description" content="E-Calendar for personal use" />
+  <meta name="twitter:image" content="icons/icon-512.png" />
+
+  <!-- iOS Apple Touch Icon & PWA Manifest -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="E-Calendar" />
+  <meta name="application-name" content="E-Calendar" />
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+  <link rel="manifest" href="manifest.json" />
+
   <meta name="theme-color" content="#FDFBF7" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#12100E" media="(prefers-color-scheme: dark)" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <title>EgBE Memory Engine · Mahidol BME</title>
+
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
@@ -20,11 +40,11 @@
 
   <div id="app">
 
-    <!-- ─── Global Header (3rd EgBE style) ─── -->
+    <!-- ─── Global Header ─── -->
     <header class="app-header" role="banner">
       <div class="header-brand">
         <a href="#" class="brand-logo" id="brand-logo-btn">
-          <span class="brand-dot"></span>EgBE
+          <span class="brand-dot"></span>E-Calendar
         </a>
         <nav class="header-nav" aria-label="เมนูหลัก">
           <button class="nav-link active" data-view="home">Home</button>
