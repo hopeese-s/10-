@@ -1,0 +1,11 @@
+{
+  "name": "daily-study-dashboard",
+  "version": "1.0.0",
+  "description": "Daily Routine & Study Dashboard for BME Mahidol students",
+  "scripts": {
+    "start": "npx serve . -p ${PORT:-3000}",
+    "dev": "npx serve . -p 3000"
+  },
+  "keywords": ["study", "dashboard", "routine", "BME", "Mahidol"],
+  "engines": { "node": ">=16" }
+}

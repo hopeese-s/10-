@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="th" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="description" content="Daily Routine & Study Dashboard สำหรับนักศึกษา BME Mahidol — จัดการตารางเรียน ทบทวนวิชา และติดตามความคืบหน้า" />
+  <meta name="theme-color" content="#5a9e7a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <title>Study Dashboard · BME Mahidol</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <!-- Background blobs -->
+  <div class="bg-blobs" aria-hidden="true">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+  </div>
+
+  <div id="app">
+
+    <!-- ─── Header ─── -->
+    <header class="app-header glass" role="banner">
+      <div class="header-brand">
+        <div class="brand-icon" aria-hidden="true">📅</div>
+        <div class="brand-text">
+          <h1>Study Dashboard</h1>
+          <p>BME · Mahidol University · 2026</p>
+        </div>
+      </div>
+
+      <nav class="header-nav" aria-label="เมนูหลัก">
+        <button class="nav-btn active" data-view="timeline" aria-current="page">⏱ ตาราง</button>
+        <button class="nav-btn" data-view="week">📊 สัปดาห์</button>
+        <button class="nav-btn" data-view="schedule">📆 ตารางเรียน</button>
+      </nav>
+
+      <div class="header-actions">
+        <div id="clock" aria-live="polite" aria-label="เวลาปัจจุบัน">00:00:00</div>
+        <button class="icon-btn" id="theme-toggle" title="เปลี่ยนธีม" aria-label="เปลี่ยนธีม Dark/Light">🌙</button>
+      </div>
+    </header>
+
+    <!-- ─── Day Tabs (Timeline only) ─── -->
+    <div class="day-tabs-wrapper" id="day-tabs-wrapper" role="navigation" aria-label="เลือกวัน">
+      <div class="day-tabs" id="day-tabs" role="tablist"></div>
+    </div>
+
+    <!-- ─── Main Content ─── -->
+    <main class="main-content" id="main-content" role="main">
+
+      <!-- Timeline View -->
+      <div id="view-timeline" class="view active" role="tabpanel" aria-label="ตารางประจำวัน">
+        <!-- Rendered by JS -->
+      </div>
+
+      <!-- Week Overview View -->
+      <div id="view-week" class="view" role="tabpanel" aria-label="ภาพรวมสัปดาห์">
+        <!-- Rendered by JS -->
+      </div>
+
+      <!-- Class Schedule View -->
+      <div id="view-schedule" class="view" role="tabpanel" aria-label="ตารางเรียน">
+        <!-- Rendered by JS -->
+      </div>
+
+    </main>
+
+    <!-- ─── Mobile Bottom Nav ─── -->
+    <nav class="mobile-nav" aria-label="เมนูมือถือ">
+      <button class="mob-nav-btn active" data-view="timeline">
+        <span class="icon">⏱</span>
+        <span class="label">ตาราง</span>
+      </button>
+      <button class="mob-nav-btn" data-view="week">
+        <span class="icon">📊</span>
+        <span class="label">สัปดาห์</span>
+      </button>
+      <button class="mob-nav-btn" data-view="schedule">
+        <span class="icon">📆</span>
+        <span class="label">เรียน</span>
+      </button>
+      <button class="mob-nav-btn icon-btn" id="mob-theme-toggle" style="border:none;background:transparent;flex-direction:column;gap:3px">
+        <span class="icon">🌙</span>
+        <span class="label">ธีม</span>
+      </button>
+    </nav>
+
+    <!-- ─── Edit Block Modal ─── -->
+    <div class="modal-overlay" id="edit-modal" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">
+      <div class="modal-box glass">
+        <div class="modal-header">
+          <h2 class="modal-title" id="edit-modal-title">✏️ แก้ไขกิจกรรม</h2>
+          <button class="modal-close" id="edit-cancel-btn" aria-label="ปิด">✕</button>
+        </div>
+        <div class="modal-body"></div>
+        <div class="modal-actions">
+          <button class="btn btn-danger" id="edit-delete-btn">🗑</button>
+          <button class="btn btn-secondary" id="edit-cancel-btn-footer">ยกเลิก</button>
+          <button class="btn btn-primary" id="edit-save-btn">💾 บันทึก</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── Add Block Modal ─── -->
+    <div class="modal-overlay" id="add-modal" role="dialog" aria-modal="true" aria-labelledby="add-modal-title">
+      <div class="modal-box glass">
+        <div class="modal-header">
+          <h2 class="modal-title" id="add-modal-title">➕ เพิ่มกิจกรรม</h2>
+          <button class="modal-close" id="add-cancel-btn" aria-label="ปิด">✕</button>
+        </div>
+        <div class="modal-body"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="add-cancel-btn-footer">ยกเลิก</button>
+          <button class="btn btn-primary" id="add-save-btn">✅ เพิ่ม</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── Toast Container ─── -->
+    <div class="toast-container" id="toast-container" role="status" aria-live="polite"></div>
+
+  </div><!-- #app -->
+
+  <!-- Scripts -->
+  <script src="js/data.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
