@@ -141,6 +141,64 @@
       type: 'image',
       url: 'egmu-class-schedule-2026-1-program_B-BI.png',
       desc: 'ภาพตารางเรียนหลักสูตร BME ภาคเรียนที่ 1/2026 ความละเอียดสูง'
+    },
+
+    // ─── BME Assumed Schedules (Year 1 - Year 4 from BMEASSUMESCHE) ───
+    {
+      id: 'doc-sche-y1s2',
+      title: '📅 ตารางเรียนจำลอง ปี 1 เทอม 2 (Year 1 Sem 2)',
+      sub: 'BME Assumed Schedule (PDF)',
+      type: 'pdf',
+      url: 'BMEASSUMESCHE/year1s2.pdf',
+      desc: 'ผังตารางเรียนและเวลาเรียนจำลองหลักสูตร BME ชั้นปีที่ 1 ภาคการศึกษาที่ 2'
+    },
+    {
+      id: 'doc-sche-y2s1',
+      title: '📅 ตารางเรียนจำลอง ปี 2 เทอม 1 (Year 2 Sem 1)',
+      sub: 'BME Assumed Schedule (PDF)',
+      type: 'pdf',
+      url: 'BMEASSUMESCHE/year2s1.pdf',
+      desc: 'ผังตารางเรียนและเวลาเรียนจำลองหลักสูตร BME ชั้นปีที่ 2 ภาคการศึกษาที่ 1'
+    },
+    {
+      id: 'doc-sche-y2s2',
+      title: '📅 ตารางเรียนจำลอง ปี 2 เทอม 2 (Year 2 Sem 2)',
+      sub: 'BME Assumed Schedule (PDF)',
+      type: 'pdf',
+      url: 'BMEASSUMESCHE/year2s2.pdf',
+      desc: 'ผังตารางเรียนและเวลาเรียนจำลองหลักสูตร BME ชั้นปีที่ 2 ภาคการศึกษาที่ 2'
+    },
+    {
+      id: 'doc-sche-y3s1',
+      title: '📅 ตารางเรียนจำลอง ปี 3 เทอม 1 (Year 3 Sem 1)',
+      sub: 'BME Assumed Schedule (PDF)',
+      type: 'pdf',
+      url: 'BMEASSUMESCHE/year3s1.pdf',
+      desc: 'ผังตารางเรียนและเวลาเรียนจำลองหลักสูตร BME ชั้นปีที่ 3 ภาคการศึกษาที่ 1'
+    },
+    {
+      id: 'doc-sche-y3s2',
+      title: '📅 ตารางเรียนจำลอง ปี 3 เทอม 2 (Year 3 Sem 2)',
+      sub: 'BME Assumed Schedule (PDF)',
+      type: 'pdf',
+      url: 'BMEASSUMESCHE/year3s2.pdf',
+      desc: 'ผังตารางเรียนและเวลาเรียนจำลองหลักสูตร BME ชั้นปีที่ 3 ภาคการศึกษาที่ 2'
+    },
+    {
+      id: 'doc-sche-y4s1',
+      title: '📅 ตารางเรียนจำลอง ปี 4 เทอม 1 (Year 4 Sem 1)',
+      sub: 'BME Assumed Schedule (PDF)',
+      type: 'pdf',
+      url: 'BMEASSUMESCHE/year4s1.pdf',
+      desc: 'ผังตารางเรียนและเวลาเรียนจำลองหลักสูตร BME ชั้นปีที่ 4 ภาคการศึกษาที่ 1'
+    },
+    {
+      id: 'doc-sche-y4s2',
+      title: '📅 ตารางเรียนจำลอง ปี 4 เทอม 2 (Year 4 Sem 2)',
+      sub: 'BME Assumed Schedule (PDF)',
+      type: 'pdf',
+      url: 'BMEASSUMESCHE/year4s2.pdf',
+      desc: 'ผังตารางเรียนและเวลาเรียนจำลองหลักสูตร BME ชั้นปีที่ 4 ภาคการศึกษาที่ 2'
     }
   ];
 
@@ -187,6 +245,13 @@
         }
       });
     }
+
+    // Window resize listener for responsive SVG graph edges
+    window.addEventListener('resize', () => {
+      if (state.currentTopView === 'graph') {
+        drawGraphSvgEdges();
+      }
+    });
   }
 
   // ─── Storage & Smart Cloud Sync ──────────────────────────
@@ -1354,93 +1419,408 @@
     document.body.style.overflow = 'hidden';
   }
 
-  // ─── View 4: Concept Knowledge Graph (Year 1 BME) ─────────
+  // ─── View 4: Interactive 4-Year BME Prerequisite Node Graph ─
+  let graphState = {
+    selectedNodeId: null,
+    filterPillar: 'all',
+    searchQuery: '',
+    zoom: 1
+  };
+
   function renderGraphView() {
     const container = document.getElementById('view-egbe-graph');
     if (!container) return;
 
-    const concepts = [
-      {
-        id: 'SCPY161',
-        title: 'Physics & Biomechanics',
-        cat: 'Foundation Science',
-        color: '#3b82f6',
-        desc: 'กฎการเคลื่อนที่ของนิวตัน งานและพลังงาน นำไปสู่การวิเคราะห์แรงกระทำในข้อต่อกระดูก (Joint Forces) และการไหลของของเหลวในหลอดเลือด',
-        connections: ['EGBI100', 'SCPY111', 'Biomechanics']
-      },
-      {
-        id: 'SCMA101',
-        title: 'Calculus & Engineering Math',
-        cat: 'Mathematics',
-        color: '#ec4899',
-        desc: 'การดิฟและอินทิเกรต เพื่อคำนวณอัตราการเปลี่ยนแปลงสัญญาณไฟฟ้าหัวใจ (ECG Derivative) และ Fourier Transform สำหรับกรองคลื่นสมอง',
-        connections: ['EGBI122', 'SCPY161', 'Biosignals']
-      },
-      {
-        id: 'EGBI122',
-        title: 'Programming & Medical Data',
-        cat: 'Engineering & Computing',
-        color: '#10b981',
-        desc: 'การเขียนโปรแกรมประมวลผลข้อมูลเชิงตัวเลข สู่การสร้างอัลกอริทึมวินิจฉัยภาพถ่ายรังสีและเชื่อมต่อเซ็นเซอร์ตรวจวัดชีพจรผู้ป่วย',
-        connections: ['EGBI100', 'Medical_AI']
-      },
-      {
-        id: 'SCCH161',
-        title: 'Chemistry & Biomaterials',
-        cat: 'Foundation Science',
-        color: '#ef4444',
-        desc: 'โครงสร้างพันธะและปฏิกิริยาเคมี สู่การพัฒนาวัสดุฝังในร่างกาย (Implants), พอลิเมอร์ส่งยาตรงเป้าหมาย และระบบนำส่งสารเคมี',
-        connections: ['SCCH169', 'Biomaterials']
-      },
-      {
-        id: 'SCBE102',
-        title: 'Cell Biology & Physiology',
-        cat: 'Life Science',
-        color: '#6bae8e',
-        desc: 'กลไกการทำงานของเซลล์และเยื่อหุ้มเซลล์ การส่งสัญญาณไอออน (Action Potential) ในเซลล์ประสาทและกล้ามเนื้อหัวใจ',
-        connections: ['SCSL190', 'Tissue_Engineering']
-      },
-      {
-        id: 'EGBI100',
-        title: 'BME in the Real World & Medical Devices',
-        cat: 'Core Biomedical',
-        color: '#8b5cf6',
-        desc: 'การรวมเอาฟิสิกส์ ชีววิทยา คณิตศาสตร์ และคอมพิวเตอร์มารวมกันเพื่อออกแบบเครื่องมือแพทย์และการรับรองมาตรฐานความปลอดภัยคลินิก',
-        connections: ['Clinical_Safety', 'Medical_Sensors', 'BME_Design']
-      }
-    ];
+    const currentPillar = graphState.filterPillar || 'all';
+    const query = (graphState.searchQuery || '').toLowerCase().trim();
 
     container.innerHTML = `
-      <div style="margin-bottom:2rem">
-        <h2 style="font-family:var(--font-serif);font-size:1.6rem;font-weight:700;margin-bottom:6px">Concept Knowledge Graph (BME Year 1)</h2>
-        <p style="font-size:13.5px;color:var(--label-2)">ผังเชื่อมโยงมโนทัศน์ความรู้และวิชาพื้นฐานสู่การเป็นวิศวกรชีวแพทย์</p>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.25rem;flex-wrap:wrap;gap:1rem">
+        <div>
+          <h2 style="font-family:var(--font-serif);font-size:1.6rem;font-weight:700;margin-bottom:4px">BME Prerequisite &amp; Career Road Map (ปี 1 → ปี 4)</h2>
+          <p style="font-size:13px;color:var(--label-2)">แผนผังเชื่อมโยงเส้นทางการเรียนรู้วิศวกรรมชีวแพทย์ คลิกที่ Node วิชาเพื่อดูเส้นทาง Prerequisite และวิชาที่จะได้เรียนต่อจนถึงปี 4</p>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--label-2);background:var(--bg-2);padding:6px 12px;border-radius:var(--r-pill);border:1px solid var(--sep)">
+          <span>💡 คลิกที่การ์ดเพื่อ Trace เส้นทางไปต่อ</span>
+        </div>
       </div>
 
-      <div class="cards-grid">
-        ${concepts.map(c => `
-          <div class="card-item" style="border-left:4px solid ${c.color}">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-              <span class="tag-chip" style="background:${c.color}22;color:${c.color}">
-                ● ${c.id}
-              </span>
-              <span style="font-size:11px;color:var(--label-3);font-weight:600">${escHtml(c.cat)}</span>
+      <!-- Graph Toolbar & Filters -->
+      <div class="node-graph-wrapper">
+        <div class="graph-toolbar">
+          <div class="graph-filter-group">
+            <button class="graph-btn-pill ${currentPillar === 'all' ? 'active' : ''}" data-pillar="all">
+              🌈 ทุกสายวิชา (All)
+            </button>
+            ${Object.values(BME_PILLARS).map(p => `
+              <button class="graph-btn-pill ${currentPillar === p.id ? 'active' : ''}" data-pillar="${p.id}">
+                ${p.icon} ${escHtml(p.nameTh)}
+              </button>
+            `).join('')}
+          </div>
+
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <div style="position:relative">
+              <input type="text" id="graph-search-input" placeholder="🔍 ค้นหาวิชา เช่น 122, Phy, AI..." value="${escHtml(graphState.searchQuery || '')}" style="padding:6px 12px 6px 28px;font-size:12px;border-radius:var(--r-pill);border:1px solid var(--sep);background:var(--bg-1);color:var(--label);outline:none;width:180px" />
+              <span style="position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--label-3);pointer-events:none">🔍</span>
+              ${graphState.searchQuery ? `<button id="graph-clear-search" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--label-3);font-size:11px">✕</button>` : ''}
             </div>
-            <h3 style="font-size:15px;font-weight:700;margin-bottom:8px;color:var(--label)">${escHtml(c.title)}</h3>
-            <p style="font-size:12.5px;color:var(--label-2);line-height:1.55;margin-bottom:14px">${escHtml(c.desc)}</p>
-            <div style="border-top:1px solid var(--sep);padding-top:10px;font-size:11.5px;color:var(--label-3)">
-              เชื่อมต่อไปยัง:
-              <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">
-                ${c.connections.map(con => `
-                  <span style="background:var(--bg-3);padding:2px 8px;border-radius:12px;font-size:10.5px;font-weight:600;color:var(--label)">
-                    → ${escHtml(con)}
-                  </span>
-                `).join('')}
-              </div>
+
+            <div class="graph-controls">
+              <button class="graph-control-btn" id="graph-zoom-in" title="ซูมเข้า">➕</button>
+              <button class="graph-control-btn" id="graph-zoom-out" title="ซูมออก">➖</button>
+              <button class="graph-control-btn" id="graph-zoom-reset" title="รีเซ็ต">↺</button>
             </div>
           </div>
-        `).join('')}
+        </div>
+
+        <!-- Interactive Canvas Viewport -->
+        <div class="graph-viewport" id="graph-viewport">
+          <div class="graph-canvas" id="graph-canvas" style="transform: scale(${graphState.zoom})">
+            <!-- Dynamic SVG Connectors Layer -->
+            <svg class="graph-svg-layer" id="graph-svg-layer">
+              <defs>
+                <marker id="arrow-forward" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#2563eb" />
+                </marker>
+                <marker id="arrow-backward" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#10b981" />
+                </marker>
+                <marker id="arrow-default" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                  <path d="M 0 1.5 L 7 5 L 0 8.5 z" fill="rgba(150,150,150,0.4)" />
+                </marker>
+              </defs>
+              <g id="graph-svg-edges-group"></g>
+            </svg>
+
+            <!-- Semester Columns -->
+            ${BME_SEMESTERS.map(sem => {
+              const semNodes = BME_GRAPH_NODES.filter(node => node.sem === sem.id);
+              return `
+                <div class="graph-column" data-sem="${sem.id}">
+                  <div class="graph-col-header">${escHtml(sem.label)}</div>
+                  ${semNodes.map(node => {
+                    const pillar = BME_PILLARS[node.pillar] || BME_PILLARS.core;
+                    const matchesFilter = (currentPillar === 'all' || node.pillar === currentPillar) &&
+                                          (!query || node.code.toLowerCase().includes(query) || node.name.toLowerCase().includes(query) || node.nameTh.toLowerCase().includes(query));
+                    return `
+                      <div class="graph-node ${!matchesFilter ? 'dimmed' : ''}" id="gnode-${node.id}" data-id="${node.id}" data-pillar="${node.pillar}">
+                        <div class="graph-node-top">
+                          <span class="graph-node-code">${escHtml(node.code)}</span>
+                          <span class="graph-node-credits">${node.credits} หน่วยกิต</span>
+                        </div>
+                        <div class="graph-node-title">${escHtml(node.nameTh)}</div>
+                        <div style="font-size:10px;color:var(--label-3);line-height:1.2">${escHtml(node.name)}</div>
+                        <div class="graph-node-stream-tag" style="background:${pillar.bg};color:${pillar.color}">
+                          ${pillar.icon} ${escHtml(pillar.name.split(' ')[0])}
+                        </div>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              `;
+            }).join('')}
+          </div>
+
+          <!-- Slide-Up Course Inspector Panel -->
+          <div id="graph-inspector-container"></div>
+        </div>
       </div>
     `;
+
+    // Attach Filter Buttons
+    container.querySelectorAll('.graph-btn-pill').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const pillar = e.currentTarget.dataset.pillar;
+        if (pillar) {
+          graphState.filterPillar = pillar;
+          renderGraphView();
+        }
+      });
+    });
+
+    // Search Input
+    const searchInp = document.getElementById('graph-search-input');
+    searchInp?.addEventListener('input', (e) => {
+      graphState.searchQuery = e.target.value;
+      updateGraphFiltering();
+    });
+    document.getElementById('graph-clear-search')?.addEventListener('click', () => {
+      graphState.searchQuery = '';
+      renderGraphView();
+    });
+
+    // Zoom Controls
+    document.getElementById('graph-zoom-in')?.addEventListener('click', () => {
+      graphState.zoom = Math.min(graphState.zoom + 0.15, 1.6);
+      const canvas = document.getElementById('graph-canvas');
+      if (canvas) canvas.style.transform = `scale(${graphState.zoom})`;
+      drawGraphSvgEdges();
+    });
+    document.getElementById('graph-zoom-out')?.addEventListener('click', () => {
+      graphState.zoom = Math.max(graphState.zoom - 0.15, 0.65);
+      const canvas = document.getElementById('graph-canvas');
+      if (canvas) canvas.style.transform = `scale(${graphState.zoom})`;
+      drawGraphSvgEdges();
+    });
+    document.getElementById('graph-zoom-reset')?.addEventListener('click', () => {
+      graphState.zoom = 1;
+      const canvas = document.getElementById('graph-canvas');
+      if (canvas) canvas.style.transform = 'scale(1)';
+      drawGraphSvgEdges();
+    });
+
+    // Node click
+    container.querySelectorAll('.graph-node').forEach(nodeEl => {
+      nodeEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = nodeEl.dataset.id;
+        if (graphState.selectedNodeId === id) {
+          clearGraphSelection();
+        } else {
+          selectGraphNode(id);
+        }
+      });
+    });
+
+    // Click outside node -> clear
+    const viewport = document.getElementById('graph-viewport');
+    viewport?.addEventListener('click', (e) => {
+      if (!e.target.closest('.graph-node') && !e.target.closest('.graph-inspector-panel') && !e.target.closest('.graph-toolbar')) {
+        clearGraphSelection();
+      }
+    });
+
+    // Draw initial SVG edges after DOM renders
+    setTimeout(() => {
+      drawGraphSvgEdges();
+      if (graphState.selectedNodeId) {
+        selectGraphNode(graphState.selectedNodeId);
+      }
+    }, 50);
+  }
+
+  function updateGraphFiltering() {
+    const currentPillar = graphState.filterPillar || 'all';
+    const query = (graphState.searchQuery || '').toLowerCase().trim();
+
+    document.querySelectorAll('.graph-node').forEach(nodeEl => {
+      const id = nodeEl.dataset.id;
+      const node = BME_GRAPH_NODES.find(n => n.id === id);
+      if (!node) return;
+      const matches = (currentPillar === 'all' || node.pillar === currentPillar) &&
+                      (!query || node.code.toLowerCase().includes(query) || node.name.toLowerCase().includes(query) || node.nameTh.toLowerCase().includes(query));
+      if (matches) {
+        nodeEl.classList.remove('dimmed');
+      } else {
+        nodeEl.classList.add('dimmed');
+      }
+    });
+  }
+
+  function drawGraphSvgEdges() {
+    const svgGroup = document.getElementById('graph-svg-edges-group');
+    const canvas = document.getElementById('graph-canvas');
+    if (!svgGroup || !canvas) return;
+
+    svgGroup.innerHTML = '';
+    const canvasRect = canvas.getBoundingClientRect();
+    const zoom = graphState.zoom || 1;
+
+    BME_GRAPH_NODES.forEach(sourceNode => {
+      const sourceEl = document.getElementById(`gnode-${sourceNode.id}`);
+      if (!sourceEl) return;
+
+      const sRect = sourceEl.getBoundingClientRect();
+      const x1 = (sRect.right - canvasRect.left) / zoom;
+      const y1 = (sRect.top + sRect.height / 2 - canvasRect.top) / zoom;
+
+      (sourceNode.unlocks || []).forEach(targetId => {
+        const targetEl = document.getElementById(`gnode-${targetId}`);
+        if (!targetEl) return;
+
+        const tRect = targetEl.getBoundingClientRect();
+        const x2 = (tRect.left - canvasRect.left) / zoom;
+        const y2 = (tRect.top + tRect.height / 2 - canvasRect.top) / zoom;
+
+        const dx = Math.max(x2 - x1, 40);
+        const d = `M ${x1} ${y1} C ${x1 + dx * 0.45} ${y1}, ${x2 - dx * 0.45} ${y2}, ${x2} ${y2}`;
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', d);
+        path.setAttribute('class', 'graph-edge');
+        path.setAttribute('marker-end', 'url(#arrow-default)');
+        path.dataset.source = sourceNode.id;
+        path.dataset.target = targetId;
+
+        svgGroup.appendChild(path);
+      });
+    });
+  }
+
+  function getDownstreamNodes(startId, visited = new Set()) {
+    const res = new Set();
+    function traverse(nodeId) {
+      const node = BME_GRAPH_NODES.find(n => n.id === nodeId);
+      if (!node || !node.unlocks) return;
+      node.unlocks.forEach(childId => {
+        if (!res.has(childId)) {
+          res.add(childId);
+          traverse(childId);
+        }
+      });
+    }
+    traverse(startId);
+    return res;
+  }
+
+  function getUpstreamNodes(startId) {
+    const res = new Set();
+    function traverse(nodeId) {
+      const node = BME_GRAPH_NODES.find(n => n.id === nodeId);
+      if (!node || !node.prereqs) return;
+      node.prereqs.forEach(parentId => {
+        if (!res.has(parentId)) {
+          res.add(parentId);
+          traverse(parentId);
+        }
+      });
+    }
+    traverse(startId);
+    return res;
+  }
+
+  function selectGraphNode(nodeId) {
+    graphState.selectedNodeId = nodeId;
+    const node = BME_GRAPH_NODES.find(n => n.id === nodeId);
+    if (!node) return;
+
+    const downstream = getDownstreamNodes(nodeId);
+    const upstream   = getUpstreamNodes(nodeId);
+    const activeNodes = new Set([nodeId, ...downstream, ...upstream]);
+
+    // Update node highlights
+    document.querySelectorAll('.graph-node').forEach(el => {
+      const id = el.dataset.id;
+      el.classList.remove('active-focus', 'active-downstream', 'active-upstream', 'dimmed');
+
+      if (id === nodeId) {
+        el.classList.add('active-focus');
+      } else if (downstream.has(id)) {
+        el.classList.add('active-downstream');
+      } else if (upstream.has(id)) {
+        el.classList.add('active-upstream');
+      } else {
+        el.classList.add('dimmed');
+      }
+    });
+
+    // Update edge highlights
+    document.querySelectorAll('.graph-edge').forEach(edge => {
+      const s = edge.dataset.source;
+      const t = edge.dataset.target;
+      edge.classList.remove('edge-active-forward', 'edge-active-backward', 'edge-dimmed');
+
+      if ((s === nodeId || downstream.has(s)) && downstream.has(t)) {
+        edge.classList.add('edge-active-forward');
+        edge.setAttribute('marker-end', 'url(#arrow-forward)');
+      } else if (upstream.has(s) && (t === nodeId || upstream.has(t))) {
+        edge.classList.add('edge-active-backward');
+        edge.setAttribute('marker-end', 'url(#arrow-backward)');
+      } else {
+        edge.classList.add('edge-dimmed');
+        edge.setAttribute('marker-end', 'url(#arrow-default)');
+      }
+    });
+
+    // Render Inspector Panel
+    renderGraphInspector(node, upstream, downstream);
+  }
+
+  function clearGraphSelection() {
+    graphState.selectedNodeId = null;
+    document.querySelectorAll('.graph-node').forEach(el => {
+      el.classList.remove('active-focus', 'active-downstream', 'active-upstream', 'dimmed');
+    });
+    document.querySelectorAll('.graph-edge').forEach(edge => {
+      edge.classList.remove('edge-active-forward', 'edge-active-backward', 'edge-dimmed');
+      edge.setAttribute('marker-end', 'url(#arrow-default)');
+    });
+    const inspectorContainer = document.getElementById('graph-inspector-container');
+    if (inspectorContainer) inspectorContainer.innerHTML = '';
+    updateGraphFiltering();
+  }
+
+  function renderGraphInspector(node, upstreamSet, downstreamSet) {
+    const container = document.getElementById('graph-inspector-container');
+    if (!container) return;
+
+    const pillar = BME_PILLARS[node.pillar] || BME_PILLARS.core;
+    const semInfo = BME_SEMESTERS.find(s => s.id === node.sem);
+
+    const directPrereqs = (node.prereqs || []).map(pid => BME_GRAPH_NODES.find(n => n.id === pid)).filter(Boolean);
+    const directUnlocks = (node.unlocks || []).map(cid => BME_GRAPH_NODES.find(n => n.id === cid)).filter(Boolean);
+
+    container.innerHTML = `
+      <div class="graph-inspector-panel">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
+              <span class="tag-chip" style="background:${pillar.bg};color:${pillar.color};font-weight:700">
+                ${pillar.icon} ${escHtml(pillar.nameTh)}
+              </span>
+              <span class="online-pill">${escHtml(semInfo?.label || node.sem)} · ${node.credits} หน่วยกิต</span>
+            </div>
+            <h3 style="font-family:var(--font-serif);font-size:1.35rem;font-weight:700;color:var(--label);margin-bottom:2px">
+              ${escHtml(node.code)}: ${escHtml(node.nameTh)}
+            </h3>
+            <div style="font-size:12px;color:var(--label-3);font-weight:500">${escHtml(node.name)}</div>
+          </div>
+          <button id="graph-inspector-close" style="width:28px;height:28px;border-radius:50%;border:none;background:var(--bg-3);cursor:pointer;color:var(--label-2);font-size:13px">✕</button>
+        </div>
+
+        <p style="font-size:13px;color:var(--label-2);line-height:1.55;margin:4px 0">
+          ${escHtml(node.desc)}
+        </p>
+
+        <!-- Prerequisite & Unlock Chains -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:12px;border-top:1px solid var(--sep);padding-top:10px">
+          <div>
+            <div style="font-size:11.5px;font-weight:700;color:#059669;margin-bottom:6px;display:flex;align-items:center;gap:4px">
+              ⬅️ วิชาบังคับก่อน (Prerequisites):
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              ${directPrereqs.length > 0 ? directPrereqs.map(p => `
+                <button class="graph-inspector-chip" data-id="${p.id}" style="padding:4px 10px;border-radius:var(--r-pill);border:1px solid #10b981;background:rgba(16,185,129,0.08);color:#059669;font-size:11.5px;font-weight:600;cursor:pointer">
+                  ${escHtml(p.code)} ${escHtml(p.nameTh)}
+                </button>
+              `).join('') : '<span style="font-size:12px;color:var(--label-3)">ไม่มีวิชาบังคับก่อน (เริ่มต้นเรียนได้ทันที)</span>'}
+            </div>
+          </div>
+
+          <div>
+            <div style="font-size:11.5px;font-weight:700;color:#2563eb;margin-bottom:6px;display:flex;align-items:center;gap:4px">
+              ➡️ วิชาที่ปลดล็อคให้เรียนต่อ (Unlocks / Next Courses):
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              ${directUnlocks.length > 0 ? directUnlocks.map(u => `
+                <button class="graph-inspector-chip" data-id="${u.id}" style="padding:4px 10px;border-radius:var(--r-pill);border:1px solid #3b82f6;background:rgba(59,130,246,0.08);color:#2563eb;font-size:11.5px;font-weight:600;cursor:pointer">
+                  ${escHtml(u.code)} ${escHtml(u.nameTh)}
+                </button>
+              `).join('') : '<span style="font-size:12px;color:var(--label-3)">วิชาระดับสูง / ปริญญานิพนธ์ปีสุดท้าย</span>'}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('graph-inspector-close')?.addEventListener('click', clearGraphSelection);
+    container.querySelectorAll('.graph-inspector-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const targetId = chip.dataset.id;
+        if (targetId) selectGraphNode(targetId);
+      });
+    });
   }
 
   // ─── Edit Modal (9th Verbatim) ───────────────────────────

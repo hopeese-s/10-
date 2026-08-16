@@ -211,3 +211,640 @@ function getDayKey(jsDay) {
   const map = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
   return map[jsDay];
 }
+
+// ============================================================
+// 4-Year BME Curriculum Knowledge & Prerequisite Graph Data
+// ============================================================
+const BME_PILLARS = {
+  circuits: {
+    id: 'circuits',
+    name: 'Electronics & Signals',
+    nameTh: '⚡ ฮาร์ดแวร์ & สัญญาณการแพทย์',
+    color: '#2563eb',
+    bg: 'rgba(37, 99, 235, 0.12)',
+    icon: '⚡'
+  },
+  computing: {
+    id: 'computing',
+    name: 'AI, Code & Math',
+    nameTh: '💻 ปัญญาประดิษฐ์ & ซอฟต์แวร์',
+    color: '#059669',
+    bg: 'rgba(16, 185, 129, 0.12)',
+    icon: '💻'
+  },
+  biomech: {
+    id: 'biomech',
+    name: 'Biomechanics & Robotics',
+    nameTh: '🦾 ชีวกลศาสตร์ & หุ่นยนต์การแพทย์',
+    color: '#d97706',
+    bg: 'rgba(217, 119, 6, 0.12)',
+    icon: '🦾'
+  },
+  biomaterials: {
+    id: 'biomaterials',
+    name: 'Biomaterials & Life Science',
+    nameTh: '🧬 วัสดุชีวการแพทย์ & ชีวเคมี',
+    color: '#9333ea',
+    bg: 'rgba(147, 51, 234, 0.12)',
+    icon: '🧬'
+  },
+  core: {
+    id: 'core',
+    name: 'BME Core & Capstone',
+    nameTh: '🏆 แกนหลัก BME & โครงงานวิจัย',
+    color: '#C45A1B',
+    bg: 'rgba(196, 90, 27, 0.12)',
+    icon: '🏆'
+  }
+};
+
+const BME_SEMESTERS = [
+  { id: 'y1s1', year: 1, sem: 1, label: 'ปี 1 เทอม 1', labelEn: 'Year 1 Sem 1' },
+  { id: 'y1s2', year: 1, sem: 2, label: 'ปี 1 เทอม 2', labelEn: 'Year 1 Sem 2' },
+  { id: 'y2s1', year: 2, sem: 1, label: 'ปี 2 เทอม 1', labelEn: 'Year 2 Sem 1' },
+  { id: 'y2s2', year: 2, sem: 2, label: 'ปี 2 เทอม 2', labelEn: 'Year 2 Sem 2' },
+  { id: 'y3s1', year: 3, sem: 1, label: 'ปี 3 เทอม 1', labelEn: 'Year 3 Sem 1' },
+  { id: 'y3s2', year: 3, sem: 2, label: 'ปี 3 เทอม 2', labelEn: 'Year 3 Sem 2' },
+  { id: 'y4',   year: 4, sem: 0, label: 'ปี 4 (Capstone)', labelEn: 'Year 4 Specializations' },
+];
+
+const BME_GRAPH_NODES = [
+  // ─── Year 1 Semester 1 ───
+  {
+    id: 'SCMA101',
+    code: 'SCMA 101',
+    name: 'Mathematics I',
+    nameTh: 'คณิตศาสตร์ 1',
+    credits: 2,
+    sem: 'y1s1',
+    pillar: 'computing',
+    prereqs: [],
+    unlocks: ['SCMA102', 'EGBI221'],
+    desc: 'แคลคูลัส อนุพันธ์ และการอินทิเกรตสำหรับสร้างแบบจำลองทางฟิสิกส์และระบบชีวการแพทย์'
+  },
+  {
+    id: 'SCPY161',
+    code: 'SCPY 161',
+    name: 'General Physics I',
+    nameTh: 'ฟิสิกส์ทั่วไป 1',
+    credits: 3,
+    sem: 'y1s1',
+    pillar: 'biomech',
+    prereqs: [],
+    unlocks: ['SCPY162', 'EGBI110', 'EGBI260', 'EGBI270'],
+    desc: 'กลศาสตร์ของนิวตัน งาน พลังงาน และการเคลื่อนที่ รากฐานสู่ชีวกลศาสตร์และแรงกระทำในกระดูก'
+  },
+  {
+    id: 'SCCH161',
+    code: 'SCCH 161',
+    name: 'General Chemistry',
+    nameTh: 'เคมีทั่วไป',
+    credits: 3,
+    sem: 'y1s1',
+    pillar: 'biomaterials',
+    prereqs: [],
+    unlocks: ['SCCH172', 'EGBI110', 'EGBI270'],
+    desc: 'โครงสร้างอะตอม พันธะเคมี และอุณหพลศาสตร์ รากฐานสู่วัสดุฝังในร่างกายและพอลิเมอร์ทางการแพทย์'
+  },
+  {
+    id: 'SCSL190',
+    code: 'SCSL 190',
+    name: 'Wonderful Life (Biology)',
+    nameTh: 'ชีววิทยาสิ่งมีชีวิต',
+    credits: 3,
+    sem: 'y1s1',
+    pillar: 'biomaterials',
+    prereqs: [],
+    unlocks: ['SCAN201', 'EGBI252'],
+    desc: 'ชีววิทยาระดับเซลล์ สรีรวิทยา และพันธุศาสตร์ รากฐานสู่วิชากายวิภาคศาสตร์และชีวโมเลกุล'
+  },
+  {
+    id: 'EGBI122',
+    code: 'EGBI 122',
+    name: 'Computer Programming',
+    nameTh: 'การเขียนโปรแกรมคอมพิวเตอร์',
+    credits: 3,
+    sem: 'y1s1',
+    pillar: 'computing',
+    prereqs: [],
+    unlocks: ['EGBI220', 'EGBI223', 'EGBI405'],
+    desc: 'การเขียนโค้ด อัลกอริทึม และการประมวลผลข้อมูลตัวเลข สู่การวิเคราะห์ข้อมูลผู้ป่วยและ AI ทางการแพทย์'
+  },
+  {
+    id: 'EGBI100',
+    code: 'EGBI 100',
+    name: 'BME in the Real World',
+    nameTh: 'วิศวกรรมชีวการแพทย์ในโลกจริง',
+    credits: 1,
+    sem: 'y1s1',
+    pillar: 'core',
+    prereqs: [],
+    unlocks: ['EGBI101', 'EGBI390'],
+    desc: 'ภาพรวมวิศวกรรมชีวการแพทย์ นวัตกรรมเครื่องมือแพทย์ และแนวทางการวิจัยในห้องปฏิบัติการ'
+  },
+  {
+    id: 'SCPY111',
+    code: 'SCPY 111',
+    name: 'Physics Laboratory I',
+    nameTh: 'ปฏิบัติการฟิสิกส์ 1',
+    credits: 1,
+    sem: 'y1s1',
+    pillar: 'biomech',
+    prereqs: [],
+    unlocks: ['EGBI201'],
+    desc: 'ปฏิบัติการวัดทางฟิสิกส์ การวิเคราะห์ความคลาดเคลื่อนและการทดลองกลศาสตร์'
+  },
+  {
+    id: 'SCCH169',
+    code: 'SCCH 169',
+    name: 'Chemistry Laboratory',
+    nameTh: 'ปฏิบัติการเคมี',
+    credits: 1,
+    sem: 'y1s1',
+    pillar: 'biomaterials',
+    prereqs: [],
+    unlocks: ['EGBI252'],
+    desc: 'ปฏิบัติการวิเคราะห์เคมีเชิงปริมาณและการสังเคราะห์สารเคมี'
+  },
+  {
+    id: 'SCBE102',
+    code: 'SCBE 102',
+    name: 'General Biology Lab 1',
+    nameTh: 'ปฏิบัติการชีววิทยา 1',
+    credits: 1,
+    sem: 'y1s1',
+    pillar: 'biomaterials',
+    prereqs: [],
+    unlocks: ['SCAN201'],
+    desc: 'ปฏิบัติการส่องกล้องจุลทรรศน์ วิเคราะห์เซลล์และโครงสร้างเนื้อเยื่อสิ่งมีชีวิต'
+  },
+  {
+    id: 'LAEN182',
+    code: 'LAEN 182',
+    name: 'English for Academic Purposes',
+    nameTh: 'ภาษาอังกฤษเชิงวิชาการ',
+    credits: 2,
+    sem: 'y1s1',
+    pillar: 'core',
+    prereqs: [],
+    unlocks: ['EGBI390', 'EGBI495'],
+    desc: 'ภาษาอังกฤษสำหรับการสื่อสารทางวิศวกรรม การเขียนรายงานวิชาการ และนำเสนองานวิจัย'
+  },
+
+  // ─── Year 1 Semester 2 ───
+  {
+    id: 'SCMA102',
+    code: 'SCMA 102',
+    name: 'Mathematics II',
+    nameTh: 'คณิตศาสตร์ 2',
+    credits: 4,
+    sem: 'y1s2',
+    pillar: 'computing',
+    prereqs: ['SCMA101'],
+    unlocks: ['EGBI202', 'EGBI234', 'EGBI260'],
+    desc: 'แคลคูลัสหลายตัวแปร สมการเชิงอนุพันธ์ และอนุกรมฟูเรียร์สำหรับการวิเคราะห์ระบบพลวัตและวงจรไฟฟ้า'
+  },
+  {
+    id: 'SCPY162',
+    code: 'SCPY 162',
+    name: 'General Physics II',
+    nameTh: 'ฟิสิกส์ทั่วไป 2',
+    credits: 3,
+    sem: 'y1s2',
+    pillar: 'circuits',
+    prereqs: ['SCPY161'],
+    unlocks: ['EGBI234'],
+    desc: 'ไฟฟ้าแม่เหล็ก คลื่นแม่เหล็กไฟฟ้า และทัศนศาสตร์ รากฐานสู่อุปกรณ์การแพทย์ เครื่อง X-ray และ MRI'
+  },
+  {
+    id: 'SCCH172',
+    code: 'SCCH 172',
+    name: 'Organic Chemistry',
+    nameTh: 'เคมีอินทรีย์',
+    credits: 3,
+    sem: 'y1s2',
+    pillar: 'biomaterials',
+    prereqs: ['SCCH161'],
+    unlocks: ['EGBI252'],
+    desc: 'โครงสร้างและปฏิกิริยาของโมเลกุลอินทรีย์ สารชีวโมเลกุล และพอลิเมอร์ชีวภาพ'
+  },
+  {
+    id: 'EGBI101',
+    code: 'EGBI 101',
+    name: 'Basic Engineering Skills in BME',
+    nameTh: 'ทักษะวิศวกรรมพื้นฐานใน BME',
+    credits: 2,
+    sem: 'y1s2',
+    pillar: 'core',
+    prereqs: ['EGBI100'],
+    unlocks: ['EGBI201', 'EGBI301'],
+    desc: 'ทักษะวิศวกรรมภาคปฏิบัติ การบัดกรีวงจร การใช้เครื่องมือช่างและแล็บเครื่องมือวัด'
+  },
+  {
+    id: 'EGBI110',
+    code: 'EGBI 110',
+    name: 'Engineering Materials',
+    nameTh: 'วัสดุวิศวกรรม',
+    credits: 3,
+    sem: 'y1s2',
+    pillar: 'biomaterials',
+    prereqs: ['SCCH161', 'SCPY161'],
+    unlocks: ['EGBI352'],
+    desc: 'คุณสมบัติเชิงกล ไฟฟ้า และความร้อนของโลหะ พอลิเมอร์ เซรามิก และวัสดุผสม'
+  },
+  {
+    id: 'EGBI120',
+    code: 'EGBI 120',
+    name: 'Engineering Drawing & CAD',
+    nameTh: 'การเขียนแบบวิศวกรรมและ CAD',
+    credits: 3,
+    sem: 'y1s2',
+    pillar: 'biomech',
+    prereqs: [],
+    unlocks: ['EGBI301', 'EGBI481'],
+    desc: 'การเขียนแบบ 2D/3D Solid Modeling สำหรับออกแบบชิ้นส่วนอวัยวะเทียมและหุ่นยนต์การแพทย์'
+  },
+
+  // ─── Year 2 Semester 1 ───
+  {
+    id: 'SCAN201',
+    code: 'SCAN 201',
+    name: 'Essential Human Anatomy',
+    nameTh: 'กายวิภาคศาสตร์มนุษย์',
+    credits: 3,
+    sem: 'y2s1',
+    pillar: 'biomaterials',
+    prereqs: ['SCSL190', 'SCBE102'],
+    unlocks: ['EGBI351', 'EGBI403'],
+    desc: 'กายวิภาคศาสตร์มนุษย์ โครงสร้างกระดูก กล้ามเนื้อ อวัยวะภายใน ระบบหัวใจและหลอดเลือด'
+  },
+  {
+    id: 'EGBI202',
+    code: 'EGBI 202',
+    name: 'Engineering Mathematics',
+    nameTh: 'คณิตศาสตร์วิศวกรรม',
+    credits: 3,
+    sem: 'y2s1',
+    pillar: 'computing',
+    prereqs: ['SCMA102'],
+    unlocks: ['EGBI220', 'EGBI340'],
+    desc: 'สมการเชิงอนุพันธ์ย่อย ลาปลาซทรานส์ฟอร์ม เมทริกซ์ และการวิเคราะห์เวกเตอร์สำหรับระบบการแพทย์'
+  },
+  {
+    id: 'EGBI221',
+    code: 'EGBI 221',
+    name: 'Biostatistics and Probability',
+    nameTh: 'ชีวสถิติและความน่าจะเป็น',
+    credits: 3,
+    sem: 'y2s1',
+    pillar: 'computing',
+    prereqs: ['SCMA101'],
+    unlocks: ['EGBI405', 'EGBI495'],
+    desc: 'สถิติชีวการแพทย์ การทดสอบสมมติฐานทางคลินิก และการวิเคราะห์ข้อมูลผู้ป่วย'
+  },
+  {
+    id: 'EGBI234',
+    code: 'EGBI 234',
+    name: 'Electric Circuits for BME',
+    nameTh: 'วงจรไฟฟ้าสำหรับ BME',
+    credits: 3,
+    sem: 'y2s1',
+    pillar: 'circuits',
+    prereqs: ['SCPY162', 'SCMA102'],
+    unlocks: ['EGBI201', 'EGBI223', 'EGBI233', 'EGBI340'],
+    desc: 'ทฤษฎีวงจรไฟฟ้า AC/DC โหนด/เมช วงจรกรองความถี่ (Filters) และวงจร RLC ในเครื่องมือแพทย์'
+  },
+  {
+    id: 'EGBI252',
+    code: 'EGBI 252',
+    name: 'Biochemistry & Molecular Biology',
+    nameTh: 'ชีวเคมีและโมเลกุลชีววิทยา',
+    credits: 3,
+    sem: 'y2s1',
+    pillar: 'biomaterials',
+    prereqs: ['SCCH172', 'SCSL190'],
+    unlocks: ['EGBI352'],
+    desc: 'ชีวเคมี โปรตีน เอนไซม์ DNA/RNA และกระบวนการเมแทบอลิซึมระดับเซลล์'
+  },
+  {
+    id: 'EGBI260',
+    code: 'EGBI 260',
+    name: 'Biomechanics 1',
+    nameTh: 'ชีวกลศาสตร์ 1',
+    credits: 3,
+    sem: 'y2s1',
+    pillar: 'biomech',
+    prereqs: ['SCPY161', 'SCMA102'],
+    unlocks: ['EGBI261'],
+    desc: 'สถิตศาสตร์และจลนศาสตร์ของระบบกล้ามเนื้อและกระดูก แรงกระทำในข้อต่อและกระดูกสันหลัง'
+  },
+  {
+    id: 'EGBI270',
+    code: 'EGBI 270',
+    name: 'Biomedical Thermodynamics',
+    nameTh: 'อุณหพลศาสตร์ชีวการแพทย์',
+    credits: 3,
+    sem: 'y2s1',
+    pillar: 'biomech',
+    prereqs: ['SCCH161', 'SCPY161'],
+    unlocks: ['EGBI330', 'EGBI352'],
+    desc: 'อุณหพลศาสตร์ชีวการแพทย์ การถ่ายเทความร้อนในเนื้อเยื่อ และพลังงานในระบบชีววิทยา'
+  },
+
+  // ─── Year 2 Semester 2 ───
+  {
+    id: 'EGBI201',
+    code: 'EGBI 201',
+    name: 'BME Lab 1',
+    nameTh: 'ปฏิบัติการวิศวกรรมชีวการแพทย์ 1',
+    credits: 1,
+    sem: 'y2s2',
+    pillar: 'core',
+    prereqs: ['EGBI234', 'EGBI101'],
+    unlocks: ['EGBI300'],
+    desc: 'ปฏิบัติการวงจรอิเล็กทรอนิกส์ชีวการแพทย์และการทดสอบการทำงานของเซ็นเซอร์'
+  },
+  {
+    id: 'EGBI220',
+    code: 'EGBI 220',
+    name: 'Computational Methods in BME',
+    nameTh: 'ระเบียบวิธีเชิงคำนวณใน BME',
+    credits: 3,
+    sem: 'y2s2',
+    pillar: 'computing',
+    prereqs: ['EGBI122', 'EGBI202'],
+    unlocks: ['EGBI405'],
+    desc: 'ระเบียบวิธีเชิงตัวเลข การแก้สมการเชิงอนุพันธ์ด้วยคอมพิวเตอร์และการจำลองระบบ BME'
+  },
+  {
+    id: 'EGBI223',
+    code: 'EGBI 223',
+    name: 'Digital Systems & Microprocessors',
+    nameTh: 'ระบบดิจิทัลและไมโครโปรเซสเซอร์',
+    credits: 3,
+    sem: 'y2s2',
+    pillar: 'circuits',
+    prereqs: ['EGBI234', 'EGBI122'],
+    unlocks: ['EGBI330', 'EGBI481'],
+    desc: 'ระบบดิจิทัล ไมโครคอนโทรลเลอร์ (ARM/Arduino) สถาปัตยกรรมคอมพิวเตอร์และการรับส่งข้อมูล'
+  },
+  {
+    id: 'EGBI233',
+    code: 'EGBI 233',
+    name: 'Electrical & Electronics in Medicine',
+    nameTh: 'ไฟฟ้าและอิเล็กทรอนิกส์ทางการแพทย์',
+    credits: 3,
+    sem: 'y2s2',
+    pillar: 'circuits',
+    prereqs: ['EGBI234'],
+    unlocks: ['EGBI330'],
+    desc: 'อุปกรณ์กึ่งตัวนำ Op-Amp วงจรขยายสัญญาณชีวภาพ (Biopotential Amplifiers) และความปลอดภัย'
+  },
+  {
+    id: 'EGBI261',
+    code: 'EGBI 261',
+    name: 'Biomechanics 2',
+    nameTh: 'ชีวกลศาสตร์ 2',
+    credits: 3,
+    sem: 'y2s2',
+    pillar: 'biomech',
+    prereqs: ['EGBI260'],
+    unlocks: ['EGBI301', 'EGBI481', 'EGBI403'],
+    desc: 'พลศาสตร์ชีวกลศาสตร์ การวิเคราะห์การเดิน (Gait Analysis) และกลศาสตร์ของไหลชีวภาพ (Hemodynamics)'
+  },
+
+  // ─── Year 3 Semester 1 ───
+  {
+    id: 'EGBI300',
+    code: 'EGBI 300',
+    name: 'BME Lab 2',
+    nameTh: 'ปฏิบัติการวิศวกรรมชีวการแพทย์ 2',
+    credits: 1,
+    sem: 'y3s1',
+    pillar: 'core',
+    prereqs: ['EGBI201'],
+    unlocks: ['EGBI391', 'EGBI495'],
+    desc: 'ปฏิบัติการเครื่องมือแพทย์ระดับสูง การวัดสัญญาณ ECG/EMG/EEG และการทดสอบวัสดุชีวภาพ'
+  },
+  {
+    id: 'EGBI301',
+    code: 'EGBI 301',
+    name: 'Design for Biomedical Engineering',
+    nameTh: 'การออกแบบทางวิศวกรรมชีวการแพทย์',
+    credits: 3,
+    sem: 'y3s1',
+    pillar: 'core',
+    prereqs: ['EGBI120', 'EGBI261'],
+    unlocks: ['EGBI495', 'EGBI403'],
+    desc: 'กระบวนการออกแบบวิศวกรรมการแพทย์ Design Thinking ข้อกำหนดมาตรฐานสากล ISO13485/FDA'
+  },
+  {
+    id: 'EGBI330',
+    code: 'EGBI 330',
+    name: 'Biomedical Measurement & Instrumentation',
+    nameTh: 'การวัดและเครื่องมือวัดชีวการแพทย์',
+    credits: 3,
+    sem: 'y3s1',
+    pillar: 'circuits',
+    prereqs: ['EGBI233', 'EGBI223'],
+    unlocks: ['EGBI485', 'EGBI495'],
+    desc: 'เซ็นเซอร์ชีวการแพทย์ เครื่องตรวจคลื่นไฟฟ้าหัวใจ (ECG), Pulse Oximeter และอัลตราซาวด์'
+  },
+  {
+    id: 'EGBI340',
+    code: 'EGBI 340',
+    name: 'Biomedical Signals & Systems',
+    nameTh: 'สัญญาณและระบบชีวการแพทย์',
+    credits: 3,
+    sem: 'y3s1',
+    pillar: 'circuits',
+    prereqs: ['EGBI202', 'EGBI234'],
+    unlocks: ['EGBI331', 'EGBI401', 'EGBI441'],
+    desc: 'การวิเคราะห์สัญญาณในโดเมนเวลาและความถี่ Fourier/Z-Transform และตัวกรองดิจิทัล'
+  },
+  {
+    id: 'EGBI352',
+    code: 'EGBI 352',
+    name: 'Biomaterials',
+    nameTh: 'วัสดุชีวการแพทย์',
+    credits: 3,
+    sem: 'y3s1',
+    pillar: 'biomaterials',
+    prereqs: ['EGBI110', 'EGBI252'],
+    unlocks: ['EGBI351', 'EGBI483', 'EGBI485'],
+    desc: 'วัสดุชีวการแพทย์ พอลิเมอร์ ไฮโดรเจล สารเคลือบข้อเทียม และปฏิกิริยากับสิ่งแปลกปลอม'
+  },
+  {
+    id: 'EGBI405',
+    code: 'EGBI 405',
+    name: 'AI in Medical Applications',
+    nameTh: 'ปัญญาประดิษฐ์ประยุกต์ทางการแพทย์',
+    credits: 3,
+    sem: 'y3s1',
+    pillar: 'computing',
+    prereqs: ['EGBI122', 'EGBI220', 'EGBI221'],
+    unlocks: ['EGBI495'],
+    desc: 'ปัญญาประดิษฐ์ทางการแพทย์ Machine Learning, Deep Learning วิเคราะห์ภาพรังสีและทำนายสุขภาพ'
+  },
+
+  // ─── Year 3 Semester 2 ───
+  {
+    id: 'EGBI331',
+    code: 'EGBI 331',
+    name: 'Control Systems for BME',
+    nameTh: 'ระบบควบคุมสำหรับ BME',
+    credits: 3,
+    sem: 'y3s2',
+    pillar: 'circuits',
+    prereqs: ['EGBI340'],
+    unlocks: ['EGBI481'],
+    desc: 'ระบบควบคุมป้อนกลับ PID Controller การควบคุมหุ่นยนต์แขนกลผ่าตัดและเครื่องช่วยหายใจ'
+  },
+  {
+    id: 'EGBI351',
+    code: 'EGBI 351',
+    name: 'Biocompatibility',
+    nameTh: 'ความเข้ากันได้ทางชีวภาพ',
+    credits: 3,
+    sem: 'y3s2',
+    pillar: 'biomaterials',
+    prereqs: ['EGBI352', 'SCAN201'],
+    unlocks: ['EGBI483'],
+    desc: 'ความเข้ากันได้ทางชีวภาพ การทดสอบความเป็นพิษต่อเซลล์ (Cytotoxicity) และภูมิคุ้มกัน'
+  },
+  {
+    id: 'EGBI390',
+    code: 'EGBI 390',
+    name: 'Business for Medical Entrepreneurs',
+    nameTh: 'ธุรกิจสำหรับผู้ประกอบการการแพทย์',
+    credits: 3,
+    sem: 'y3s2',
+    pillar: 'core',
+    prereqs: ['EGBI100', 'LAEN182'],
+    unlocks: ['EGBI495'],
+    desc: 'การสร้างธุรกิจนวัตกรรมแพทย์ การจดสิทธิบัตร (Patent) การประเมินเทคโนโลยี และ MedTech Startup'
+  },
+  {
+    id: 'EGBI401',
+    code: 'EGBI 401',
+    name: 'Medical Imaging',
+    nameTh: 'การสร้างภาพทางการแพทย์',
+    credits: 3,
+    sem: 'y3s2',
+    pillar: 'circuits',
+    prereqs: ['EGBI340'],
+    unlocks: ['EGBI441', 'EGBI495'],
+    desc: 'หลักการสร้างภาพทางการแพทย์ X-ray, CT Scan, MRI, Ultrasound และการฟื้นฟูภาพรังสี 3 มิติ'
+  },
+  {
+    id: 'EGBI391',
+    code: 'EGBI 391',
+    name: 'BME Training / Internship',
+    nameTh: 'การฝึกงานวิศวกรรมชีวการแพทย์',
+    credits: 3,
+    sem: 'y3s2',
+    pillar: 'core',
+    prereqs: ['EGBI300'],
+    unlocks: ['EGBI495'],
+    desc: 'การฝึกงานในโรงพยาบาล สถาบันวิจัยชั้นนำ หรือบริษัทยักษ์ใหญ่ด้านอุปกรณ์การแพทย์ (>= 240 ชม.)'
+  },
+
+  // ─── Year 4 Specialization & Capstone ───
+  {
+    id: 'EGBI495',
+    code: 'EGBI 495',
+    name: 'BME Capstone Project 1',
+    nameTh: 'โครงงานวิจัยชีวการแพทย์ 1',
+    credits: 3,
+    sem: 'y4',
+    pillar: 'core',
+    prereqs: ['EGBI301', 'EGBI330'],
+    unlocks: ['EGBI496'],
+    desc: 'โครงงานปริญญานิพนธ์ขั้นที่ 1 ออกแบบและทดสอบต้นแบบนวัตกรรมชีวการแพทย์ร่วมกับอาจารย์ที่ปรึกษา'
+  },
+  {
+    id: 'EGBI496',
+    code: 'EGBI 496',
+    name: 'BME Capstone Project 2',
+    nameTh: 'โครงงานวิจัยชีวการแพทย์ 2',
+    credits: 3,
+    sem: 'y4',
+    pillar: 'core',
+    prereqs: ['EGBI495'],
+    unlocks: [],
+    desc: 'โครงงานปริญญานิพนธ์ขั้นที่ 2 การทดสอบประสิทธิภาพทางคลินิก การเขียนเปเปอร์วิชาการ และนำเสนองาน'
+  },
+  {
+    id: 'EGBI441',
+    code: 'EGBI 441',
+    name: 'Medical Signal Processing',
+    nameTh: 'การประมวลผลสัญญาณการแพทย์',
+    credits: 3,
+    sem: 'y4',
+    pillar: 'circuits',
+    prereqs: ['EGBI340'],
+    unlocks: ['EGBI444'],
+    desc: 'การประมวลผลสัญญาณสมองและประสาทขั้นสูง Wavelet Transform และ Noise Reduction'
+  },
+  {
+    id: 'EGBI444',
+    code: 'EGBI 444',
+    name: 'Neuroengineering',
+    nameTh: 'วิศวกรรมประสาทและสมอง',
+    credits: 3,
+    sem: 'y4',
+    pillar: 'circuits',
+    prereqs: ['EGBI441'],
+    unlocks: [],
+    desc: 'วิศวกรรมระบบประสาท Brain-Computer Interface (BCI) ขาเทียมสั่งการด้วยคลื่นสมอง (MINT LAB)'
+  },
+  {
+    id: 'EGBI481',
+    code: 'EGBI 481',
+    name: 'Introduction to Medical Robotics',
+    nameTh: 'หุ่นยนต์ทางการแพทย์',
+    credits: 3,
+    sem: 'y4',
+    pillar: 'biomech',
+    prereqs: ['EGBI331', 'EGBI261', 'EGBI120'],
+    unlocks: [],
+    desc: 'หุ่นยนต์ทางการแพทย์ แขนกลช่วยผ่าตัดความแม่นยำสูง ระบบนำทางผ่าตัด (BART LAB)'
+  },
+  {
+    id: 'EGBI403',
+    code: 'EGBI 403',
+    name: 'Artificial Organs & Assistive Tech',
+    nameTh: 'อวัยวะเทียมและเทคโนโลยีช่วยเหลือ',
+    credits: 3,
+    sem: 'y4',
+    pillar: 'biomech',
+    prereqs: ['EGBI301', 'EGBI261', 'SCAN201'],
+    unlocks: [],
+    desc: 'อวัยวะเทียม หัวใจเทียม ไตเทียม แขน-ขาเทียมกลไก และเทคโนโลยีช่วยเหลือผู้ป่วย'
+  },
+  {
+    id: 'EGBI483',
+    code: 'EGBI 483',
+    name: 'Drug Delivery System',
+    nameTh: 'ระบบนำส่งยาตรงเป้าหมาย',
+    credits: 3,
+    sem: 'y4',
+    pillar: 'biomaterials',
+    prereqs: ['EGBI352', 'EGBI351'],
+    unlocks: [],
+    desc: 'ระบบนำส่งยาตรงเป้าหมาย อนุภาคนาโนต้านมะเร็ง และพอลิเมอร์ควบคุมการปลดปล่อยยา (BioNEDD LAB)'
+  },
+  {
+    id: 'EGBI485',
+    code: 'EGBI 485',
+    name: 'Biosensors',
+    nameTh: 'ไบโอเซนเซอร์ทางการแพทย์',
+    credits: 3,
+    sem: 'y4',
+    pillar: 'biomaterials',
+    prereqs: ['EGBI330', 'EGBI352'],
+    unlocks: [],
+    desc: 'ไบโอเซนเซอร์ตรวจวัดสารเคมีในเลือด แถบตรวจโรคแบบพกพา (Lab-on-a-chip) (Biosensors LAB)'
+  }
+];
+
