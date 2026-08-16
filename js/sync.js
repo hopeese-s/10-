@@ -70,18 +70,19 @@ const CloudSync = (function() {
     }
   }
 
-  // Pull data from Cloud
-  async function pullFromCloud() {
+  // Pull data from Cloud (silent mode available for background polling)
+  async function pullFromCloud(isBackground = false) {
     if (!syncKey) return null;
-    syncStatus = 'syncing';
-    updateUIStatus();
+    if (!isBackground) {
+      syncStatus = 'syncing';
+      updateUIStatus();
+    }
 
     try {
       const endpoint = `${getApiEndpoint()}/${encodeURIComponent(syncKey)}?t=${Date.now()}`;
       const res = await fetch(endpoint);
       
       if (res.status === 404) {
-        // Key doesn't exist yet on cloud
         syncStatus = 'synced';
         updateUIStatus();
         return null;
@@ -140,10 +141,10 @@ const CloudSync = (function() {
   function startAutoSync(onRemoteUpdate) {
     if (autoSyncTimer) clearInterval(autoSyncTimer);
 
-    // Poll every 5 seconds if syncKey is set
+    // Poll every 5 seconds silently if syncKey is set
     autoSyncTimer = setInterval(async () => {
       if (syncKey && document.visibilityState === 'visible') {
-        const cloudData = await pullFromCloud();
+        const cloudData = await pullFromCloud(true);
         if (cloudData && onRemoteUpdate) {
           onRemoteUpdate(cloudData);
         }
@@ -153,7 +154,7 @@ const CloudSync = (function() {
     // Pull when tab gets focus or page becomes visible
     document.addEventListener('visibilitychange', async () => {
       if (document.visibilityState === 'visible' && syncKey) {
-        const cloudData = await pullFromCloud();
+        const cloudData = await pullFromCloud(true);
         if (cloudData && onRemoteUpdate) {
           onRemoteUpdate(cloudData);
         }

@@ -36,13 +36,25 @@
     startClock();
     startTimeIndicator();
 
-    // Start auto sync background polling
+    // Start auto sync background polling (smooth, no flicker)
     CloudSync.startAutoSync(cloudData => {
-      if (cloudData) {
+      if (cloudData && hasDataChanged(cloudData)) {
         applyCloudData(cloudData);
         renderCurrentView();
       }
     });
+  }
+
+  function hasDataChanged(cloudData) {
+    if (!cloudData) return false;
+    const cChecklist = JSON.stringify(state.checklist);
+    const nChecklist = JSON.stringify(cloudData.checklist || {});
+    const cSubjects  = JSON.stringify(state.subjects);
+    const nSubjects  = JSON.stringify(cloudData.subjects || {});
+    const cCustom    = JSON.stringify(state.customBlocks);
+    const nCustom    = JSON.stringify(cloudData.customBlocks || {});
+
+    return (cChecklist !== nChecklist) || (cSubjects !== nSubjects) || (cCustom !== nCustom);
   }
 
   function applyCloudData(cloudData) {
