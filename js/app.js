@@ -250,26 +250,49 @@
   // ─── Storage & Smart Cloud Sync ──────────────────────────
   function touchUpdatedAt() {
     state.updatedAt = new Date().toISOString();
+    state.version = (parseInt(state.version, 10) || 0) + 1;
     localStorage.setItem('sd-updated-at', state.updatedAt);
+    localStorage.setItem('sd-version', String(state.version));
   }
 
   function syncSmartWithCloud(cloudData) {
-    if (!cloudData) return;
+    if (!cloudData) return 'no-data';
 
     // Check if cloud data is different from current local state
     const currentChecklistJson = JSON.stringify(state.checklist || {});
     const cloudChecklistJson   = JSON.stringify(cloudData.checklist || {});
     const currentSubjectsJson  = JSON.stringify(state.subjects || {});
     const cloudSubjectsJson    = JSON.stringify(cloudData.subjects || {});
+    const currentCustomJson    = JSON.stringify(state.customBlocks || {});
+    const cloudCustomJson      = JSON.stringify(cloudData.customBlocks || {});
+    const currentFoldersJson   = JSON.stringify(state.studyFolders || []);
+    const cloudFoldersJson     = JSON.stringify(cloudData.studyFolders || []);
+    const currentLinksJson     = JSON.stringify(state.studyLinks || []);
+    const cloudLinksJson       = JSON.stringify(cloudData.studyLinks || []);
 
-    const isDifferent = (cloudData.updatedAt && cloudData.updatedAt !== state.updatedAt) ||
-                        (currentChecklistJson !== cloudChecklistJson) ||
-                        (currentSubjectsJson !== cloudSubjectsJson);
+    const cloudIsNewer = cloudData.version !== undefined && cloudData.version > state.version;
+    const cloudTimeNewer = cloudData.updatedAt && state.updatedAt && cloudData.updatedAt > state.updatedAt;
+    const dataDifferent = (currentChecklistJson !== cloudChecklistJson) ||
+                          (currentSubjectsJson !== cloudSubjectsJson) ||
+                          (currentCustomJson !== cloudCustomJson) ||
+                          (currentFoldersJson !== cloudFoldersJson) ||
+                          (currentLinksJson !== cloudLinksJson);
 
-    if (isDifferent) {
+    if (cloudIsNewer || cloudTimeNewer || dataDifferent) {
       applyCloudData(cloudData);
       reRenderCurrentView();
+      return 'pulled';
     }
+
+    // If local is newer, push to cloud
+    if (state.version > (cloudData.version || 0)) {
+      if (window.CloudSync) {
+        CloudSync.pushToCloud(state);
+      }
+      return 'pushed';
+    }
+
+    return 'same';
   }
 
   function reRenderCurrentView() {
@@ -605,10 +628,7 @@
   }
 
   // ─── Time Helpers (9th Verbatim) ──────────────────────────
-  function getDayKey(jsDay) {
-    const map = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    return map[jsDay];
-  }
+  // Note: getDayKey() is provided globally by data.js
 
   function timeToMinutes(t) {
     if (!t) return 0;
@@ -982,7 +1002,9 @@
         const day = ROUTINES[state.currentDay];
         if (!day) return;
         const customExtra = state.customBlocks[state.currentDay] || [];
-        const allBlocks = [...day.blocks, ...customExtra].sort((a,b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+        const overrideIds = new Set(customExtra.filter(b => b._override).map(b => b.id));
+        const baseBlocks = day.blocks.filter(b => !overrideIds.has(b.id));
+        const allBlocks = [...baseBlocks, ...customExtra].sort((a,b) => timeToMinutes(a.start) - timeToMinutes(b.start));
         updateTimeIndicator(state.currentDay, allBlocks);
       }
     }, 30000);
@@ -1085,23 +1107,6 @@
             return `<div style="color:${sc.color};font-weight:600;font-size:10px">${sc.emoji || '📘'} ${sc.shortName || c.code}</div>`;
           }).join('')}</div>
         </div>`;
-    }).join('');
-
-    const allClassItems = DAY_ORDER.flatMap(key => {
-      const day = ROUTINES[key];
-      const classes = CLASS_SCHEDULE[key] || [];
-      return classes.map(cls => {
-        const sc = SUBJECT_COLORS[cls.code] || { color:'#64748b', bg:'rgba(100,116,139,0.15)', emoji:'📘', shortName:cls.code };
-        return `
-          <div class="week-class-item">
-            <span class="wci-emoji">${sc.emoji}</span>
-            <div class="wci-info">
-              <div class="wci-name">${cls.name} <span style="font-size:11px;color:var(--label-3)">(${cls.type})</span></div>
-              <div class="wci-meta">${day.label} · 📍 ${cls.room} · ⏰ ${cls.start}–${cls.end}</div>
-            </div>
-            <span class="wci-code" style="background:${sc.bg};color:${sc.color}">${cls.code}</span>
-          </div>`;
-      });
     }).join('');
 
     container.innerHTML = `
@@ -1655,13 +1660,22 @@
     document.body.style.overflow = 'hidden';
   }
 
-  // ─── High-Performance Page-by-Page PDF Viewer for iPad / Mobile / Desktop ─
+  // ─── High-Performance PDF Viewer with Page & Scroll Modes ─
+  // Track keydown handler for cleanup
+  let _pdfKeydownHandler = null;
+
   async function renderPdfWithPdfJs(url, bodyEl, title) {
+    // Clean up previous keydown handler
+    if (_pdfKeydownHandler) {
+      document.removeEventListener('keydown', _pdfKeydownHandler);
+      _pdfKeydownHandler = null;
+    }
+
     bodyEl.innerHTML = `
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;gap:12px;min-height:300px;text-align:center">
         <div style="font-size:32px">⏳</div>
         <div style="font-size:14px;font-weight:600;color:var(--label)">กำลังเปิดเอกสาร PDF...</div>
-        <div style="font-size:12px;color:var(--label-3)">เปิดดูทีละหน้าได้อย่างรวดเร็ว ไม่กระตุก ไม่กินแรม</div>
+        <div style="font-size:12px;color:var(--label-3)">รองรับทั้งโหมดทีละหน้าและโหมดเลื่อนดูทุกหน้าต่อเนื่อง</div>
       </div>
     `;
 
@@ -1679,11 +1693,13 @@
       let currentPage = 1;
       let currentScale = 1.0;
       let isRendering = false;
+      let viewMode = 'page'; // 'page' or 'scroll'
+      let renderedPages = {}; // cache for scroll mode
 
       bodyEl.innerHTML = `
         <div class="pdf-viewer-bar" style="position:sticky;top:0;z-index:15;background:var(--bg-1);border-bottom:1px solid var(--sep);padding:8px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-          <!-- Page Navigation -->
-          <div style="display:flex;align-items:center;gap:6px">
+          <!-- Page Navigation (page mode only) -->
+          <div style="display:flex;align-items:center;gap:6px" id="pdf-nav-btns">
             <button id="pdf-prev-btn" class="btn btn-secondary" style="padding:5px 12px;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:4px">
               ◀️ ก่อนหน้า
             </button>
@@ -1698,8 +1714,12 @@
             </button>
           </div>
 
-          <!-- Zoom Controls -->
-          <div style="display:flex;align-items:center;gap:6px">
+          <!-- View Mode Toggle + Zoom -->
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <div style="display:flex;border-radius:var(--r-pill);overflow:hidden;border:1px solid var(--sep)">
+              <button id="pdf-mode-page" class="btn btn-secondary" style="padding:4px 10px;font-size:11.5px;font-weight:700;border-radius:0;background:var(--accent-bg);color:var(--accent)">📄 ทีละหน้า</button>
+              <button id="pdf-mode-scroll" class="btn btn-secondary" style="padding:4px 10px;font-size:11.5px;font-weight:600;border-radius:0">📜 เลื่อนดู</button>
+            </div>
             <button id="pdf-zoom-out" class="btn btn-secondary" style="padding:4px 10px;font-size:12px;font-weight:600" title="ย่อ">🔍 -</button>
             <span id="pdf-zoom-val" style="font-size:12px;font-weight:600;min-width:42px;text-align:center;color:var(--label)">100%</span>
             <button id="pdf-zoom-in" class="btn btn-secondary" style="padding:4px 10px;font-size:12px;font-weight:600" title="ขยาย">🔍 +</button>
@@ -1711,6 +1731,7 @@
           <div id="pdf-single-page-wrapper" style="position:relative;background:#fff;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.15);overflow:hidden;transition:transform 0.1s ease">
             <canvas id="pdf-canvas" style="display:block;max-width:100%;height:auto"></canvas>
           </div>
+          <div id="pdf-scroll-container" style="display:none;flex-direction:column;align-items:center;gap:16px;width:100%"></div>
         </div>
       `;
 
@@ -1720,6 +1741,9 @@
       const prevBtn = bodyEl.querySelector('#pdf-prev-btn');
       const nextBtn = bodyEl.querySelector('#pdf-next-btn');
       const container = bodyEl.querySelector('#pdf-page-container');
+      const singleWrapper = bodyEl.querySelector('#pdf-single-page-wrapper');
+      const scrollContainer = bodyEl.querySelector('#pdf-scroll-container');
+      const navBtns = bodyEl.querySelector('#pdf-nav-btns');
 
       // Calculate initial auto-fit scale
       const firstPage = await pdf.getPage(1);
@@ -1764,7 +1788,83 @@
         }
       }
 
+      async function renderAllPagesScroll() {
+        scrollContainer.innerHTML = '';
+        renderedPages = {};
+        isRendering = true;
+
+        for (let i = 1; i <= numPages; i++) {
+          try {
+            const page = await pdf.getPage(i);
+            const viewport = page.getViewport({ scale: currentScale });
+            const outputScale = window.devicePixelRatio || 1;
+
+            const pageCanvas = document.createElement('canvas');
+            pageCanvas.width = Math.floor(viewport.width * outputScale);
+            pageCanvas.height = Math.floor(viewport.height * outputScale);
+            pageCanvas.style.width = Math.floor(viewport.width) + "px";
+            pageCanvas.style.height = Math.floor(viewport.height) + "px";
+            pageCanvas.style.display = 'block';
+            pageCanvas.style.maxWidth = '100%';
+            pageCanvas.style.height = 'auto';
+
+            const ctx = pageCanvas.getContext('2d');
+            const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null;
+
+            await page.render({
+              canvasContext: ctx,
+              transform: transform,
+              viewport: viewport
+            }).promise;
+
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'background:#fff;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.15);overflow:hidden;width:100%;max-width:100%';
+            wrapper.appendChild(pageCanvas);
+
+            const pageLabel = document.createElement('div');
+            pageLabel.style.cssText = 'text-align:center;font-size:11px;color:var(--label-3);padding:4px 0';
+            pageLabel.textContent = `หน้า ${i} / ${numPages}`;
+            wrapper.appendChild(pageLabel);
+
+            scrollContainer.appendChild(wrapper);
+            renderedPages[i] = true;
+          } catch (e) {
+            console.error('Error rendering page ' + i + ':', e);
+          }
+        }
+        isRendering = false;
+        container.scrollTop = 0;
+      }
+
+      function switchViewMode(mode) {
+        viewMode = mode;
+        const pageModeBtn = bodyEl.querySelector('#pdf-mode-page');
+        const scrollModeBtn = bodyEl.querySelector('#pdf-mode-scroll');
+
+        if (mode === 'page') {
+          singleWrapper.style.display = '';
+          scrollContainer.style.display = 'none';
+          navBtns.style.display = '';
+          if (pageModeBtn) { pageModeBtn.style.background = 'var(--accent-bg)'; pageModeBtn.style.color = 'var(--accent)'; pageModeBtn.style.fontWeight = '700'; }
+          if (scrollModeBtn) { scrollModeBtn.style.background = ''; scrollModeBtn.style.color = ''; scrollModeBtn.style.fontWeight = '600'; }
+          renderCurrentPage();
+        } else {
+          singleWrapper.style.display = 'none';
+          scrollContainer.style.display = 'flex';
+          navBtns.style.display = 'none';
+          if (pageModeBtn) { pageModeBtn.style.background = ''; pageModeBtn.style.color = ''; pageModeBtn.style.fontWeight = '600'; }
+          if (scrollModeBtn) { scrollModeBtn.style.background = 'var(--accent-bg)'; scrollModeBtn.style.color = 'var(--accent)'; scrollModeBtn.style.fontWeight = '700'; }
+          if (Object.keys(renderedPages).length === 0) {
+            renderAllPagesScroll();
+          }
+        }
+      }
+
       await renderCurrentPage();
+
+      // Mode toggle buttons
+      bodyEl.querySelector('#pdf-mode-page')?.addEventListener('click', () => switchViewMode('page'));
+      bodyEl.querySelector('#pdf-mode-scroll')?.addEventListener('click', () => switchViewMode('scroll'));
 
       // Page change handlers
       prevBtn?.addEventListener('click', async () => {
@@ -1793,13 +1893,15 @@
       bodyEl.querySelector('#pdf-zoom-in')?.addEventListener('click', async () => {
         currentScale = Math.min(2.5, currentScale + 0.15);
         if (zoomValEl) zoomValEl.textContent = `${Math.round(currentScale * 100)}%`;
-        await renderCurrentPage();
+        if (viewMode === 'scroll') { renderedPages = {}; await renderAllPagesScroll(); }
+        else await renderCurrentPage();
       });
 
       bodyEl.querySelector('#pdf-zoom-out')?.addEventListener('click', async () => {
         currentScale = Math.max(0.3, currentScale - 0.15);
         if (zoomValEl) zoomValEl.textContent = `${Math.round(currentScale * 100)}%`;
-        await renderCurrentPage();
+        if (viewMode === 'scroll') { renderedPages = {}; await renderAllPagesScroll(); }
+        else await renderCurrentPage();
       });
 
       bodyEl.querySelector('#pdf-zoom-fit')?.addEventListener('click', async () => {
@@ -1808,13 +1910,19 @@
         const cW = Math.max(280, (container.clientWidth || window.innerWidth * 0.9) - 40);
         currentScale = Math.max(0.3, Math.min(2.0, cW / vp.width));
         if (zoomValEl) zoomValEl.textContent = `${Math.round(currentScale * 100)}%`;
-        await renderCurrentPage();
+        if (viewMode === 'scroll') { renderedPages = {}; await renderAllPagesScroll(); }
+        else await renderCurrentPage();
       });
 
-      // Keyboard left/right arrows for page turning
-      const handleKey = async (e) => {
-        if (!document.getElementById('preview-modal')?.classList.contains('open')) return;
+      // Keyboard left/right arrows for page turning (page mode only)
+      _pdfKeydownHandler = async (e) => {
+        if (!document.getElementById('preview-modal')?.classList.contains('open')) {
+          document.removeEventListener('keydown', _pdfKeydownHandler);
+          _pdfKeydownHandler = null;
+          return;
+        }
         if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+        if (viewMode !== 'page') return;
         if (e.key === 'ArrowLeft' && currentPage > 1) {
           currentPage--;
           await renderCurrentPage();
@@ -1823,7 +1931,7 @@
           await renderCurrentPage();
         }
       };
-      document.addEventListener('keydown', handleKey);
+      document.addEventListener('keydown', _pdfKeydownHandler);
 
     } catch (err) {
       console.warn('PDF.js fallback to iframe:', err);
@@ -2477,6 +2585,12 @@
         <label class="form-label">หมายเหตุ</label>
         <textarea id="add-notes" class="form-textarea" placeholder="หมายเหตุเพิ่มเติม..."></textarea>
       </div>
+      <div class="form-group">
+        <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="add-is-study" style="width:16px;height:16px;cursor:pointer" />
+          <span>เป็นบล็อกอ่านหนังสือ (มี Checklist ให้ติ๊ก)</span>
+        </label>
+      </div>
     `;
 
     modal.querySelector('#add-tag-selector').addEventListener('click', e => {
@@ -2505,6 +2619,7 @@
     const end      = modal.querySelector('#add-end')?.value || '';
     const notes    = modal.querySelector('#add-notes')?.value || '';
     const tag      = modal.querySelector('#add-tag-selector .tag-option.selected')?.dataset.tag || 'break';
+    const isStudy  = modal.querySelector('#add-is-study')?.checked || false;
 
     if (!title || !start || !end) { showToast('⚠️ กรุณากรอกข้อมูลให้ครบ', 'warning'); return; }
 
@@ -2513,6 +2628,10 @@
       start, end, title, subtitle, tag, notes,
       isCustom: true
     };
+    if (isStudy) {
+      newBlock.isStudyBlock = true;
+      newBlock.studyBlockIndex = 0;
+    }
     if (!state.customBlocks[dayKey]) state.customBlocks[dayKey] = [];
     state.customBlocks[dayKey].push(newBlock);
     saveCustomBlocks();
@@ -2607,7 +2726,7 @@
     document.getElementById('edit-save-btn')?.addEventListener('click', saveEdit);
     document.getElementById('edit-delete-btn')?.addEventListener('click', deleteBlock);
     document.getElementById('edit-cancel-btn')?.addEventListener('click', () => closeModal('edit-modal'));
-    document.getElementById('edit-cancel-btn-footer')?.addEventListener('click', () => closeModal('edit-modal'));
+    document.getElementById('edit-cancel-action-btn')?.addEventListener('click', () => closeModal('edit-modal'));
     document.getElementById('edit-modal')?.addEventListener('click', e => {
       if (e.target === e.currentTarget) closeModal('edit-modal');
     });
@@ -2615,7 +2734,7 @@
     // Add modal
     document.getElementById('add-save-btn')?.addEventListener('click', saveNewBlock);
     document.getElementById('add-cancel-btn')?.addEventListener('click', () => closeModal('add-modal'));
-    document.getElementById('add-cancel-btn-footer')?.addEventListener('click', () => closeModal('add-modal'));
+    document.getElementById('add-cancel-action-btn')?.addEventListener('click', () => closeModal('add-modal'));
     document.getElementById('add-modal')?.addEventListener('click', e => {
       if (e.target === e.currentTarget) closeModal('add-modal');
     });

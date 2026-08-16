@@ -255,6 +255,8 @@ const CloudSync = (function () {
 
   function _sanitize(data) {
     return {
+      version:      data.version      || 0,
+      updatedAt:    data.updatedAt    || new Date().toISOString(),
       checklist:    data.checklist    || {},
       subjects:     data.subjects     || {},
       customBlocks: data.customBlocks || {},
