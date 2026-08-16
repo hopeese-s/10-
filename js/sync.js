@@ -1,17 +1,23 @@
 // ============================================================
 // sync.js — Real-Time Cloud Sync Module (Passcode / Sync Key)
-// Uses KV storage REST API with local fallback
+// Uses Serverless / Node.js backend REST API with local fallback
 // ============================================================
 
 const CloudSync = (function() {
   'use strict';
 
-  // Free high-availability public KV endpoint for seamless sync
-  const API_ENDPOINT = 'https://kvdb.io/4y9nQeN8zS8yK7hP5kZ2wQ'; 
+  function getApiEndpoint() {
+    if (window.location.protocol.startsWith('http')) {
+      return `${window.location.origin}/api/sync`;
+    }
+    // Fallback if opened directly as local file://
+    return 'http://localhost:3000/api/sync';
+  }
 
   let syncKey = localStorage.getItem('sd-sync-key') || '';
   let syncStatus = 'local'; // 'local' | 'synced' | 'syncing' | 'error'
   let autoSyncTimer = null;
+  let lastSyncTime = 0;
 
   function getSyncKey() { return syncKey; }
 
@@ -32,6 +38,7 @@ const CloudSync = (function() {
     updateUIStatus();
 
     try {
+      const endpoint = `${getApiEndpoint()}/${encodeURIComponent(syncKey)}`;
       const payload = JSON.stringify({
         checklist: data.checklist || {},
         subjects: data.subjects || {},
@@ -39,7 +46,7 @@ const CloudSync = (function() {
         updatedAt: new Date().toISOString()
       });
 
-      const res = await fetch(`${API_ENDPOINT}/${encodeURIComponent(syncKey)}`, {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: payload
@@ -47,6 +54,7 @@ const CloudSync = (function() {
 
       if (res.ok) {
         syncStatus = 'synced';
+        lastSyncTime = Date.now();
         updateUIStatus();
         return true;
       } else {
@@ -69,9 +77,11 @@ const CloudSync = (function() {
     updateUIStatus();
 
     try {
-      const res = await fetch(`${API_ENDPOINT}/${encodeURIComponent(syncKey)}?t=${Date.now()}`);
+      const endpoint = `${getApiEndpoint()}/${encodeURIComponent(syncKey)}?t=${Date.now()}`;
+      const res = await fetch(endpoint);
+      
       if (res.status === 404) {
-        // Key doesn't exist yet on cloud, create it
+        // Key doesn't exist yet on cloud
         syncStatus = 'synced';
         updateUIStatus();
         return null;
@@ -80,6 +90,7 @@ const CloudSync = (function() {
 
       const cloudData = await res.json();
       syncStatus = 'synced';
+      lastSyncTime = Date.now();
       updateUIStatus();
       return cloudData;
     } catch (err) {
@@ -92,7 +103,6 @@ const CloudSync = (function() {
 
   function updateUIStatus() {
     const btn = document.getElementById('cloud-sync-btn');
-    const badge = document.getElementById('cloud-sync-badge');
     const modalBadge = document.getElementById('modal-sync-status');
 
     if (!btn) return;
@@ -100,25 +110,37 @@ const CloudSync = (function() {
     if (!syncKey) {
       btn.innerHTML = '☁️ Off';
       btn.title = 'ไม่ได้เชื่อมต่อ Cloud (ใช้งานแบบ Local)';
-      if (modalBadge) modalBadge.className = 'status-badge'; modalBadge.textContent = '⚪ ข้อมูลเก็บในเครื่องนี้เท่านั้น';
+      if (modalBadge) {
+        modalBadge.className = 'status-badge';
+        modalBadge.textContent = '⚪ ข้อมูลเก็บในเครื่องนี้เท่านั้น';
+      }
     } else if (syncStatus === 'syncing') {
       btn.innerHTML = '🔄 Sync...';
-      if (modalBadge) modalBadge.className = 'status-badge dorm'; modalBadge.textContent = '🔄 กำลังซิงค์ข้อมูล...';
+      if (modalBadge) {
+        modalBadge.className = 'status-badge dorm';
+        modalBadge.textContent = '🔄 กำลังซิงค์ข้อมูล...';
+      }
     } else if (syncStatus === 'synced') {
       btn.innerHTML = '☁️ Synced';
       btn.title = `เชื่อมต่อแล้ว (Key: ${syncKey})`;
-      if (modalBadge) modalBadge.className = 'status-badge home'; modalBadge.textContent = `✅ เชื่อมต่อแล้ว (Key: ${syncKey})`;
+      if (modalBadge) {
+        modalBadge.className = 'status-badge home';
+        modalBadge.textContent = `✅ เชื่อมต่อแล้ว (Key: ${syncKey})`;
+      }
     } else if (syncStatus === 'error') {
       btn.innerHTML = '⚠️ Offline';
       btn.title = 'เชื่อมต่อแบบออฟไลน์ (จะซิงค์ใหม่อัตโนมัติเมื่อออนไลน์)';
-      if (modalBadge) modalBadge.className = 'status-badge'; modalBadge.textContent = '⚠️ ออฟไลน์ (บันทึกลงเครื่องชั่วคราว)';
+      if (modalBadge) {
+        modalBadge.className = 'status-badge';
+        modalBadge.textContent = '⚠️ ออฟไลน์ (บันทึกลงเครื่องชั่วคราว)';
+      }
     }
   }
 
   function startAutoSync(onRemoteUpdate) {
     if (autoSyncTimer) clearInterval(autoSyncTimer);
 
-    // Poll every 10 seconds if syncKey is set
+    // Poll every 5 seconds if syncKey is set
     autoSyncTimer = setInterval(async () => {
       if (syncKey && document.visibilityState === 'visible') {
         const cloudData = await pullFromCloud();
@@ -126,11 +148,11 @@ const CloudSync = (function() {
           onRemoteUpdate(cloudData);
         }
       }
-    }, 10000);
+    }, 5000);
 
-    // Pull when tab gets focus
-    window.addEventListener('focus', async () => {
-      if (syncKey) {
+    // Pull when tab gets focus or page becomes visible
+    document.addEventListener('visibilitychange', async () => {
+      if (document.visibilityState === 'visible' && syncKey) {
         const cloudData = await pullFromCloud();
         if (cloudData && onRemoteUpdate) {
           onRemoteUpdate(cloudData);
