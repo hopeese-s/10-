@@ -43,8 +43,10 @@
 
     // Cloud Sync initial pull
     if (window.CloudSync && CloudSync.getSyncKey()) {
-      const cloudData = await CloudSync.pullFromCloud();
-      if (cloudData) applyCloudData(cloudData);
+      const pullRes = await CloudSync.pullFromCloud();
+      if (pullRes && pullRes.ok && pullRes.data) {
+        applyCloudData(pullRes.data);
+      }
     }
     if (window.CloudSync) CloudSync.updateUIStatus();
 
@@ -73,19 +75,25 @@
   // ─── Storage & Cloud Sync ────────────────────────────────
   function hasDataChanged(cloudData) {
     if (!cloudData) return false;
-    const cChecklist = JSON.stringify(state.checklist);
-    const nChecklist = JSON.stringify(cloudData.checklist || {});
-    const cSubjects  = JSON.stringify(state.subjects);
-    const nSubjects  = JSON.stringify(cloudData.subjects || {});
-    const cCustom    = JSON.stringify(state.customBlocks);
-    const nCustom    = JSON.stringify(cloudData.customBlocks || {});
-    return (cChecklist !== nChecklist) || (cSubjects !== nSubjects) || (cCustom !== nCustom);
+    const cChecklist  = JSON.stringify(state.checklist);
+    const nChecklist  = JSON.stringify(cloudData.checklist || {});
+    const cSubjects   = JSON.stringify(state.subjects);
+    const nSubjects   = JSON.stringify(cloudData.subjects || {});
+    const cCustom     = JSON.stringify(state.customBlocks);
+    const nCustom     = JSON.stringify(cloudData.customBlocks || {});
+    const cStudyLinks = JSON.stringify(state.studyLinks);
+    const nStudyLinks = JSON.stringify(cloudData.studyLinks || []);
+    return (cChecklist !== nChecklist) || (cSubjects !== nSubjects) || (cCustom !== nCustom) || (cStudyLinks !== nStudyLinks);
   }
 
   function applyCloudData(cloudData) {
     if (cloudData.checklist) state.checklist = cloudData.checklist;
     if (cloudData.subjects) state.subjects = cloudData.subjects;
     if (cloudData.customBlocks) state.customBlocks = cloudData.customBlocks;
+    if (cloudData.studyLinks && Array.isArray(cloudData.studyLinks) && cloudData.studyLinks.length > 0) {
+      state.studyLinks = cloudData.studyLinks;
+      saveStudyLinks();
+    }
 
     localStorage.setItem('sd-checklist', JSON.stringify(state.checklist));
     localStorage.setItem('sd-subjects', JSON.stringify(state.subjects));
@@ -1348,14 +1356,35 @@
       if (e.target === e.currentTarget) closeModal('add-modal');
     });
 
-    // Cloud Sync modal
-    document.getElementById('cloud-sync-btn')?.addEventListener('click', () => {
+    // Cloud Sync header button
+    document.getElementById('cloud-sync-btn')?.addEventListener('click', async (e) => {
       const modal = document.getElementById('sync-modal');
       const input = document.getElementById('sync-key-input');
-      if (input && window.CloudSync) input.value = CloudSync.getSyncKey();
-      if (window.CloudSync) CloudSync.updateUIStatus();
-      if (modal) modal.classList.add('open');
-      document.body.style.overflow = 'hidden';
+      const key = CloudSync.getSyncKey();
+
+      if (!key || e.shiftKey || e.altKey) {
+        // Open setup modal
+        if (input) input.value = key;
+        CloudSync.updateUIStatus();
+        if (modal) modal.classList.add('open');
+        document.body.style.overflow = 'hidden';
+      } else {
+        // Fast instant sync
+        showToast('🔄 กำลังซิงค์ข้อมูลกับ Cloud...', 'info');
+        const pullRes = await CloudSync.pullFromCloud();
+        if (pullRes.ok) {
+          if (pullRes.data) {
+            applyCloudData(pullRes.data);
+            if (state.currentTopView === 'dashboard') renderDashboardCurrentView();
+            else if (state.currentTopView === 'study') renderStudyView();
+          } else {
+            await CloudSync.pushToCloud(state);
+          }
+          showToast('✅ ซิงค์ข้อมูลล่าสุดสำเร็จ!', 'success');
+        } else {
+          showToast('⚠️ ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ Cloud ได้ในขณะนี้', 'warning');
+        }
+      }
     });
 
     document.getElementById('sync-cancel-btn')?.addEventListener('click', () => closeModal('sync-modal'));
@@ -1363,6 +1392,7 @@
       if (e.target === e.currentTarget) closeModal('sync-modal');
     });
 
+    // Connect & Sync button
     document.getElementById('sync-connect-btn')?.addEventListener('click', async () => {
       const input = document.getElementById('sync-key-input');
       const key = input?.value.trim();
@@ -1370,26 +1400,73 @@
         showToast('⚠️ กรุณากรอก Sync Key', 'warning');
         return;
       }
-      if (window.CloudSync) {
-        CloudSync.setSyncKey(key);
-        showToast('🔄 กำลังเชื่อมต่อ Cloud...', 'info');
+      CloudSync.setSyncKey(key);
+      showToast('🔄 กำลังเชื่อมต่อ Cloud...', 'info');
 
-        const cloudData = await CloudSync.pullFromCloud();
-        if (cloudData) {
-          applyCloudData(cloudData);
+      const pullRes = await CloudSync.pullFromCloud();
+      if (pullRes.ok) {
+        if (pullRes.data) {
+          applyCloudData(pullRes.data);
           if (state.currentTopView === 'dashboard') renderDashboardCurrentView();
-          showToast('✅ ซิงค์ข้อมูลสำเร็จ!', 'success');
-        } else {
-          await CloudSync.pushToCloud(state);
-          showToast('✅ สร้าง Sync Key บน Cloud แล้ว!', 'success');
+          else if (state.currentTopView === 'study') renderStudyView();
+          showToast(`✅ เชื่อมต่อและดึงข้อมูลจาก Cloud แล้ว (Key: ${key})`, 'success');
+        } else if (pullRes.notFound) {
+          const pushRes = await CloudSync.pushToCloud(state);
+          if (pushRes.ok) {
+            showToast(`✅ สร้าง Sync Key บน Cloud เรียบร้อย (Key: ${key})`, 'success');
+          } else {
+            showToast(`⚠️ สร้าง Key แล้ว แต่บันทึกข้อมูลไม่สำเร็จ`, 'warning');
+          }
         }
+      } else {
+        showToast('⚠️ เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ (บันทึกไว้ในเครื่องเรียบร้อย)', 'warning');
       }
       closeModal('sync-modal');
     });
 
+    // Force Pull button
+    document.getElementById('sync-force-pull-btn')?.addEventListener('click', async () => {
+      const key = CloudSync.getSyncKey();
+      if (!key) {
+        showToast('⚠️ ยังไม่ได้ตั้งค่า Sync Key', 'warning');
+        return;
+      }
+      showToast('📥 กำลังดึงข้อมูลจาก Cloud...', 'info');
+      const pullRes = await CloudSync.pullFromCloud();
+      if (pullRes.ok && pullRes.data) {
+        applyCloudData(pullRes.data);
+        if (state.currentTopView === 'dashboard') renderDashboardCurrentView();
+        else if (state.currentTopView === 'study') renderStudyView();
+        showToast('✅ ดึงข้อมูลล่าสุดจาก Cloud มาอัปเดตเครื่องนี้แล้ว!', 'success');
+        closeModal('sync-modal');
+      } else if (pullRes.notFound) {
+        showToast('ℹ️ ยังไม่มีข้อมูลบน Cloud สำหรับ Key นี้', 'info');
+      } else {
+        showToast('⚠️ ไม่สามารถดึงข้อมูลได้ โปรดตรวจสอบการเชื่อมต่อ', 'warning');
+      }
+    });
+
+    // Force Push button
+    document.getElementById('sync-force-push-btn')?.addEventListener('click', async () => {
+      const key = CloudSync.getSyncKey();
+      if (!key) {
+        showToast('⚠️ ยังไม่ได้ตั้งค่า Sync Key', 'warning');
+        return;
+      }
+      showToast('📤 กำลังส่งข้อมูลขึ้น Cloud...', 'info');
+      const pushRes = await CloudSync.pushToCloud(state);
+      if (pushRes.ok) {
+        showToast('✅ ส่งข้อมูลเครื่องนี้ขึ้น Cloud สำเร็จ!', 'success');
+        closeModal('sync-modal');
+      } else {
+        showToast('⚠️ ส่งข้อมูลขึ้น Cloud ไม่สำเร็จ โปรดลองใหม่', 'warning');
+      }
+    });
+
+    // Disconnect button
     document.getElementById('sync-disconnect-btn')?.addEventListener('click', () => {
-      if (window.CloudSync) CloudSync.setSyncKey('');
-      showToast('⚪ ยกเลิกการซิงค์ Cloud แล้ว', 'info');
+      CloudSync.setSyncKey('');
+      showToast('⚪ ยกเลิกการซิงค์ Cloud แล้ว (ใช้งานเฉพาะในเครื่อง)', 'info');
       closeModal('sync-modal');
     });
 
