@@ -7,8 +7,8 @@ const CloudSync = (function () {
   'use strict';
 
   const API = 'https://daily-study-dashboard-production.up.railway.app/api/sync';
-  const PUSH_DEBOUNCE_MS = 50;     // 50ms instant batching
-  const POLL_INTERVAL_MS = 2000;   // Poll every 2 seconds for real-time responsiveness
+  const PUSH_DEBOUNCE_MS = 20;     // 20ms ultra-fast push
+  const POLL_INTERVAL_MS = 1500;   // Poll every 1.5 seconds for instant multi-device sync
 
   let syncKey      = localStorage.getItem('sd-sync-key') || '1';
   let syncStatus   = syncKey ? 'synced' : 'local';

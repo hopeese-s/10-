@@ -56,6 +56,10 @@ const server = http.createServer((req, res) => {
 
   // API Endpoint: /api/sync/:key
   if (pathname.startsWith('/api/sync/')) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
     const key = decodeURIComponent(pathname.replace('/api/sync/', '')).trim();
     if (!key) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -78,7 +82,7 @@ const server = http.createServer((req, res) => {
           const parsed = JSON.parse(body);
           store[key] = {
             ...parsed,
-            updatedAt: parsed.updatedAt || new Date().toISOString()
+            updatedAt: new Date().toISOString()
           };
           saveStore();
           res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -117,6 +121,11 @@ const server = http.createServer((req, res) => {
 
     const ext = path.extname(filePath).toLowerCase();
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+
+    // Disable caching for HTML, JS, CSS to ensure instant multi-device deployment
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
 
     res.writeHead(200, { 'Content-Type': contentType });
     fs.createReadStream(filePath).pipe(res);
