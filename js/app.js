@@ -21,6 +21,9 @@
     editingBlock: null,
     addingDay: null,
 
+    // Curriculum View Mode ('grid' | 'list')
+    curriculumViewMode: 'grid',
+
     // Study Resource Links (Custom user links saved in localStorage)
     studyLinks: [
       { id: 'link-1', title: '📘 BME Undergraduate Handbook 2026', type: 'pdf', url: '2026_Handbok for Biomedical Engineering Undergraduate Student.pdf', desc: 'คู่มือนักศึกษาหลักสูตรวิศวกรรมชีวแพทย์ ม.มหิดล' },
@@ -97,6 +100,7 @@
       state.customBlocks = JSON.parse(localStorage.getItem('sd-custom-blocks') || '{}');
       const savedLinks   = localStorage.getItem('sd-study-links');
       if (savedLinks) state.studyLinks = JSON.parse(savedLinks);
+      state.curriculumViewMode = localStorage.getItem('sd-curriculum-mode') || 'grid';
     } catch (e) {}
   }
 
@@ -762,32 +766,92 @@
       { code: 'SCCH169', name: 'Chemistry Laboratory', credits: '1 (0-3-1)', type: 'ปฏิบัติการ', room: 'L2-201', schedule: 'ศุกร์ 13:30 - 16:30', desc: 'ปฏิบัติการเคมี การไตเตรท การสังเคราะห์สาร และการทดสอบคุณสมบัติ' }
     ];
 
+    const isList = state.curriculumViewMode === 'list';
+
+    // Build Content based on view mode
+    let contentHtml = '';
+    if (isList) {
+      // List Mode (Table / Horizontal Row View)
+      contentHtml = `
+        <div class="curriculum-list-wrap">
+          ${curriculumCourses.map(c => {
+            const sc = SUBJECT_COLORS[c.code] || { color: 'var(--accent)', bg: 'var(--accent-bg)', emoji: '📘' };
+            return `
+              <div class="curriculum-list-row">
+                <div class="clr-badge-col">
+                  <span class="tag-chip" style="background:${sc.bg};color:${sc.color}">
+                    ${sc.emoji} ${c.code}
+                  </span>
+                  <div style="font-size:11px;font-weight:600;color:var(--label-3);margin-top:4px">${c.credits}</div>
+                </div>
+                <div class="clr-main-col">
+                  <h3 style="font-size:14.5px;font-weight:700;color:var(--label);margin-bottom:3px">${escHtml(c.name)} <span style="font-size:12px;font-weight:500;color:var(--label-3)">(${c.type})</span></h3>
+                  <p style="font-size:12px;color:var(--label-2);line-height:1.45">${escHtml(c.desc)}</p>
+                </div>
+                <div class="clr-meta-col">
+                  <div style="font-size:12px;font-weight:600;color:var(--label)">📍 ${escHtml(c.room)}</div>
+                  <div style="font-size:11.5px;color:var(--label-3);margin-top:2px">⏰ ${escHtml(c.schedule)}</div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    } else {
+      // Grid Mode (Card Grid View)
+      contentHtml = `
+        <div class="cards-grid">
+          ${curriculumCourses.map(c => {
+            const sc = SUBJECT_COLORS[c.code] || { color: 'var(--accent)', bg: 'var(--accent-bg)', emoji: '📘' };
+            return `
+              <div class="card-item">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                  <span class="tag-chip" style="background:${sc.bg};color:${sc.color}">
+                    ${sc.emoji} ${c.code}
+                  </span>
+                  <span style="font-size:11.5px;font-weight:600;color:var(--label-3)">${c.credits}</span>
+                </div>
+                <h3 style="font-size:15px;font-weight:700;margin-bottom:6px;color:var(--label)">${escHtml(c.name)}</h3>
+                <p style="font-size:12.5px;color:var(--label-2);line-height:1.5;margin-bottom:12px">${escHtml(c.desc)}</p>
+                <div style="font-size:11.5px;color:var(--label-3);border-top:1px solid var(--sep);padding-top:10px;display:flex;flex-direction:column;gap:3px">
+                  <div>📍 ห้อง: <strong>${escHtml(c.room)}</strong></div>
+                  <div>⏰ เวลา: <strong>${escHtml(c.schedule)}</strong></div>
+                </div>
+              </div>`;
+          }).join('')}
+        </div>
+      `;
+    }
+
     container.innerHTML = `
-      <div style="margin-bottom:2rem">
-        <h2 style="font-family:var(--font-serif);font-size:1.6rem;font-weight:700;margin-bottom:6px">หลักสูตรวิศวกรรมชีวแพทย์ (BME Mahidol 2026)</h2>
-        <p style="font-size:13.5px;color:var(--label-2)">โครงสร้างรายวิชาปีที่ 1 ภาคเรียนที่ 1 รวมทั้งสิ้น 21 หน่วยกิต</p>
+      <div class="curriculum-header-row">
+        <div>
+          <h2 style="font-family:var(--font-serif);font-size:1.6rem;font-weight:700;margin-bottom:4px">หลักสูตรวิศวกรรมชีวแพทย์ (BME Mahidol 2026)</h2>
+          <p style="font-size:13.5px;color:var(--label-2)">โครงสร้างรายวิชาปีที่ 1 ภาคเรียนที่ 1 รวมทั้งสิ้น 21 หน่วยกิต</p>
+        </div>
+        <div class="view-mode-toggle" aria-label="รูปแบบการแสดงผล">
+          <button class="view-mode-btn ${!isList ? 'active' : ''}" data-mode="grid" title="แสดงแบบการ์ด">
+            <span>⊞</span> การ์ด (Grid)
+          </button>
+          <button class="view-mode-btn ${isList ? 'active' : ''}" data-mode="list" title="แสดงแบบรายการ">
+            <span>☰</span> รายการ (List)
+          </button>
+        </div>
       </div>
-      <div class="cards-grid">
-        ${curriculumCourses.map(c => {
-          const sc = SUBJECT_COLORS[c.code] || { color: 'var(--accent)', bg: 'var(--accent-bg)', emoji: '📘' };
-          return `
-            <div class="card-item">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-                <span class="tag-chip" style="background:${sc.bg};color:${sc.color}">
-                  ${sc.emoji} ${c.code}
-                </span>
-                <span style="font-size:11.5px;font-weight:600;color:var(--label-3)">${c.credits}</span>
-              </div>
-              <h3 style="font-size:15px;font-weight:700;margin-bottom:6px;color:var(--label)">${escHtml(c.name)}</h3>
-              <p style="font-size:12.5px;color:var(--label-2);line-height:1.5;margin-bottom:12px">${escHtml(c.desc)}</p>
-              <div style="font-size:11.5px;color:var(--label-3);border-top:1px solid var(--sep);padding-top:10px;display:flex;flex-direction:column;gap:3px">
-                <div>📍 ห้อง: <strong>${escHtml(c.room)}</strong></div>
-                <div>⏰ เวลา: <strong>${escHtml(c.schedule)}</strong></div>
-              </div>
-            </div>`;
-        }).join('')}
-      </div>
+      ${contentHtml}
     `;
+
+    // Attach switch listener
+    container.querySelectorAll('.view-mode-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const mode = e.currentTarget.dataset.mode;
+        if (mode && mode !== state.curriculumViewMode) {
+          state.curriculumViewMode = mode;
+          localStorage.setItem('sd-curriculum-mode', mode);
+          renderCurriculumView();
+        }
+      });
+    });
   }
 
   // ─── View 3: Study Resources (Link Drive / Sheet / Files) ─
