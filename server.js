@@ -93,7 +93,13 @@ const server = http.createServer((req, res) => {
   }
 
   // Static File Serving
-  let filePath = path.join(__dirname, pathname === '/' ? 'index.html' : pathname);
+  let decodedPathname = '/';
+  try {
+    decodedPathname = decodeURIComponent(pathname);
+  } catch (e) {
+    decodedPathname = pathname;
+  }
+  let filePath = path.join(__dirname, decodedPathname === '/' ? 'index.html' : decodedPathname);
   
   // Prevent directory traversal
   if (!filePath.startsWith(__dirname)) {

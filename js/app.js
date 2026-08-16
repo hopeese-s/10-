@@ -15,6 +15,7 @@
 
     // 9th Core Dashboard State
     theme: 'light',
+    updatedAt: new Date().toISOString(),
     checklist: {},      // { 'monday-2026-08-17': { 'mon-11-0': true } }
     subjects: {},       // { 'monday-2026-08-17': { 'mon-11-0': 'GenPhy' } }
     customBlocks: {},   // per-day overrides { monday: [...extra blocks] }
@@ -152,11 +153,11 @@
     const todayIndex = new Date().getDay();
     state.currentDay = getDayKey(todayIndex) || 'monday';
 
-    // Cloud Sync initial pull
+    // Cloud Sync initial smart sync
     if (window.CloudSync && CloudSync.getSyncKey()) {
       const pullRes = await CloudSync.pullFromCloud();
       if (pullRes && pullRes.ok && pullRes.data) {
-        applyCloudData(pullRes.data);
+        syncSmartWithCloud(pullRes.data);
       }
     }
     if (window.CloudSync) CloudSync.updateUIStatus();
@@ -173,42 +174,89 @@
     // Auto sync background polling & BroadcastChannel (Instant real-time update)
     if (window.CloudSync) {
       CloudSync.startAutoSync(cloudData => {
-        if (cloudData && hasDataChanged(cloudData)) {
-          applyCloudData(cloudData);
-          const isTyping = document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
-          if (state.currentTopView === 'dashboard') {
-            if (!isTyping) {
-              renderDashboardCurrentView();
+        if (cloudData) {
+          const syncResult = syncSmartWithCloud(cloudData);
+          if (syncResult === 'pulled' || syncResult === 'merged') {
+            const isTyping = document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
+            if (state.currentTopView === 'dashboard') {
+              if (!isTyping) renderDashboardCurrentView();
+            } else if (state.currentTopView === 'study' && !isTyping) {
+              renderStudyView();
             }
-          } else if (state.currentTopView === 'study' && !isTyping) {
-            renderStudyView();
           }
         }
       });
     }
   }
 
-  // ─── Storage & Cloud Sync ────────────────────────────────
-  function hasDataChanged(cloudData) {
-    if (!cloudData) return false;
-    const cChecklist  = JSON.stringify(state.checklist);
-    const nChecklist  = JSON.stringify(cloudData.checklist || {});
-    const cSubjects   = JSON.stringify(state.subjects);
-    const nSubjects   = JSON.stringify(cloudData.subjects || {});
-    const cCustom     = JSON.stringify(state.customBlocks);
-    const nCustom     = JSON.stringify(cloudData.customBlocks || {});
-    const cStudyLinks = JSON.stringify(state.studyLinks);
-    const nStudyLinks = JSON.stringify(cloudData.studyLinks || []);
-    return (cChecklist !== nChecklist) || (cSubjects !== nSubjects) || (cCustom !== nCustom) || (cStudyLinks !== nStudyLinks);
+  // ─── Storage & Smart Cloud Sync ──────────────────────────
+  function touchUpdatedAt() {
+    state.updatedAt = new Date().toISOString();
+    localStorage.setItem('sd-updated-at', state.updatedAt);
+  }
+
+  function syncSmartWithCloud(cloudData) {
+    if (!cloudData) return 'no-data';
+
+    const localTime  = new Date(state.updatedAt || 0).getTime();
+    const remoteTime = new Date(cloudData.updatedAt || 0).getTime();
+
+    // 1. Remote is newer: apply cloud data
+    if (remoteTime > localTime) {
+      applyCloudData(cloudData);
+      return 'pulled';
+    }
+    // 2. Local is newer: push local data up to cloud
+    else if (localTime > remoteTime) {
+      if (window.CloudSync) CloudSync.pushToCloud(state);
+      return 'pushed';
+    }
+    // 3. Timestamps equal or close: merge checklist safely
+    else {
+      let changed = false;
+      if (cloudData.checklist) {
+        for (const [day, dayObj] of Object.entries(cloudData.checklist)) {
+          if (!state.checklist[day]) state.checklist[day] = {};
+          for (const [k, v] of Object.entries(dayObj)) {
+            if (state.checklist[day][k] !== v) {
+              state.checklist[day][k] = v;
+              changed = true;
+            }
+          }
+        }
+      }
+      if (cloudData.subjects) {
+        for (const [day, dayObj] of Object.entries(cloudData.subjects)) {
+          if (!state.subjects[day]) state.subjects[day] = {};
+          for (const [k, v] of Object.entries(dayObj)) {
+            if (state.subjects[day][k] !== v) {
+              state.subjects[day][k] = v;
+              changed = true;
+            }
+          }
+        }
+      }
+      if (changed) {
+        localStorage.setItem('sd-checklist', JSON.stringify(state.checklist));
+        localStorage.setItem('sd-subjects', JSON.stringify(state.subjects));
+        touchUpdatedAt();
+        if (window.CloudSync) CloudSync.pushToCloud(state);
+      }
+      return 'merged';
+    }
   }
 
   function applyCloudData(cloudData) {
+    if (cloudData.updatedAt) {
+      state.updatedAt = cloudData.updatedAt;
+      localStorage.setItem('sd-updated-at', state.updatedAt);
+    }
     if (cloudData.checklist) state.checklist = cloudData.checklist;
     if (cloudData.subjects) state.subjects = cloudData.subjects;
     if (cloudData.customBlocks) state.customBlocks = cloudData.customBlocks;
     if (cloudData.studyLinks && Array.isArray(cloudData.studyLinks) && cloudData.studyLinks.length > 0) {
       state.studyLinks = cloudData.studyLinks;
-      saveStudyLinks();
+      localStorage.setItem('sd-study-links', JSON.stringify(state.studyLinks));
     }
 
     localStorage.setItem('sd-checklist', JSON.stringify(state.checklist));
@@ -219,6 +267,7 @@
   function loadFromStorage() {
     try {
       state.theme        = localStorage.getItem('sd-theme') || 'light';
+      state.updatedAt    = localStorage.getItem('sd-updated-at') || new Date().toISOString();
       state.checklist    = JSON.parse(localStorage.getItem('sd-checklist') || '{}');
       state.subjects     = JSON.parse(localStorage.getItem('sd-subjects') || '{}');
       state.customBlocks = JSON.parse(localStorage.getItem('sd-custom-blocks') || '{}');
@@ -245,22 +294,27 @@
   }
 
   function saveChecklist() {
+    touchUpdatedAt();
     localStorage.setItem('sd-checklist', JSON.stringify(state.checklist));
     if (window.CloudSync) CloudSync.pushToCloud(state);
   }
 
   function saveSubjects() {
+    touchUpdatedAt();
     localStorage.setItem('sd-subjects', JSON.stringify(state.subjects));
     if (window.CloudSync) CloudSync.pushToCloud(state);
   }
 
   function saveCustomBlocks() {
+    touchUpdatedAt();
     localStorage.setItem('sd-custom-blocks', JSON.stringify(state.customBlocks));
     if (window.CloudSync) CloudSync.pushToCloud(state);
   }
 
   function saveStudyLinks() {
+    touchUpdatedAt();
     localStorage.setItem('sd-study-links', JSON.stringify(state.studyLinks));
+    if (window.CloudSync) CloudSync.pushToCloud(state);
   }
 
   function saveTheme() {
@@ -1226,8 +1280,9 @@
 
     if (title) title.textContent = item.title;
     if (metaInfo) metaInfo.textContent = item.sub || item.desc || item.url;
+    const safeUrl = item.url.startsWith('http') ? item.url : encodeURI(item.url);
     if (extBtn) {
-      extBtn.href = item.url;
+      extBtn.href = safeUrl;
       extBtn.textContent = '🚀 เปิดในแท็บใหม่';
     }
 
@@ -1254,11 +1309,11 @@
     if (body) {
       if (item.type === 'pdf') {
         body.innerHTML = `
-          <iframe src="${escHtml(item.url)}#toolbar=1" style="width:100%;height:68vh;border:none;border-radius:var(--r-m);background:#ffffff"></iframe>
+          <iframe src="${escHtml(safeUrl)}#toolbar=1" style="width:100%;height:68vh;border:none;border-radius:var(--r-m);background:#ffffff"></iframe>
         `;
       } else if (item.type === 'image') {
         body.innerHTML = `
-          <img src="${escHtml(item.url)}" alt="${escHtml(item.title)}" style="max-width:100%;max-height:68vh;object-fit:contain;border-radius:var(--r-m);display:block;margin:0 auto" />
+          <img src="${escHtml(safeUrl)}" alt="${escHtml(item.title)}" style="max-width:100%;max-height:68vh;object-fit:contain;border-radius:var(--r-m);display:block;margin:0 auto" />
         `;
       } else {
         // Classroom or Drive or Web Link
@@ -1695,18 +1750,25 @@
         if (modal) modal.classList.add('open');
         document.body.style.overflow = 'hidden';
       } else {
-        // Fast instant sync
+        // Fast instant smart sync
         showToast('🔄 กำลังซิงค์ข้อมูลกับ Cloud...', 'info');
         const pullRes = await CloudSync.pullFromCloud();
         if (pullRes.ok) {
           if (pullRes.data) {
-            applyCloudData(pullRes.data);
-            if (state.currentTopView === 'dashboard') renderDashboardCurrentView();
-            else if (state.currentTopView === 'study') renderStudyView();
+            const syncRes = syncSmartWithCloud(pullRes.data);
+            if (syncRes === 'pulled' || syncRes === 'merged') {
+              if (state.currentTopView === 'dashboard') renderDashboardCurrentView();
+              else if (state.currentTopView === 'study') renderStudyView();
+              showToast('✅ ดึงข้อมูลล่าสุดจาก Cloud มาอัปเดตเครื่องนี้แล้ว!', 'success');
+            } else if (syncRes === 'pushed') {
+              showToast('✅ ข้อมูลในเครื่องนี้ล่าสุดกว่า! อัปเดตขึ้น Cloud เรียบร้อย', 'success');
+            } else {
+              showToast('✅ ข้อมูลตรงกันกับ Cloud เรียบร้อย', 'success');
+            }
           } else {
             await CloudSync.pushToCloud(state);
+            showToast('✅ ส่งข้อมูลเครื่องนี้ขึ้น Cloud สำเร็จ!', 'success');
           }
-          showToast('✅ ซิงค์ข้อมูลล่าสุดสำเร็จ!', 'success');
         } else {
           showToast('⚠️ ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ Cloud ได้ในขณะนี้', 'warning');
         }
@@ -1732,10 +1794,16 @@
       const pullRes = await CloudSync.pullFromCloud();
       if (pullRes.ok) {
         if (pullRes.data) {
-          applyCloudData(pullRes.data);
-          if (state.currentTopView === 'dashboard') renderDashboardCurrentView();
-          else if (state.currentTopView === 'study') renderStudyView();
-          showToast(`✅ เชื่อมต่อและดึงข้อมูลจาก Cloud แล้ว (Key: ${key})`, 'success');
+          const syncRes = syncSmartWithCloud(pullRes.data);
+          if (syncRes === 'pulled' || syncRes === 'merged') {
+            if (state.currentTopView === 'dashboard') renderDashboardCurrentView();
+            else if (state.currentTopView === 'study') renderStudyView();
+            showToast(`✅ เชื่อมต่อและดึงข้อมูลจาก Cloud แล้ว (Key: ${key})`, 'success');
+          } else if (syncRes === 'pushed') {
+            showToast(`✅ ข้อมูลในเครื่องนี้ล่าสุดกว่า! อัปเดตขึ้น Cloud แล้ว (Key: ${key})`, 'success');
+          } else {
+            showToast(`✅ เชื่อมต่อสำเร็จ ข้อมูลตรงกันกับ Cloud แล้ว (Key: ${key})`, 'success');
+          }
         } else if (pullRes.notFound) {
           const pushRes = await CloudSync.pushToCloud(state);
           if (pushRes.ok) {
