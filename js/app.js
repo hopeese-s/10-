@@ -359,7 +359,8 @@
         } else {
           // Merge custom items with updated DEFAULT_STUDY_LINKS
           const defaultIds = new Set(DEFAULT_STUDY_LINKS.map(l => l.id));
-          const customOnly = (Array.isArray(parsed) ? parsed : []).filter(l => !defaultIds.has(l.id) && !l.id.startsWith('link-'));
+          // Keep ALL non-default items (user-added links use id 'link-TIMESTAMP')
+          const customOnly = (Array.isArray(parsed) ? parsed : []).filter(l => !defaultIds.has(l.id));
           state.studyLinks = [...DEFAULT_STUDY_LINKS, ...customOnly];
           saveStudyLinks();
         }
