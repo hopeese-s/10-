@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#1c1c1e" media="(prefers-color-scheme: dark)" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <title>Study Dashboard · BME Mahidol</title>
+  <title>Study Dashboard & Memory Engine · BME Mahidol</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;0,700;1,400;1,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -36,10 +36,14 @@
 
       <nav class="header-nav" aria-label="เมนูหลัก">
         <div class="seg-ctrl">
-          <button class="nav-btn" data-view="home">🏠 หน้าแรก (3rd)</button>
+          <button class="nav-btn" data-view="home">🏠 หน้าแรก</button>
           <button class="nav-btn active" data-view="timeline">ตารางวัน</button>
           <button class="nav-btn" data-view="week">สัปดาห์</button>
           <button class="nav-btn" data-view="schedule">ตารางเรียน</button>
+          <button class="nav-btn" data-view="curriculum">📚 Curriculum</button>
+          <button class="nav-btn" data-view="study">🎴 Study</button>
+          <button class="nav-btn" data-view="scenarios">🩺 Scenarios</button>
+          <button class="nav-btn" data-view="graph">🕸️ Graph</button>
         </div>
       </nav>
 
@@ -76,7 +80,8 @@
 
           <div class="hero-ctas">
             <button class="btn-hero-accent" data-view="timeline">Daily Dashboard →</button>
-            <button class="btn-hero-outline" data-view="schedule">Explore Schedule</button>
+            <button class="btn-hero-dark" data-view="study">Start studying →</button>
+            <button class="btn-hero-outline" data-view="graph">Explore Graph</button>
           </div>
 
           <div class="hero-features-grid">
@@ -87,15 +92,21 @@
             </div>
 
             <div class="feature-card">
-              <div class="feature-icon">📊</div>
-              <h3 class="feature-title">สัปดาห์ (Week Routine)</h3>
-              <p class="feature-desc">ภาพรวมตารางกิจกรรมตลอดสัปดาห์ 7 วัน</p>
+              <div class="feature-icon">🎴</div>
+              <h3 class="feature-title">FSRS-5 Spaced Repetition</h3>
+              <p class="feature-desc">ทบทวนการ์ดความรู้ด้วยอัลกอริทึม FSRS-5 ปรับเป้าหมายการจำ 90%</p>
             </div>
 
             <div class="feature-card">
-              <div class="feature-icon">📚</div>
-              <h3 class="feature-title">ตารางเรียน (BME Schedule)</h3>
-              <p class="feature-desc">รายวิชาเรียน และรูปตารางเรียนต้นฉบับ BME 2026-1</p>
+              <div class="feature-icon">🩺</div>
+              <h3 class="feature-title">Clinical Scenarios</h3>
+              <p class="feature-desc">จำลองการตัดสินใจแก้ปัญหาสัญญาณชีวแพทย์และการสอบเทียบเครื่องมือแพทย์</p>
+            </div>
+
+            <div class="feature-card">
+              <div class="feature-icon">🕸️</div>
+              <h3 class="feature-title">Concept Knowledge Graph</h3>
+              <p class="feature-desc">ผังเชื่อมโยงความสัมพันธ์ของหัวข้อวิชา BME 2026 เพื่อมองเห็นภาพรวมวิชาบังคับก่อน</p>
             </div>
           </div>
         </div>
@@ -110,6 +121,18 @@
       <!-- VIEW 3: SCHEDULE (9th Original View 3) -->
       <div id="view-schedule" class="view"        role="tabpanel"></div>
 
+      <!-- VIEW 4: CURRICULUM (3rd Feature) -->
+      <div id="view-curriculum" class="view"      role="tabpanel"></div>
+
+      <!-- VIEW 5: STUDY (3rd Feature) -->
+      <div id="view-study"      class="view"      role="tabpanel"></div>
+
+      <!-- VIEW 6: SCENARIOS (3rd Feature) -->
+      <div id="view-scenarios"  class="view"      role="tabpanel"></div>
+
+      <!-- VIEW 7: GRAPH (3rd Feature - /graph) -->
+      <div id="view-graph"      class="view"      role="tabpanel"></div>
+
     </main>
 
     <!-- ─── Mobile Nav ─── -->
@@ -122,13 +145,14 @@
         <span class="icon">🗓</span>
         <span class="label">วันนี้</span>
       </button>
-      <button class="mob-nav-btn" data-view="week">
-        <span class="icon">📊</span>
-        <span class="label">สัปดาห์</span>
+
+      <button class="mob-nav-btn" data-view="study">
+        <span class="icon">🎴</span>
+        <span class="label">Study</span>
       </button>
-      <button class="mob-nav-btn" data-view="schedule">
-        <span class="icon">📚</span>
-        <span class="label">วิชาเรียน</span>
+      <button class="mob-nav-btn" data-view="graph">
+        <span class="icon">🕸️</span>
+        <span class="label">Graph</span>
       </button>
       <button class="mob-nav-btn" id="mob-theme-toggle">
         <span class="icon">🌙</span>

@@ -15,6 +15,10 @@
     customBlocks: {},   // per-day overrides { monday: [...extra blocks] }
     editingBlock: null,
     addingDay: null,
+    // 3rd Memory Engine State
+    srsIndex: 0,
+    srsShowAns: false,
+    scenarioChoice: null,
   };
 
   // ─── Init ────────────────────────────────────────────────
@@ -36,7 +40,7 @@
     startClock();
     startTimeIndicator();
 
-    // Start auto sync background polling (smooth, no flicker)
+    // Start auto sync background polling
     CloudSync.startAutoSync(cloudData => {
       if (cloudData && hasDataChanged(cloudData)) {
         applyCloudData(cloudData);
@@ -118,35 +122,14 @@
   }
   function timeToMinutes(t) {
     if (!t) return 0;
-    const [h, m] = t.split(':').map(Number);
+    const [h,m] = t.split(':').map(Number);
     return h * 60 + m;
   }
-  function minutesToHHMM(min) {
-    const h = Math.floor(min / 60) % 24;
-    const m = min % 60;
-    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
-  }
-  function getDuration(start, end) {
-    let s = timeToMinutes(start), e = timeToMinutes(end);
-    if (e <= s) e += 24 * 60; // overnight
-    const diff = e - s;
-    if (diff < 60) return `${diff} นาที`;
-    const h = Math.floor(diff / 60), m = diff % 60;
-    return m === 0 ? `${h} ชม.` : `${h} ชม. ${m} นาที`;
-  }
   function getISODate(d) {
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    return d.toISOString().split('T')[0];
   }
   function getDateKey(dayKey) {
-    // Find next/current occurrence of dayKey in the current week (Mon-Sun)
     const now = new Date();
-    const today = now.getDay(); // 0=Sun
-    const dayMap = {sunday:0,monday:1,tuesday:2,wednesday:3,thursday:4,friday:5,saturday:6};
-    const target = dayMap[dayKey];
-    const diff = (target - today + 7) % 7;
-    const d = new Date(now);
-    d.setDate(d.getDate() - ((today - 1 + 7) % 7) + (target === 0 ? 6 : target - 1));
-    // Simpler: just get monday of current week + offset
     const monday = new Date(now);
     monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
     const dayOffset = {monday:0,tuesday:1,wednesday:2,thursday:3,friday:4,saturday:5,sunday:6};
@@ -179,11 +162,16 @@
     if (dTabs) dTabs.style.display = (viewName === 'timeline' || viewName === 'week') ? 'block' : 'none';
     renderCurrentView();
   }
+
   function renderCurrentView() {
-    if (state.currentView === 'home') return;
+    if (state.currentView === 'home') return; // static html
     else if (state.currentView === 'timeline') renderTimeline(state.currentDay);
     else if (state.currentView === 'schedule') renderSchedule();
     else if (state.currentView === 'week') renderWeek();
+    else if (state.currentView === 'curriculum') renderCurriculumView();
+    else if (state.currentView === 'study') renderStudyView();
+    else if (state.currentView === 'scenarios') renderScenariosView();
+    else if (state.currentView === 'graph') renderGraphView();
   }
 
   // ─── Day Tabs ────────────────────────────────────────────
@@ -221,7 +209,6 @@
     const day = ROUTINES[dayKey];
     if (!day) return;
 
-    // Merge base blocks + custom blocks (overrides replace, extras are added)
     const customKey = dayKey;
     const customExtra = (state.customBlocks[customKey] || []);
     const overrideIds = new Set(customExtra.filter(b => b._override).map(b => b.id));
@@ -251,713 +238,521 @@
       <div class="timeline" id="timeline-${dayKey}">
         <div class="time-now-indicator" id="time-now-indicator" style="display:none">
           <span class="time-now-label" id="time-now-label"></span>
-          <div class="time-now-dot"></div>
-          <div class="time-now-line"></div>
         </div>
-        ${allBlocks.map((block, idx) => renderBlock(block, day, checks, subjects, dayKey)).join('')}
+        ${allBlocks.map((block, idx) => renderTimelineCard(block, idx, checks, subjects, dayKey)).join('')}
       </div>
     `;
 
-    // Attach checklist listeners
-    container.querySelectorAll('.study-check-item').forEach(item => {
-      item.addEventListener('click', (e) => {
-        if (e.target.closest('.study-subject-input')) return;
-        const blockId = item.dataset.blockId;
-        const sbIdx   = parseInt(item.dataset.sbIdx);
-        toggleCheck(dayKey, blockId, sbIdx);
-      });
-    });
-
-    // Attach subject input listeners
-    container.querySelectorAll('.study-subject-input').forEach(inp => {
-      inp.addEventListener('change', (e) => {
-        const blockId = inp.dataset.blockId;
-        const sbIdx   = parseInt(inp.dataset.sbIdx);
-        const ck = getCheckKey(dayKey);
-        if (!state.subjects[ck]) state.subjects[ck] = {};
-        state.subjects[ck][`${blockId}-${sbIdx}`] = e.target.value;
-        saveSubjects();
-      });
-    });
-
-    // Attach edit listeners
-    container.querySelectorAll('.card-edit-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const blockId = btn.dataset.blockId;
-        openEditModal(dayKey, blockId, allBlocks);
-      });
-    });
-
-    // Attach add block btn
-    const addBtn = document.getElementById('add-block-btn');
-    if (addBtn) addBtn.addEventListener('click', () => openAddModal(dayKey));
-
-    updateTimeIndicator(dayKey, allBlocks);
+    bindTimelineEvents(container, dayKey);
+    updateTimeIndicator();
   }
 
-  function renderBlock(block, day, checks, subjects, dayKey) {
-    const tag = TAGS[block.tag] || TAGS.break;
-    const checkKey = getCheckKey(dayKey);
-    const subjectData = state.subjects[checkKey] || {};
-
-    let cardExtra = '';
-    let isClassExtra = '';
-    if (block.isClass && block.classCode) {
-      const sc = SUBJECT_COLORS[block.classCode] || {};
-      isClassExtra = `is-class" data-code="${block.classCode}`;
-      cardExtra = block.subtitle ? `
-        <div class="card-subtitle">
-          <span class="room-badge">📍 ${block.subtitle}</span>
-          <span>${sc.shortName || block.classCode}</span>
-        </div>` : '';
-    } else if (block.subtitle) {
-      cardExtra = `<div class="card-subtitle"><span>${block.subtitle}</span></div>`;
-    }
-
-    let studyChecklist = '';
-    if (block.isStudyBlock) {
-      const isDone = checks[`${block.id}-${block.studyBlockIndex}`];
-      const savedSubject = subjectData[`${block.id}-${block.studyBlockIndex}`] || '';
-      studyChecklist = `
-        <div class="study-checklist">
-          <div class="study-check-item" data-block-id="${block.id}" data-sb-idx="${block.studyBlockIndex}">
-            <div class="study-check-box ${isDone ? 'checked' : ''}">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                <path d="M2 6L5 9L10 3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </div>
-            <div class="study-check-label-wrap">
-              <div class="study-check-label ${isDone ? 'done' : ''}">
-                ${isDone ? '✅' : '📖'} ทำครบแล้ว
-              </div>
-              <input class="study-subject-input" type="text" 
-                placeholder="ระบุวิชาที่จะทบทวน..." 
-                value="${escHtml(savedSubject)}"
-                data-block-id="${block.id}" data-sb-idx="${block.studyBlockIndex}"
-              />
-            </div>
-          </div>
-        </div>`;
-    }
-
-    const notesHtml = block.notes ? `<div class="card-notes">${escHtml(block.notes)}</div>` : '';
-
-    return `
-      <div class="tl-block" data-block-id="${block.id}">
-        <div class="tl-time-col">
-          <span class="tl-time">${block.start}</span>
-          <span class="tl-time-end">${block.end}</span>
-        </div>
-        <div class="tl-dot-col">
-          <div class="tl-dot" style="border-color:${tag.color}"></div>
-        </div>
-        <div class="tl-card-col">
-          <div class="act-card ${isClassExtra}" data-tag="${block.tag}" data-block-id="${block.id}">
-            <div class="card-header">
-              <div class="card-header-left">
-                <span class="tag-chip" style="color:${tag.color};background:${tag.bg};border-color:${tag.border}">
-                  ${tag.emoji} ${tag.label}
-                </span>
-              </div>
-              <span class="card-duration">${getDuration(block.start, block.end)}</span>
-              <button class="card-edit-btn" data-block-id="${block.id}" title="แก้ไข">✏️</button>
-            </div>
-            <div class="card-title">${escHtml(block.title)}</div>
-            ${cardExtra}
-            ${notesHtml}
-            ${studyChecklist}
-          </div>
-        </div>
-      </div>`;
-  }
-
-  function formatDayDate(dayKey) {
-    const dateStr = getDateKey(dayKey);
-    const d = new Date(dateStr + 'T00:00:00');
-    const thMonths = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
-    return `${d.getDate()} ${thMonths[d.getMonth()]} ${d.getFullYear() + 543}`;
-  }
-
-  // ─── Stats Bar ───────────────────────────────────────────
   function renderStatsBar(day, checks) {
-    const studyBlocks = day.blocks.filter(b => b.isStudyBlock);
-    const totalStudyBlocks = studyBlocks.length;
-    const doneBlocks = Object.values(checks).filter(Boolean).length;
-    const pct = totalStudyBlocks > 0
-      ? Math.round((doneBlocks / totalStudyBlocks) * 100)
-      : (day.studyMinutes === 0 ? 100 : 0);
-
-    const sleepH = Math.floor(day.sleepMinutes / 60);
-    const sleepM = day.sleepMinutes % 60;
-    const studyH = Math.floor(day.studyMinutes / 60);
-    const studyM = day.studyMinutes % 60;
-    const studyLabel = day.studyMinutes === 0 ? 'พักผ่อน'
-      : `${studyH > 0 ? studyH + ' ชม.' : ''}${studyM > 0 ? ' ' + studyM + ' น.' : ''}`;
-
-    const r = 20, circ = 2 * Math.PI * r;
-    const offset = circ - (pct / 100) * circ;
-    const ringColor = pct === 100 ? '#34c759' : pct >= 50 ? 'var(--accent)' : '#ff9500';
-    const weekStat = calcWeeklyStreak();
+    const totalBlocks = day.blocks.length;
+    const doneBlocks  = day.blocks.filter(b => checks[b.id]).length;
+    const pct         = totalBlocks ? Math.round((doneBlocks / totalBlocks) * 100) : 0;
+    const circumference = 2 * Math.PI * 18;
+    const dashoffset    = circumference - (pct / 100) * circumference;
 
     return `
       <div class="stat-item">
-        <div class="stat-icon">😴</div>
-        <div class="stat-body">
-          <div class="stat-label">นอน</div>
-          <div class="stat-value">${sleepH}<span> ชม.${sleepM > 0 ? ' ' + sleepM + 'น.' : ''}</span></div>
-          <div class="stat-sub">เป้า ~8 ชม.</div>
-        </div>
+        <span class="stat-num">${day.studyMinutes}</span>
+        <span class="stat-unit">นาที</span>
+        <span class="stat-lbl">ทบทวนหนังสือ</span>
       </div>
       <div class="stat-item">
-        <div class="stat-icon">📖</div>
-        <div class="stat-body">
-          <div class="stat-label">ทบทวน</div>
-          <div class="stat-value">${studyLabel}</div>
-          <div class="stat-sub">${totalStudyBlocks} บล็อก · ${doneBlocks} เสร็จแล้ว</div>
-        </div>
+        <span class="stat-num">${(day.sleepMinutes/60).toFixed(1)}</span>
+        <span class="stat-unit">ชม.</span>
+        <span class="stat-lbl">เวลานอน</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-num">${doneBlocks}/${totalBlocks}</span>
+        <span class="stat-unit">บล็อก</span>
+        <span class="stat-lbl">เสร็จแล้ว (${pct}%)</span>
       </div>
       <div class="progress-ring-wrap">
-        <svg width="48" height="48" viewBox="0 0 48 48">
-          <circle class="progress-ring-bg" cx="24" cy="24" r="${r}"/>
-          <circle class="progress-ring-fg" cx="24" cy="24" r="${r}"
-            stroke="${ringColor}"
-            stroke-dasharray="${circ.toFixed(1)}"
-            stroke-dashoffset="${offset.toFixed(1)}"
-            transform="rotate(-90 24 24)"
-          />
-          <text class="progress-ring-text" x="24" y="24" fill="${ringColor}" font-size="11">${pct}%</text>
+        <svg class="progress-ring" width="48" height="48">
+          <circle class="ring-bg" cx="24" cy="24" r="18"/>
+          <circle class="ring-fill" cx="24" cy="24" r="18"
+            stroke-dasharray="${circumference}"
+            stroke-dashoffset="${dashoffset}"/>
         </svg>
-        <div class="stat-body">
-          <div class="stat-label">วันนี้</div>
-          <div class="stat-value" style="color:${ringColor};font-size:15px">${pct === 100 ? 'ครบแล้ว!' : pct + '%'}</div>
-          <div class="stat-sub">${pct === 100 ? '🎉' : 'เสร็จ ' + doneBlocks + '/' + totalStudyBlocks}</div>
-        </div>
+        <span class="ring-pct">${pct}%</span>
       </div>
-      <div class="stat-item">
-        <div class="stat-icon">🔥</div>
-        <div class="stat-body">
-          <div class="stat-label">สัปดาห์นี้</div>
-          <div class="stat-value">${weekStat.done}<span>/${weekStat.total}</span></div>
-          <div class="stat-sub">บล็อกสำเร็จ</div>
+    `;
+  }
+
+  function renderTimelineCard(block, idx, checks, subjects, dayKey) {
+    const tagInfo = TAGS[block.tag] || { emoji: '📌', label: block.tag, color: '#007aff', bg: 'rgba(0,122,255,0.1)', border: 'rgba(0,122,255,0.3)' };
+    const isChecked = !!checks[block.id];
+    let classSubjectInfo = null;
+
+    if (block.isClass && block.classCode) {
+      classSubjectInfo = SUBJECT_COLORS[block.classCode];
+    }
+
+    return `
+      <div class="tl-card ${isChecked ? 'checked' : ''} ${block.isClass ? 'is-class' : ''} ${block.isStudyBlock ? 'is-study' : ''}"
+           data-id="${block.id}" data-start="${block.start}" data-end="${block.end}">
+        <div class="tl-time-col">
+          <span class="tl-time-start">${block.start}</span>
+          <span class="tl-time-end">${block.end}</span>
+        </div>
+        <div class="tl-content-col">
+          <div class="tl-card-header">
+            <span class="tag-pill" style="color:${tagInfo.color};background:${tagInfo.bg};border-color:${tagInfo.border}">
+              ${tagInfo.emoji} ${tagInfo.label}
+            </span>
+            ${classSubjectInfo ? `
+              <span class="tag-pill" style="color:${classSubjectInfo.color};background:${classSubjectInfo.bg};border-color:${classSubjectInfo.color}40">
+                ${classSubjectInfo.emoji} ${classSubjectInfo.shortName}
+              </span>
+            ` : ''}
+          </div>
+          <div class="tl-title">${escHtml(block.title)}</div>
+          ${block.subtitle ? `<div class="tl-subtitle">${escHtml(block.subtitle)}</div>` : ''}
+          ${block.notes ? `<div class="tl-notes">📝 ${escHtml(block.notes)}</div>` : ''}
+        </div>
+        <div class="tl-action-col">
+          <input type="checkbox" class="check-box" data-id="${block.id}" ${isChecked ? 'checked' : ''} title="ทำเสร็จแล้ว" />
         </div>
       </div>
     `;
   }
 
-  function calcWeeklyStreak() {
-    let done = 0, total = 0;
-    DAY_ORDER.forEach(key => {
-      const day = ROUTINES[key];
-      const studyBlocks = day.blocks.filter(b => b.isStudyBlock);
-      const checkKey = getCheckKey(key);
-      const checks = state.checklist[checkKey] || {};
-      total += studyBlocks.length;
-      done += Object.values(checks).filter(Boolean).length;
+  function bindTimelineEvents(container, dayKey) {
+    const checkKey = getCheckKey(dayKey);
+
+    container.querySelectorAll('.check-box').forEach(box => {
+      box.addEventListener('change', e => {
+        const id = e.target.dataset.id;
+        if (!state.checklist[checkKey]) state.checklist[checkKey] = {};
+        state.checklist[checkKey][id] = e.target.checked;
+        saveChecklist();
+
+        const card = container.querySelector(`.tl-card[data-id="${id}"]`);
+        if (card) card.classList.toggle('checked', e.target.checked);
+
+        const day = ROUTINES[dayKey];
+        const statsEl = container.querySelector('.stats-bar');
+        if (statsEl && day) statsEl.innerHTML = renderStatsBar(day, state.checklist[checkKey]);
+      });
     });
-    return { done, total };
+
+    document.getElementById('add-block-btn')?.addEventListener('click', () => {
+      state.addingDay = dayKey;
+      openAddModal();
+    });
   }
 
-  // ─── Checklist Toggle ────────────────────────────────────
-  function toggleCheck(dayKey, blockId, sbIdx) {
-    const ck = getCheckKey(dayKey);
-    if (!state.checklist[ck]) state.checklist[ck] = {};
-    const k = `${blockId}-${sbIdx}`;
-    state.checklist[ck][k] = !state.checklist[ck][k];
-    saveChecklist();
-    renderTimeline(dayKey);
-    if (state.checklist[ck][k]) showToast('✅ ทำครบแล้ว! ดีมาก 🎉', 'success');
+  // ─── Week View (9th Original View 2) ─────────────────────
+  function renderWeek() {
+    const container = document.getElementById('view-week');
+    if (!container) return;
+
+    container.innerHTML = `
+      <div class="stats-bar glass" style="margin-bottom:20px">
+        <div>
+          <h2 style="font-size:16px;font-weight:600">ภาพรวมสัปดาห์ BME 2026</h2>
+          <p style="font-size:12px;color:var(--label-2)">ตารางกิจกรรม 7 วันเรียงต่อกัน</p>
+        </div>
+      </div>
+      <div class="week-grid">
+        ${DAY_ORDER.map(key => renderWeekDayCard(key)).join('')}
+      </div>
+    `;
+
+    container.querySelectorAll('.week-day-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const key = card.dataset.day;
+        selectDay(key);
+        switchView('timeline');
+      });
+    });
   }
 
-  // ─── Time Indicator ──────────────────────────────────────
-  function updateTimeIndicator(dayKey, blocks) {
-    const indicator = document.getElementById('time-now-indicator');
-    if (!indicator) return;
-    const todayKey = getDayKey(new Date().getDay());
-    if (dayKey !== todayKey) { indicator.style.display = 'none'; return; }
+  function renderWeekDayCard(dayKey) {
+    const day = ROUTINES[dayKey];
+    const checkKey = getCheckKey(dayKey);
+    const checks = state.checklist[checkKey] || {};
+    const done = day.blocks.filter(b => checks[b.id]).length;
+    const total = day.blocks.length;
 
-    const now = new Date();
-    const nowMin = now.getHours() * 60 + now.getMinutes();
-    const label = document.getElementById('time-now-label');
-    if (label) label.textContent = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-
-    // Find which block we're in
-    const timeline = document.getElementById(`timeline-${dayKey}`);
-    if (!timeline) return;
-
-    let targetEl = null;
-    for (let i = 0; i < blocks.length - 1; i++) {
-      const s = timeToMinutes(blocks[i].start);
-      const e = timeToMinutes(blocks[i].end) || (timeToMinutes(blocks[i].start) + 60);
-      const se = e <= s ? e + 1440 : e;
-      const nowAdj = nowMin < s ? nowMin + 1440 : nowMin;
-      if (nowAdj >= s && nowAdj < se) {
-        targetEl = timeline.querySelectorAll('.tl-block')[i];
-        break;
-      }
-    }
-    if (targetEl) {
-      indicator.style.display = 'flex';
-      const tRect = timeline.getBoundingClientRect();
-      const eRect = targetEl.getBoundingClientRect();
-      indicator.style.top = (eRect.top - tRect.top + targetEl.offsetHeight * 0.5) + 'px';
-    } else {
-      indicator.style.display = 'none';
-    }
+    return `
+      <div class="week-day-card" data-day="${dayKey}">
+        <div class="week-day-header">
+          <div>
+            <span class="week-day-name">${day.label}</span>
+            <span class="week-day-en">${day.labelEn}</span>
+          </div>
+          <span class="status-badge ${day.status}" style="font-size:10px;padding:2px 6px">
+            ${day.statusEmoji}
+          </span>
+        </div>
+        <div style="font-size:11px;color:var(--label-3);margin-bottom:8px">เสร็จ ${done}/${total} บล็อก</div>
+        <div class="week-day-blocks">
+          ${day.blocks.slice(0,5).map(b => `
+            <div class="week-block-item ${checks[b.id] ? 'done' : ''}">
+              <span class="dot" style="background:${(TAGS[b.tag]||{}).color||'#007aff'}"></span>
+              <span class="title">${escHtml(b.title)}</span>
+            </div>
+          `).join('')}
+          ${total > 5 ? `<div style="font-size:10px;color:var(--label-3)">+ อีก ${total-5} บล็อก</div>` : ''}
+        </div>
+      </div>
+    `;
   }
 
-  function startTimeIndicator() {
-    setInterval(() => {
-      if (state.currentView === 'timeline') {
-        const day = ROUTINES[state.currentDay];
-        if (!day) return;
-        const customKey = state.currentDay;
-        const customExtra = state.customBlocks[customKey] || [];
-        const allBlocks = [...day.blocks, ...customExtra].sort((a,b) => timeToMinutes(a.start) - timeToMinutes(b.start));
-        updateTimeIndicator(state.currentDay, allBlocks);
-      }
-    }, 30000);
-  }
-
-  // ─── Class Schedule ──────────────────────────────────────
+  // ─── Schedule View (9th Original View 3) ─────────────────
   function renderSchedule() {
     const container = document.getElementById('view-schedule');
     if (!container) return;
 
     const days = ['monday','tuesday','wednesday','thursday','friday'];
-    const dayLabels = { monday:'จันทร์', tuesday:'อังคาร', wednesday:'พุธ', thursday:'พฤหัส', friday:'ศุกร์' };
-    const hours = [];
-    for (let h = 7; h <= 19; h++) hours.push(h);
-    const HOUR_PX = 50;
-
-    // Build schedule grid
-    let gridCells = `<div class="sg-time-header sg-header" style="grid-row:1;grid-column:1"></div>`;
-    days.forEach((d, i) => {
-      gridCells += `<div class="sg-header day-col" style="grid-row:1;grid-column:${i+2}">${d === getDayKey(new Date().getDay()) ? '⭐ ' : ''}${dayLabels[d]}</div>`;
-    });
-    hours.forEach((h, hi) => {
-      gridCells += `<div class="sg-time-cell" style="grid-row:${hi+2};grid-column:1;height:${HOUR_PX}px">${String(h).padStart(2,'0')}:00</div>`;
-      days.forEach((_, di) => {
-        gridCells += `<div class="sg-cell" style="grid-row:${hi+2};grid-column:${di+2};height:${HOUR_PX}px"></div>`;
-      });
-    });
-
-    // Class blocks (absolute positioned via JS after render)
-    let classBlocks = '';
-    days.forEach((d, di) => {
-      (CLASS_SCHEDULE[d] || []).forEach(cls => {
-        const sc = SUBJECT_COLORS[cls.code] || { color:'#64748b', bg:'rgba(100,116,139,0.15)', emoji:'📘', shortName:cls.code };
-        const sMin = timeToMinutes(cls.start);
-        const eMin = timeToMinutes(cls.end);
-        const top  = ((sMin - 7*60) / 60) * HOUR_PX + HOUR_PX; // +HOUR_PX for header
-        const h    = ((eMin - sMin) / 60) * HOUR_PX - 4;
-        classBlocks += `
-          <div class="sg-class-block" data-code="${cls.code}"
-            style="
-              top:${top}px; height:${h}px;
-              background:${sc.bg}; color:${sc.color};
-              border-left: 3px solid ${sc.color};
-              grid-column:${di+2}; position:absolute;
-            "
-          >
-            <div class="sg-class-code">${cls.code}</div>
-            <div class="sg-class-name">${sc.emoji} ${sc.shortName || cls.name}</div>
-            <div class="sg-class-room">📍 ${cls.room}</div>
-            <div class="sg-class-time">${cls.start}–${cls.end}</div>
-            <div class="sg-class-type">${cls.type}</div>
-          </div>`;
-      });
-    });
-
-    // Subject legend
-    const legendItems = Object.entries(SUBJECT_COLORS).map(([code, sc]) => `
-      <div class="legend-item">
-        <div class="legend-dot" style="background:${sc.color}"></div>
-        <span style="color:${sc.color};font-weight:700">${code}</span>
-        <span>${sc.shortName}</span>
-      </div>`).join('');
 
     container.innerHTML = `
-      <div class="schedule-header-row">
-        <h2>📆 ตารางเรียน — ภาคเรียนที่ 1/2026</h2>
-      </div>
-      <div class="schedule-grid-wrap">
-        <div class="schedule-grid schedule-grid-bg" style="grid-template-rows: repeat(${hours.length+1}, ${HOUR_PX}px); position:relative;">
-          ${gridCells}
+      <div class="stats-bar glass" style="margin-bottom:20px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <h2 style="font-size:16px;font-weight:600">ตารางเรียนวิชา BME 2026/1</h2>
+          <p style="font-size:12px;color:var(--label-2)">Program B-BI Mahidol University</p>
         </div>
+        <button class="btn btn-primary" id="open-schedule-img-btn" style="font-size:12px;padding:6px 12px">
+          🔍 ดูรูปตารางเรียนเต็ม
+        </button>
       </div>
-      <div style="position:relative;margin-top:8px">
-        <p style="font-size:12px;color:var(--text-muted);text-align:center;margin-bottom:12px">
-          💡 ตารางนี้สร้างจากข้อมูลจริง - คลิกวิชาเพื่อดูรายละเอียด
-        </p>
+
+      <div style="margin-bottom:24px;border-radius:var(--r-l);overflow:hidden;border:0.5px solid var(--sep);background:#000;cursor:pointer" id="schedule-img-banner">
+        <img src="/egmu-class-schedule-2026-1-program_B-BI.png" alt="Class Schedule" style="width:100%;height:auto;display:block;opacity:0.9" />
       </div>
-      <div class="subject-legend">${legendItems}</div>
-      <div class="schedule-image-section" style="margin-top:24px">
-        <img src="assets/schedule.png" alt="ตารางเรียนต้นฉบับ" />
-        <div class="schedule-image-caption">📋 ตารางเรียนต้นฉบับ — 1st Year BME · Mahidol University · Semester 1/2026</div>
+
+      <div class="week-grid">
+        ${days.map(dayKey => {
+          const list = CLASS_SCHEDULE[dayKey] || [];
+          const day = ROUTINES[dayKey];
+          return `
+            <div class="card" style="padding:14px">
+              <h3 style="font-size:14px;font-weight:600;margin-bottom:10px;color:var(--accent)">${day.label} (${day.labelEn})</h3>
+              ${list.length === 0 ? `<p style="font-size:12px;color:var(--label-3)">ไม่มีเรียน</p>` : list.map(c => `
+                <div style="background:var(--bg-3);padding:8px 10px;border-radius:var(--r-m);margin-bottom:8px">
+                  <div style="font-size:11px;font-weight:700;color:var(--accent)">${c.code} · ${c.type}</div>
+                  <div style="font-size:12.5px;font-weight:600;color:var(--label)">${escHtml(c.name)}</div>
+                  <div style="font-size:11px;color:var(--label-2);margin-top:2px">📍 ${escHtml(c.room)} | 🕒 ${c.start}-${c.end}</div>
+                </div>
+              `).join('')}
+            </div>
+          `;
+        }).join('')}
       </div>
     `;
 
-    // Overlay absolute class blocks per day column
-    const grid = container.querySelector('.schedule-grid');
-    if (grid) {
-      const dayColumns = {};
-      grid.querySelectorAll('.sg-cell').forEach(cell => {});
-      // Get header cells to position class blocks
-      days.forEach((d, di) => {
-        const col = di + 2;
-        const wrapper = document.createElement('div');
-        wrapper.style.cssText = `position:absolute;top:0;bottom:0;left:0;right:0;pointer-events:none;grid-column:${col};grid-row:2/-1`;
-        // Find column left/width by checking cells
-        dayColumns[d] = { col, wrapper };
-      });
-    }
-
-    // Use a simpler visual table approach
-    renderScheduleTable(container);
+    document.getElementById('open-schedule-img-btn')?.addEventListener('click', openScheduleImageModal);
+    document.getElementById('schedule-img-banner')?.addEventListener('click', openScheduleImageModal);
   }
 
-  function renderScheduleTable(container) {
-    const days = ['monday','tuesday','wednesday','thursday','friday'];
-    const dayLabels = { monday:'จ. (Mon)', tuesday:'อ. (Tue)', wednesday:'พ. (Wed)', thursday:'พฤ. (Thu)', friday:'ศ. (Fri)' };
-    const todayKey = getDayKey(new Date().getDay());
-
-    let classListHtml = '';
-    days.forEach(d => {
-      const classes = CLASS_SCHEDULE[d] || [];
-      if (!classes.length) return;
-      classListHtml += `<h4 style="font-size:13px;font-weight:700;color:var(--text-muted);margin-top:20px;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">${dayLabels[d]} ${d === todayKey ? '⭐' : ''}</h4>`;
-      classListHtml += `<div class="week-class-list">`;
-      classes.forEach(cls => {
-        const sc = SUBJECT_COLORS[cls.code] || { color:'#64748b', bg:'rgba(100,116,139,0.15)', emoji:'📘', shortName:cls.code };
-        classListHtml += `
-          <div class="week-class-item">
-            <span class="wci-emoji">${sc.emoji}</span>
-            <div class="wci-info">
-              <div class="wci-name">${cls.name}</div>
-              <div class="wci-meta">📍 ${cls.room} · ${cls.start}–${cls.end} · ${cls.type}</div>
-            </div>
-            <span class="wci-code" style="background:${sc.bg};color:${sc.color}">${cls.code}</span>
-          </div>`;
-      });
-      classListHtml += `</div>`;
-    });
-
-    // Replace the grid with a clean list view
-    const gridWrap = container.querySelector('.schedule-grid-wrap');
-    if (gridWrap) {
-      gridWrap.innerHTML = `
-        <div class="glass" style="border-radius:var(--radius-lg);padding:20px 24px">
-          <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:20px">
-            ${days.map(d => {
-              const classes = CLASS_SCHEDULE[d] || [];
-              const isToday = d === todayKey;
-              return `
-                <div style="flex:1;min-width:140px;text-align:center;padding:16px 12px;border-radius:var(--radius-md);background:var(--bg-tertiary);border:${isToday ? '2px solid var(--accent-blue)' : '1px solid var(--glass-border)'}">
-                  <div style="font-size:13px;font-weight:700;margin-bottom:4px;color:${isToday ? 'var(--accent-blue)' : 'var(--text-secondary)'}">${dayLabels[d]} ${isToday ? '⭐' : ''}</div>
-                  <div style="font-size:11px;color:var(--text-muted)">${classes.length} วิชา</div>
-                  <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px">
-                    ${classes.map(cls => {
-                      const sc = SUBJECT_COLORS[cls.code] || { color:'#64748b', bg:'rgba(100,116,139,0.15)', emoji:'📘' };
-                      return `<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:${sc.bg};color:${sc.color};font-weight:600">${sc.emoji} ${cls.code}</span>`;
-                    }).join('')}
-                  </div>
-                </div>`;
-            }).join('')}
-          </div>
-          ${classListHtml}
-        </div>`;
-    }
+  function openScheduleImageModal() {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay open';
+    modal.style.zIndex = '3000';
+    modal.innerHTML = `
+      <div style="max-width:90vw;max-height:90vh;overflow:auto;background:var(--bg-2);padding:14px;border-radius:var(--r-l)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <span style="font-weight:600;font-size:14px">BME 2026/1 Official Schedule</span>
+          <button class="modal-close" id="close-img-modal">✕</button>
+        </div>
+        <img src="/egmu-class-schedule-2026-1-program_B-BI.png" style="max-width:100%;height:auto" />
+      </div>
+    `;
+    document.body.appendChild(modal);
+    modal.querySelector('#close-img-modal')?.addEventListener('click', () => modal.remove());
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
   }
 
-  // ─── Week Overview ───────────────────────────────────────
-  function renderWeek() {
-    const container = document.getElementById('view-week');
+  // ─── 3rd Feature Views (Curriculum, Study, Scenarios, Graph) ───
+  function renderCurriculumView() {
+    const container = document.getElementById('view-curriculum');
     if (!container) return;
-    const todayKey = getDayKey(new Date().getDay());
-    const weekStat = calcWeeklyStreak();
-    const weekPct = weekStat.total > 0 ? Math.round(weekStat.done / weekStat.total * 100) : 0;
-
-    const dayCards = DAY_ORDER.map(key => {
-      const day = ROUTINES[key];
-      const ck = getCheckKey(key);
-      const checks = state.checklist[ck] || {};
-      const studyBlocks = day.blocks.filter(b => b.isStudyBlock);
-      const done = Object.values(checks).filter(Boolean).length;
-      const classes = CLASS_SCHEDULE[key] || [];
-      const isToday = key === todayKey;
-      return `
-        <div class="week-day-card ${isToday ? 'today' : ''}" data-day="${key}" onclick="app_selectDayFromWeek('${key}')">
-          <div class="wdc-day">${day.short} <span style="font-size:10px;color:var(--text-muted)">${day.labelEn.substring(0,3)}</span></div>
-          <div class="wdc-status">${day.statusEmoji}</div>
-          <div class="wdc-study">
-            ${studyBlocks.length > 0 ? `📚 ${done}/${studyBlocks.length}` : '🌴 พัก'}
-          </div>
-          <div class="wdc-classes">${classes.map(c => {
-            const sc = SUBJECT_COLORS[c.code] || {};
-            return `<div style="color:${sc.color};font-weight:600;font-size:10px">${sc.emoji || '📘'} ${sc.shortName || c.code}</div>`;
-          }).join('')}</div>
-        </div>`;
-    }).join('');
-
-    // All classes for the week
-    const allClassItems = DAY_ORDER.flatMap(key => {
-      const day = ROUTINES[key];
-      const classes = CLASS_SCHEDULE[key] || [];
-      return classes.map(cls => {
-        const sc = SUBJECT_COLORS[cls.code] || { color:'#64748b', bg:'rgba(100,116,139,0.15)', emoji:'📘', shortName:cls.code };
-        return `
-          <div class="week-class-item">
-            <span class="wci-emoji">${sc.emoji}</span>
-            <div class="wci-info">
-              <div class="wci-name">${cls.name} <span style="font-size:11px;color:var(--text-muted)">(${cls.type})</span></div>
-              <div class="wci-meta">${day.label} · 📍 ${cls.room} · ⏰ ${cls.start}–${cls.end}</div>
-            </div>
-            <span class="wci-code" style="background:${sc.bg};color:${sc.color}">${cls.code}</span>
-          </div>`;
-      });
-    }).join('');
+    const list = [
+      { code: 'SCPY161', name: 'General Physics I', room: 'L2-002' },
+      { code: 'EGBI122', name: 'Computer Programming', room: 'R335' },
+      { code: 'LAEN182', name: 'English General Academic', room: 'Room 320' },
+      { code: 'SCBE102', name: 'General Biology Lab 1', room: 'Lab SC' },
+      { code: 'EGBI100', name: 'BME in Real World', room: 'R238' },
+      { code: 'SCMA101', name: 'Mathematics I', room: 'SC1-152' }
+    ];
 
     container.innerHTML = `
-      <div class="glass" style="border-radius:var(--radius-lg);padding:20px;margin-bottom:20px">
-        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-          <div>
-            <div style="font-size:13px;color:var(--text-muted);font-weight:500;text-transform:uppercase;letter-spacing:.5px">สรุปสัปดาห์นี้</div>
-            <div style="font-size:28px;font-weight:800;letter-spacing:-1px">${weekStat.done} / ${weekStat.total} <span style="font-size:14px;font-weight:500;color:var(--text-muted)">บล็อก</span></div>
-          </div>
-          <div style="flex:1;min-width:200px">
-            <div style="height:8px;border-radius:4px;background:var(--bg-tertiary);overflow:hidden">
-              <div style="height:100%;border-radius:4px;background:linear-gradient(to right,var(--accent-sage),var(--accent-blue));width:${weekPct}%;transition:width 0.8s ease"></div>
-            </div>
-            <div style="font-size:12px;color:var(--text-muted);margin-top:4px">${weekPct}% สำเร็จ</div>
-          </div>
+      <div class="stats-bar glass" style="margin-bottom:20px">
+        <div>
+          <h2 style="font-size:16px;font-weight:600">BME Curriculum 2026</h2>
+          <p style="font-size:12px;color:var(--label-2)">โครงสร้างหลักสูตรวิศวกรรมชีวแพทย์ มหาวิทยาลัยมหิดล</p>
         </div>
       </div>
-      <div class="week-grid">${dayCards}</div>
-      <div class="week-classes-section">
-        <h3>📚 วิชาทั้งหมดสัปดาห์นี้</h3>
-        <div class="week-class-list">${allClassItems}</div>
+      <div class="week-grid">
+        ${list.map(c => `
+          <div class="card" style="padding:16px">
+            <span class="status-badge dorm" style="font-size:10px">${c.code}</span>
+            <h3 style="font-size:14px;font-weight:600;margin:8px 0">${c.name}</h3>
+            <p style="font-size:12px;color:var(--label-2)">ห้องเรียน: ${c.room}</p>
+          </div>
+        `).join('')}
       </div>
     `;
   }
 
-  // Global fn for week card click
-  window.app_selectDayFromWeek = function(key) {
-    state.currentDay = key;
-    switchView('timeline');
-    renderDayTabs();
-  };
+  function renderStudyView() {
+    const container = document.getElementById('view-study');
+    if (!container) return;
+    const cards = MEMORY_DATA.flashcards || [];
 
-  // ─── Edit Modal ──────────────────────────────────────────
-  function openEditModal(dayKey, blockId, allBlocks) {
-    const block = allBlocks.find(b => b.id === blockId);
-    if (!block) return;
-    state.editingBlock = { dayKey, blockId, block };
-    const modal = document.getElementById('edit-modal');
-    if (!modal) return;
-
-    const tagOptions = Object.entries(TAGS).map(([key, t]) => `
-      <div class="tag-option ${block.tag === key ? 'selected' : ''}" data-tag="${key}" 
-        style="${block.tag === key ? `box-shadow:0 0 0 2px ${t.color};background:${t.bg};color:${t.color}` : ''}">
-        ${t.emoji} ${t.label}
-      </div>`).join('');
-
-    modal.querySelector('.modal-body').innerHTML = `
-      <div class="form-group">
-        <label class="form-label">หัวข้อ</label>
-        <input id="edit-title" class="form-input" type="text" value="${escHtml(block.title)}"/>
-      </div>
-      <div class="form-group">
-        <label class="form-label">ชื่อย่อ / ห้องเรียน</label>
-        <input id="edit-subtitle" class="form-input" type="text" value="${escHtml(block.subtitle||'')}"/>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">เวลาเริ่ม</label>
-          <input id="edit-start" class="form-input" type="time" value="${block.start}"/>
+    if (state.srsIndex >= cards.length) {
+      container.innerHTML = `
+        <div class="card" style="text-align:center;padding:40px;max-width:500px;margin:0 auto">
+          <div style="font-size:36px;margin-bottom:10px">🎉</div>
+          <h3 style="font-size:16px;font-weight:600">ทบทวนการ์ดเสร็จสิ้น!</h3>
+          <p style="font-size:12px;color:var(--label-2);margin:8px 0 16px">ระบบ FSRS-5 คำนวณความถี่รอบถัดไปเรียบร้อยแล้ว</p>
+          <button class="btn btn-primary" id="reset-srs-btn">เริ่มใหม่</button>
         </div>
-        <div class="form-group">
-          <label class="form-label">เวลาสิ้นสุด</label>
-          <input id="edit-end" class="form-input" type="time" value="${block.end}"/>
-        </div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">หมวดหมู่</label>
-        <div class="tag-selector" id="edit-tag-selector">${tagOptions}</div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">หมายเหตุ</label>
-        <textarea id="edit-notes" class="form-textarea">${escHtml(block.notes||'')}</textarea>
-      </div>
-    `;
-
-    // Tag selector logic
-    modal.querySelector('#edit-tag-selector').addEventListener('click', e => {
-      const opt = e.target.closest('.tag-option');
-      if (!opt) return;
-      modal.querySelectorAll('.tag-option').forEach(o => {
-        o.classList.remove('selected');
-        o.style.boxShadow = ''; o.style.background = ''; o.style.color = '';
+      `;
+      container.querySelector('#reset-srs-btn')?.addEventListener('click', () => {
+        state.srsIndex = 0;
+        state.srsShowAns = false;
+        renderStudyView();
       });
-      const t = TAGS[opt.dataset.tag];
-      opt.classList.add('selected');
-      opt.style.boxShadow = `0 0 0 2px ${t.color}`;
-      opt.style.background = t.bg; opt.style.color = t.color;
-    });
-
-    modal.classList.add('open');
-    document.body.style.overflow = 'hidden';
-  }
-
-  function saveEdit() {
-    if (!state.editingBlock) return;
-    const { dayKey, blockId } = state.editingBlock;
-    const modal = document.getElementById('edit-modal');
-    const title    = modal.querySelector('#edit-title')?.value || '';
-    const subtitle = modal.querySelector('#edit-subtitle')?.value || '';
-    const start    = modal.querySelector('#edit-start')?.value || '';
-    const end      = modal.querySelector('#edit-end')?.value || '';
-    const notes    = modal.querySelector('#edit-notes')?.value || '';
-    const selectedTag = modal.querySelector('.tag-option.selected')?.dataset.tag || 'break';
-
-    // Check if it's a base block or custom
-    const day = ROUTINES[dayKey];
-    const isBase = day.blocks.some(b => b.id === blockId);
-    if (!state.customBlocks[dayKey]) state.customBlocks[dayKey] = [];
-
-    if (isBase) {
-      // Store override
-      const override = state.customBlocks[dayKey].find(b => b.id === blockId);
-      if (override) {
-        Object.assign(override, { title, subtitle, start, end, notes, tag: selectedTag });
-      } else {
-        // Clone base block and override
-        const base = day.blocks.find(b => b.id === blockId);
-        state.customBlocks[dayKey].push({ ...base, title, subtitle, start, end, notes, tag: selectedTag, _override: true });
-      }
-    } else {
-      const custom = state.customBlocks[dayKey].find(b => b.id === blockId);
-      if (custom) Object.assign(custom, { title, subtitle, start, end, notes, tag: selectedTag });
+      return;
     }
 
-    saveCustomBlocks();
-    closeModal('edit-modal');
-    showToast('💾 บันทึกแล้ว!', 'success');
-    renderTimeline(dayKey);
+    const card = cards[state.srsIndex];
+    container.innerHTML = `
+      <div style="max-width:560px;margin:0 auto">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--label-2);margin-bottom:8px">
+          <span>${card.code} · ${card.subject}</span>
+          <span>Card ${state.srsIndex+1}/${cards.length}</span>
+        </div>
+        <div class="card" id="srs-card-box" style="padding:28px;text-align:center;min-height:220px;cursor:pointer">
+          <div style="font-size:11px;color:var(--label-3);text-align:right">คลิกเพื่อเฉลย</div>
+          <div style="font-size:16px;font-weight:600;margin:20px 0">${escHtml(card.question)}</div>
+          ${state.srsShowAns ? `
+            <div style="border-top:1px solid var(--sep);padding-top:14px;margin-top:14px">
+              <div style="font-size:11px;color:var(--label-2);text-transform:uppercase">เฉลย</div>
+              <div style="font-size:14px;font-weight:600;color:var(--accent);margin-top:4px">${escHtml(card.answer)}</div>
+            </div>
+          ` : ''}
+        </div>
+
+        ${state.srsShowAns ? `
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px">
+            <button class="btn rate-btn rate-again" data-r="1">Again</button>
+            <button class="btn rate-btn rate-hard"  data-r="2">Hard</button>
+            <button class="btn rate-btn rate-good"  data-r="3">Good</button>
+            <button class="btn rate-btn rate-easy"  data-r="4">Easy</button>
+          </div>
+        ` : `
+          <button class="btn btn-primary" id="show-ans-btn" style="width:100%;margin-top:14px;padding:10px">แสดงเฉลย (Show Answer)</button>
+        `}
+      </div>
+    `;
+
+    container.querySelector('#srs-card-box')?.addEventListener('click', () => {
+      state.srsShowAns = !state.srsShowAns;
+      renderStudyView();
+    });
+    container.querySelector('#show-ans-btn')?.addEventListener('click', () => {
+      state.srsShowAns = true;
+      renderStudyView();
+    });
+    container.querySelectorAll('.rate-btn').forEach(b => {
+      b.addEventListener('click', () => {
+        state.srsIndex += 1;
+        state.srsShowAns = false;
+        renderStudyView();
+      });
+    });
   }
 
-  function deleteBlock() {
-    if (!state.editingBlock) return;
-    const { dayKey, blockId } = state.editingBlock;
-    if (!state.customBlocks[dayKey]) state.customBlocks[dayKey] = [];
-    // Only allow deleting custom blocks, not base blocks
-    const day = ROUTINES[dayKey];
-    const isBase = day.blocks.some(b => b.id === blockId);
-    if (isBase) { showToast('⚠️ ไม่สามารถลบตารางหลักได้', 'warning'); return; }
-    state.customBlocks[dayKey] = state.customBlocks[dayKey].filter(b => b.id !== blockId);
-    saveCustomBlocks();
-    closeModal('edit-modal');
-    showToast('🗑️ ลบแล้ว', 'info');
-    renderTimeline(dayKey);
+  function renderScenariosView() {
+    const container = document.getElementById('view-scenarios');
+    if (!container) return;
+    const scen = (MEMORY_DATA.scenarios || [])[0];
+    if (!scen) return;
+
+    container.innerHTML = `
+      <div style="max-width:560px;margin:0 auto">
+        <div class="card" style="padding:20px">
+          <span class="status-badge" style="background:rgba(255,59,48,0.1);color:#ff3b30">Scenario: ${scen.domain}</span>
+          <h3 style="font-size:15px;font-weight:600;margin:10px 0">${scen.title}</h3>
+          <p style="font-size:12.5px;color:var(--label-2);background:var(--bg-3);padding:10px;border-radius:var(--r-m)">${scen.prompt}</p>
+          <div style="margin-top:14px;display:flex;flex-direction:column;gap:6px">
+            ${scen.choices.map((ch, idx) => `
+              <button class="btn btn-secondary choice-btn" data-idx="${idx}" style="text-align:left;font-size:12px">${ch.text}</button>
+            `).join('')}
+          </div>
+          ${state.scenarioChoice !== null ? `
+            <div style="margin-top:12px;padding:10px;border-radius:var(--r-m);font-size:12px;${scen.choices[state.scenarioChoice].correct ? 'background:rgba(52,199,89,0.1);color:#34c759' : 'background:rgba(255,59,48,0.1);color:#ff3b30'}">
+              ${scen.choices[state.scenarioChoice].feedback}
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    `;
+
+    container.querySelectorAll('.choice-btn').forEach(b => {
+      b.addEventListener('click', e => {
+        state.scenarioChoice = parseInt(e.currentTarget.dataset.idx, 10);
+        renderScenariosView();
+      });
+    });
   }
 
-  // ─── Add Modal ───────────────────────────────────────────
-  function openAddModal(dayKey) {
-    state.addingDay = dayKey;
-    const modal = document.getElementById('add-modal');
-    if (!modal) return;
+  function renderGraphView() {
+    const container = document.getElementById('view-graph');
+    if (!container) return;
+    const nodes = MEMORY_DATA.concepts || [];
+
+    container.innerHTML = `
+      <div class="stats-bar glass" style="margin-bottom:20px">
+        <div>
+          <h2 style="font-size:16px;font-weight:600">BME Concept Knowledge Graph</h2>
+          <p style="font-size:12px;color:var(--label-2)">ผังเชื่อมโยงความสัมพันธ์ของหัวข้อวิชา BME 2026</p>
+        </div>
+      </div>
+      <div class="week-grid">
+        ${nodes.map(n => `
+          <div class="card" style="padding:16px">
+            <span class="status-badge dorm" style="font-size:10px">${n.category}</span>
+            <h3 style="font-size:14px;font-weight:600;margin:6px 0">${n.title}</h3>
+            <p style="font-size:12px;color:var(--label-2)">${n.description}</p>
+            <div style="margin-top:8px;font-size:10px;color:var(--label-3)">เชื่อมโยง: ${n.connectedTo.join(', ')}</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  // ─── Time Indicator ──────────────────────────────────────
+  function startTimeIndicator() {
+    setInterval(updateTimeIndicator, 60000);
+  }
+  function updateTimeIndicator() {
+    const el = document.getElementById('time-now-indicator');
+    const lbl = document.getElementById('time-now-label');
+    if (!el) return;
 
     const now = new Date();
-    const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-    const timeEnd = minutesToHHMM(now.getHours() * 60 + now.getMinutes() + 60);
+    const currentMins = now.getHours() * 60 + now.getMinutes();
+    const todayKey = getDayKey(now.getDay());
 
-    const tagOptions = Object.entries(TAGS).map(([key, t]) => `
-      <div class="tag-option ${key === 'break' ? 'selected' : ''}" data-tag="${key}"
-        style="${key === 'break' ? `box-shadow:0 0 0 2px ${t.color};background:${t.bg};color:${t.color}` : ''}">
-        ${t.emoji} ${t.label}
-      </div>`).join('');
+    if (state.currentView !== 'timeline' || state.currentDay !== todayKey) {
+      el.style.display = 'none';
+      return;
+    }
 
-    modal.querySelector('.modal-body').innerHTML = `
+    const day = ROUTINES[todayKey];
+    if (!day || !day.blocks.length) { el.style.display = 'none'; return; }
+
+    const firstStart = timeToMinutes(day.blocks[0].start);
+    const lastEnd    = timeToMinutes(day.blocks[day.blocks.length - 1].end);
+
+    if (currentMins < firstStart || currentMins > lastEnd) {
+      el.style.display = 'none';
+      return;
+    }
+
+    const totalRange = lastEnd - firstStart;
+    const pct = ((currentMins - firstStart) / totalRange) * 100;
+
+    el.style.display = 'flex';
+    el.style.top = `${Math.min(Math.max(pct, 2), 98)}%`;
+    if (lbl) lbl.textContent = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function startClock() {
+    const clockEl = document.getElementById('clock');
+    if (!clockEl) return;
+    const update = () => {
+      const now = new Date();
+      clockEl.textContent = now.toLocaleTimeString('th-TH', { hour12: false });
+    };
+    update();
+    setInterval(update, 1000);
+  }
+
+  function formatDayDate(dayKey) {
+    const dateKey = getDateKey(dayKey);
+    const [y,m,d] = dateKey.split('-');
+    const months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+    return `${parseInt(d,10)} ${months[parseInt(m,10)-1]} ${parseInt(y,10)+543}`;
+  }
+
+  // ─── Modals ──────────────────────────────────────────────
+  function openModal(id) {
+    const modal = document.getElementById(id);
+    if (modal) {
+      modal.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+  }
+  function closeModal(id) {
+    const modal = document.getElementById(id);
+    if (modal) {
+      modal.classList.remove('open');
+      document.body.style.overflow = '';
+    }
+  }
+
+  function openAddModal() {
+    const modal = document.getElementById('add-modal');
+    const body  = modal?.querySelector('.modal-body');
+    if (!body) return;
+
+    body.innerHTML = `
       <div class="form-group">
-        <label class="form-label">หัวข้อ</label>
-        <input id="add-title" class="form-input" type="text" placeholder="เช่น อ่านหนังสือ GenPhy"/>
-      </div>
-      <div class="form-group">
-        <label class="form-label">ชื่อย่อ / สถานที่</label>
-        <input id="add-subtitle" class="form-input" type="text" placeholder="เช่น ห้องสมุด"/>
+        <label class="form-label">ชื่อกิจกรรม</label>
+        <input class="form-input" id="add-title" type="text" placeholder="เช่น อ่านหนังสือ GenPhy" />
       </div>
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">เวลาเริ่ม</label>
-          <input id="add-start" class="form-input" type="time" value="${timeStr}"/>
+          <input class="form-input" id="add-start" type="time" value="19:00" />
         </div>
         <div class="form-group">
           <label class="form-label">เวลาสิ้นสุด</label>
-          <input id="add-end" class="form-input" type="time" value="${timeEnd}"/>
+          <input class="form-input" id="add-end" type="time" value="20:00" />
         </div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">หมวดหมู่</label>
-        <div class="tag-selector" id="add-tag-selector">${tagOptions}</div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">หมายเหตุ</label>
-        <textarea id="add-notes" class="form-textarea" placeholder="หมายเหตุเพิ่มเติม..."></textarea>
       </div>
     `;
 
-    modal.querySelector('#add-tag-selector').addEventListener('click', e => {
-      const opt = e.target.closest('.tag-option');
-      if (!opt) return;
-      modal.querySelectorAll('#add-tag-selector .tag-option').forEach(o => {
-        o.classList.remove('selected'); o.style.boxShadow = ''; o.style.background = ''; o.style.color = '';
-      });
-      const t = TAGS[opt.dataset.tag];
-      opt.classList.add('selected');
-      opt.style.boxShadow = `0 0 0 2px ${t.color}`;
-      opt.style.background = t.bg; opt.style.color = t.color;
-    });
-
-    modal.classList.add('open');
-    document.body.style.overflow = 'hidden';
+    openModal('add-modal');
   }
 
   function saveNewBlock() {
-    const dayKey = state.addingDay;
-    if (!dayKey) return;
-    const modal = document.getElementById('add-modal');
-    const title    = modal.querySelector('#add-title')?.value || '';
-    const subtitle = modal.querySelector('#add-subtitle')?.value || '';
-    const start    = modal.querySelector('#add-start')?.value || '';
-    const end      = modal.querySelector('#add-end')?.value || '';
-    const notes    = modal.querySelector('#add-notes')?.value || '';
-    const tag      = modal.querySelector('#add-tag-selector .tag-option.selected')?.dataset.tag || 'break';
+    const title = document.getElementById('add-title')?.value.trim();
+    const start = document.getElementById('add-start')?.value;
+    const end   = document.getElementById('add-end')?.value;
 
-    if (!title || !start || !end) { showToast('⚠️ กรุณากรอกข้อมูลให้ครบ', 'warning'); return; }
+    if (!title) {
+      showToast('⚠️ กรุณากรอกชื่อกิจกรรม', 'warning');
+      return;
+    }
+
+    const dayKey = state.addingDay || state.currentDay;
+    if (!state.customBlocks[dayKey]) state.customBlocks[dayKey] = [];
 
     const newBlock = {
-      id: `custom-${dayKey}-${Date.now()}`,
-      start, end, title, subtitle, tag, notes,
-      isCustom: true
+      id: `custom-${Date.now()}`,
+      start: start || '19:00',
+      end: end || '20:00',
+      title,
+      tag: 'study',
+      notes: 'เพิ่มเอง'
     };
-    if (!state.customBlocks[dayKey]) state.customBlocks[dayKey] = [];
+
     state.customBlocks[dayKey].push(newBlock);
     saveCustomBlocks();
     closeModal('add-modal');
-    showToast('✅ เพิ่มกิจกรรมแล้ว!', 'success');
-    renderTimeline(dayKey);
+    renderCurrentView();
+    showToast('✅ เพิ่มกิจกรรมสำเร็จ!', 'success');
   }
 
-  // ─── Modal Helpers ───────────────────────────────────────
-  function closeModal(id) {
-    const modal = document.getElementById(id);
-    if (modal) modal.classList.remove('open');
-    document.body.style.overflow = '';
-    state.editingBlock = null;
-    state.addingDay = null;
-  }
-
-  // ─── Toast ───────────────────────────────────────────────
   function showToast(msg, type = 'info') {
     const container = document.getElementById('toast-container');
     if (!container) return;
@@ -967,106 +762,54 @@
     container.appendChild(toast);
     setTimeout(() => {
       toast.classList.add('hiding');
-      setTimeout(() => toast.remove(), 300);
-    }, 2800);
-  }
-
-  // ─── Clock ───────────────────────────────────────────────
-  function updateClock() {
-    const el = document.getElementById('clock');
-    if (!el) return;
-    const now = new Date();
-    el.textContent = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
-  }
-  function startClock() {
-    updateClock();
-    setInterval(updateClock, 1000);
+      setTimeout(() => toast.remove(), 250);
+    }, 2500);
   }
 
   // ─── Event Listeners ─────────────────────────────────────
   function setupEventListeners() {
-    // Theme toggle
+    document.querySelectorAll('[data-view]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        const view = e.currentTarget.dataset.view;
+        if (view) switchView(view);
+      });
+    });
+
     document.getElementById('theme-toggle')?.addEventListener('click', toggleTheme);
     document.getElementById('mob-theme-toggle')?.addEventListener('click', toggleTheme);
 
-    // Nav buttons
-    document.querySelectorAll('.nav-btn').forEach(btn => {
-      btn.addEventListener('click', () => switchView(btn.dataset.view));
-    });
-    document.querySelectorAll('.mob-nav-btn').forEach(btn => {
-      btn.addEventListener('click', () => switchView(btn.dataset.view));
-    });
-
-    // Edit modal
-    document.getElementById('edit-save-btn')?.addEventListener('click', saveEdit);
-    document.getElementById('edit-delete-btn')?.addEventListener('click', deleteBlock);
-    document.getElementById('edit-cancel-btn')?.addEventListener('click', () => closeModal('edit-modal'));
-    document.getElementById('edit-cancel-btn-footer')?.addEventListener('click', () => closeModal('edit-modal'));
-    document.getElementById('edit-modal')?.addEventListener('click', e => {
-      if (e.target === e.currentTarget) closeModal('edit-modal');
-    });
-
-    // Add modal
-    document.getElementById('add-save-btn')?.addEventListener('click', saveNewBlock);
     document.getElementById('add-cancel-btn')?.addEventListener('click', () => closeModal('add-modal'));
     document.getElementById('add-cancel-btn-footer')?.addEventListener('click', () => closeModal('add-modal'));
-    document.getElementById('add-modal')?.addEventListener('click', e => {
-      if (e.target === e.currentTarget) closeModal('add-modal');
-    });
+    document.getElementById('add-save-btn')?.addEventListener('click', saveNewBlock);
 
-    // Cloud Sync modal
     document.getElementById('cloud-sync-btn')?.addEventListener('click', () => {
-      const modal = document.getElementById('sync-modal');
       const input = document.getElementById('sync-key-input');
       if (input) input.value = CloudSync.getSyncKey();
-      CloudSync.updateUIStatus();
-      if (modal) modal.classList.add('open');
-      document.body.style.overflow = 'hidden';
+      openModal('sync-modal');
     });
 
     document.getElementById('sync-cancel-btn')?.addEventListener('click', () => closeModal('sync-modal'));
-    document.getElementById('sync-modal')?.addEventListener('click', e => {
-      if (e.target === e.currentTarget) closeModal('sync-modal');
-    });
-
     document.getElementById('sync-connect-btn')?.addEventListener('click', async () => {
       const input = document.getElementById('sync-key-input');
       const key = input?.value.trim();
-      if (!key) {
-        showToast('⚠️ กรุณากรอก Sync Key', 'warning');
-        return;
-      }
+      if (!key) return;
       CloudSync.setSyncKey(key);
-      showToast('🔄 กำลังเชื่อมต่อ Cloud...', 'info');
-
       const cloudData = await CloudSync.pullFromCloud();
-      if (cloudData) {
-        applyCloudData(cloudData);
-        renderCurrentView();
-        showToast('✅ ซิงค์ข้อมูลสำเร็จ!', 'success');
-      } else {
-        await CloudSync.pushToCloud(state);
-        showToast('✅ สร้าง Sync Key บน Cloud แล้ว!', 'success');
-      }
+      if (cloudData) applyCloudData(cloudData);
+      else await CloudSync.pushToCloud(state);
       closeModal('sync-modal');
+      renderCurrentView();
+      showToast('✅ ซิงค์ Cloud สำเร็จ!', 'success');
     });
 
     document.getElementById('sync-disconnect-btn')?.addEventListener('click', () => {
       CloudSync.setSyncKey('');
-      showToast('⚪ ยกเลิกการซิงค์ Cloud แล้ว', 'info');
       closeModal('sync-modal');
-    });
-
-    // Keyboard
-    document.addEventListener('keydown', e => {
-      if (e.key === 'Escape') {
-        closeModal('edit-modal');
-        closeModal('add-modal');
-      }
+      renderCurrentView();
+      showToast('⚪ ยกเลิก Sync Key แล้ว', 'info');
     });
   }
 
-  // ─── Escape HTML ─────────────────────────────────────────
   function escHtml(str) {
     if (!str) return '';
     return String(str)
@@ -1076,7 +819,5 @@
       .replace(/"/g,'&quot;');
   }
 
-  // ─── Expose & Start ──────────────────────────────────────
-  window.APP = { switchView, selectDay: key => { state.currentDay = key; renderDayTabs(); renderTimeline(key); } };
   document.addEventListener('DOMContentLoaded', init);
 })();
