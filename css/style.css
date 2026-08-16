@@ -1417,25 +1417,25 @@ body {
 }
 
 .modal-box-large {
-  max-width: 900px;
-  width: 92vw;
-  max-height: 92vh;
+  max-width: 980px;
+  width: 95vw;
+  max-height: 90vh;
+  padding: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .resource-preview-body {
   flex: 1;
   min-height: 320px;
-  max-height: 70vh;
-  overflow: auto;
-  border-radius: var(--r-m);
-  background: var(--bg-1);
-  border: 1px solid var(--sep);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 16px;
+  max-height: calc(90vh - 120px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--bg-2);
+  border: none;
+  display: block;
+  margin-bottom: 0;
   position: relative;
 }
 

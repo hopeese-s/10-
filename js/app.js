@@ -1654,6 +1654,139 @@
     document.body.style.overflow = 'hidden';
   }
 
+  // ─── PDF.js Multi-Page Canvas Renderer for iPad / Mobile / Desktop ─
+  async function renderPdfWithPdfJs(url, bodyEl, title) {
+    bodyEl.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;gap:12px;min-height:300px;text-align:center">
+        <div style="font-size:32px">⏳</div>
+        <div style="font-size:14px;font-weight:600;color:var(--label)">กำลังเปิดเอกสาร PDF...</div>
+        <div style="font-size:12px;color:var(--label-3)">กำลังเรนเดอร์ทุกหน้าให้เลื่อนดูได้บน iPad และทุกอุปกรณ์</div>
+      </div>
+    `;
+
+    try {
+      if (typeof pdfjsLib === 'undefined') {
+        throw new Error('PDF.js library is not available');
+      }
+
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+      const loadingTask = pdfjsLib.getDocument(url);
+      const pdf = await loadingTask.promise;
+      const numPages = pdf.numPages;
+
+      bodyEl.innerHTML = `
+        <div class="pdf-viewer-bar" style="position:sticky;top:0;z-index:15;background:var(--bg-1);border-bottom:1px solid var(--sep);padding:8px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+          <div style="font-size:12.5px;font-weight:600;color:var(--label-2);display:flex;align-items:center;gap:6px">
+            <span>📄</span>
+            <span>ทั้งหมด <strong>${numPages}</strong> หน้า</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <button id="pdf-zoom-out" class="btn btn-secondary" style="padding:4px 10px;font-size:12px;font-weight:600" title="ย่อ">🔍 -</button>
+            <span id="pdf-zoom-val" style="font-size:12px;font-weight:600;min-width:42px;text-align:center;color:var(--label)">100%</span>
+            <button id="pdf-zoom-in" class="btn btn-secondary" style="padding:4px 10px;font-size:12px;font-weight:600" title="ขยาย">🔍 +</button>
+            <button id="pdf-zoom-fit" class="btn btn-secondary" style="padding:4px 10px;font-size:12px;font-weight:600" title="ปรับให้พอดีความกว้างหน้าจอ">📐 พอดีจอ</button>
+          </div>
+        </div>
+        <div id="pdf-pages-container" style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:16px 8px;background:var(--bg-3);overflow-y:auto;-webkit-overflow-scrolling:touch;max-height:calc(90vh - 170px)">
+        </div>
+      `;
+
+      const pagesContainer = bodyEl.querySelector('#pdf-pages-container');
+      const zoomValEl = bodyEl.querySelector('#pdf-zoom-val');
+
+      // Auto-fit scale based on container width so schedule sheets aren't excessively huge
+      const firstPage = await pdf.getPage(1);
+      const initialVp = firstPage.getViewport({ scale: 1.0 });
+      const availableWidth = Math.max(300, (bodyEl.clientWidth || window.innerWidth * 0.9) - 40);
+      let currentScale = Math.min(1.4, Math.max(0.45, availableWidth / initialVp.width));
+
+      if (zoomValEl) zoomValEl.textContent = `${Math.round(currentScale * 100)}%`;
+
+      async function renderPages(scale) {
+        pagesContainer.innerHTML = '';
+        for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+          const page = await pdf.getPage(pageNum);
+          const viewport = page.getViewport({ scale });
+
+          const wrapper = document.createElement('div');
+          wrapper.className = 'pdf-page-wrapper';
+          wrapper.style.cssText = 'position:relative;background:#fff;border-radius:6px;box-shadow:0 3px 12px rgba(0,0,0,0.12);margin-bottom:6px;max-width:100%;overflow:hidden';
+
+          const canvas = document.createElement('canvas');
+          canvas.style.display = 'block';
+          canvas.style.maxWidth = '100%';
+          canvas.style.height = 'auto';
+
+          const outputScale = window.devicePixelRatio || 1;
+          canvas.width = Math.floor(viewport.width * outputScale);
+          canvas.height = Math.floor(viewport.height * outputScale);
+          canvas.style.width = Math.floor(viewport.width) + "px";
+          canvas.style.height = Math.floor(viewport.height) + "px";
+
+          const context = canvas.getContext('2d');
+          const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null;
+
+          const badge = document.createElement('div');
+          badge.style.cssText = 'position:absolute;bottom:6px;right:8px;background:rgba(0,0,0,0.55);color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;pointer-events:none;font-weight:600';
+          badge.textContent = `${pageNum} / ${numPages}`;
+
+          wrapper.appendChild(canvas);
+          wrapper.appendChild(badge);
+          pagesContainer.appendChild(wrapper);
+
+          const renderContext = {
+            canvasContext: context,
+            transform: transform,
+            viewport: viewport
+          };
+          await page.render(renderContext).promise;
+        }
+      }
+
+      await renderPages(currentScale);
+
+      // Event listeners for zoom controls
+      bodyEl.querySelector('#pdf-zoom-in')?.addEventListener('click', async () => {
+        currentScale = Math.min(2.5, currentScale + 0.15);
+        if (zoomValEl) zoomValEl.textContent = `${Math.round(currentScale * 100)}%`;
+        await renderPages(currentScale);
+      });
+
+      bodyEl.querySelector('#pdf-zoom-out')?.addEventListener('click', async () => {
+        currentScale = Math.max(0.35, currentScale - 0.15);
+        if (zoomValEl) zoomValEl.textContent = `${Math.round(currentScale * 100)}%`;
+        await renderPages(currentScale);
+      });
+
+      bodyEl.querySelector('#pdf-zoom-fit')?.addEventListener('click', async () => {
+        const p1 = await pdf.getPage(1);
+        const vp = p1.getViewport({ scale: 1.0 });
+        const cW = Math.max(300, (pagesContainer.clientWidth || window.innerWidth * 0.9) - 36);
+        currentScale = Math.max(0.35, Math.min(2.0, cW / vp.width));
+        if (zoomValEl) zoomValEl.textContent = `${Math.round(currentScale * 100)}%`;
+        await renderPages(currentScale);
+      });
+
+    } catch (err) {
+      console.warn('PDF.js rendering fallback:', err);
+      bodyEl.innerHTML = `
+        <div style="width:100%;height:70vh;display:flex;flex-direction:column">
+          <iframe
+            src="${escHtml(url)}"
+            style="flex:1;border:none;border-radius:0 0 var(--r-m) var(--r-m);width:100%"
+            allow="fullscreen"
+            title="PDF Preview"
+          ></iframe>
+          <div style="padding:10px 16px;font-size:12px;color:var(--label-2);text-align:center;background:var(--bg-2)">
+            <a href="${escHtml(url)}" target="_blank" class="btn btn-primary" style="display:inline-flex;padding:6px 16px;font-size:12.5px;text-decoration:none">
+              🚀 เปิดไฟล์ PDF ในแท็บใหม่
+            </a>
+          </div>
+        </div>`;
+    }
+  }
+
   // ─── In-App Resource Preview ──────────────────────────────
   function openResourcePreview(item) {
     const modal = document.getElementById('preview-modal');
@@ -1697,24 +1830,15 @@
       body.innerHTML = '';
 
       if (item.type === 'pdf' && item.url) {
-        // PDF: try iframe first (works on desktop), canvas fallback for iOS
-        body.innerHTML = `
-          <div style="width:100%;height:70vh;display:flex;flex-direction:column">
-            <iframe
-              src="${escHtml(item.url)}"
-              style="flex:1;border:none;border-radius:0 0 var(--r-m) var(--r-m);width:100%"
-              allow="fullscreen"
-              title="PDF Preview"
-              id="preview-pdf-iframe"
-            ></iframe>
-            <div style="padding:10px 16px;font-size:11.5px;color:var(--label-3);text-align:center">
-              ถ้า PDF ไม่โหลด กด <strong>🚀 เปิดในแท็บใหม่</strong> ด้านล่าง
-            </div>
-          </div>`;
+        // Multi-page PDF rendering via PDF.js (works on iPad, iPhone, PC)
+        renderPdfWithPdfJs(item.url, body, item.title);
       } else if (item.type === 'image' && item.url) {
         body.innerHTML = `
-          <div style="display:flex;align-items:center;justify-content:center;padding:20px;min-height:300px">
-            <img src="${escHtml(item.url)}" alt="${escHtml(item.title)}" style="max-width:100%;max-height:65vh;border-radius:var(--r-m);box-shadow:var(--shadow-2)" />
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;min-height:300px;max-height:calc(90vh - 130px);overflow:auto">
+            <img src="${escHtml(item.url)}" alt="${escHtml(item.title)}" style="max-width:100%;height:auto;max-height:75vh;object-fit:contain;border-radius:var(--r-m);box-shadow:var(--shadow-2)" />
+            <div style="margin-top:12px;display:flex;gap:8px">
+              <a href="${escHtml(item.url)}" target="_blank" class="btn btn-secondary" style="font-size:12px;padding:6px 14px;text-decoration:none">🔍 ดูภาพขนาดเต็ม</a>
+            </div>
           </div>`;
       } else {
         // Google Drive / Classroom / generic link — show rich card + open button
