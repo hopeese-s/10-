@@ -319,6 +319,10 @@
     if (cloudData.checklist) state.checklist = cloudData.checklist;
     if (cloudData.subjects) state.subjects = cloudData.subjects;
     if (cloudData.customBlocks) state.customBlocks = cloudData.customBlocks;
+    if (cloudData.studyFolders && Array.isArray(cloudData.studyFolders) && cloudData.studyFolders.length > 0) {
+      state.studyFolders = cloudData.studyFolders;
+      localStorage.setItem('sd-study-folders', JSON.stringify(state.studyFolders));
+    }
     if (cloudData.studyLinks && Array.isArray(cloudData.studyLinks) && cloudData.studyLinks.length > 0) {
       state.studyLinks = cloudData.studyLinks;
       localStorage.setItem('sd-study-links', JSON.stringify(state.studyLinks));
@@ -336,7 +340,18 @@
       state.checklist    = JSON.parse(localStorage.getItem('sd-checklist') || '{}');
       state.subjects     = JSON.parse(localStorage.getItem('sd-subjects') || '{}');
       state.customBlocks = JSON.parse(localStorage.getItem('sd-custom-blocks') || '{}');
-      const savedLinks   = localStorage.getItem('sd-study-links');
+
+      // Study Folders
+      const savedFolders = localStorage.getItem('sd-study-folders');
+      if (savedFolders) {
+        state.studyFolders = JSON.parse(savedFolders);
+      } else {
+        state.studyFolders = [...DEFAULT_STUDY_FOLDERS];
+      }
+      state.selectedFolderId = localStorage.getItem('sd-selected-folder') || 'all';
+
+      // Study Links
+      const savedLinks = localStorage.getItem('sd-study-links');
       if (savedLinks) {
         const parsed = JSON.parse(savedLinks);
         if (Array.isArray(parsed) && parsed.length >= DEFAULT_STUDY_LINKS.length) {
@@ -354,6 +369,7 @@
       }
       state.curriculumViewMode = localStorage.getItem('sd-curriculum-mode') || 'grid';
     } catch (e) {
+      state.studyFolders = [...DEFAULT_STUDY_FOLDERS];
       state.studyLinks = [...DEFAULT_STUDY_LINKS];
     }
   }
@@ -373,6 +389,12 @@
   function saveCustomBlocks() {
     touchUpdatedAt();
     localStorage.setItem('sd-custom-blocks', JSON.stringify(state.customBlocks));
+    if (window.CloudSync) CloudSync.pushToCloud(state);
+  }
+
+  function saveStudyFolders() {
+    touchUpdatedAt();
+    localStorage.setItem('sd-study-folders', JSON.stringify(state.studyFolders));
     if (window.CloudSync) CloudSync.pushToCloud(state);
   }
 
@@ -1135,42 +1157,86 @@
     const docCount       = state.studyLinks.filter(l => l.type === 'pdf' || l.type === 'image' || l.type === 'sheet').length;
 
     // Filter items
+  // ─── View 3: Study Resources (Folders, Search, Multi-Page PDF.js, Drag & Drop) ─
+  let studySearchQuery = '';
+
+  function renderStudyView() {
+    const container = document.getElementById('view-egbe-study');
+    if (!container) return;
+
+    if (!state.studyFolders || !Array.isArray(state.studyFolders) || state.studyFolders.length === 0) {
+      state.studyFolders = [...DEFAULT_STUDY_FOLDERS];
+    }
+    const currentFolder = state.selectedFolderId || 'all';
+    const query = (studySearchQuery || '').toLowerCase().trim();
+
+    // Filter links
     const filteredLinks = state.studyLinks.filter(item => {
-      if (currentFilter === 'classroom') return item.type === 'classroom';
-      if (currentFilter === 'drive') return item.type === 'drive';
-      if (currentFilter === 'pdf') return item.type === 'pdf' || item.type === 'image' || item.type === 'sheet';
-      return true;
+      const matchFolder = (currentFolder === 'all' || item.folderId === currentFolder || (!item.folderId && currentFolder === 'f-notes'));
+      const matchQuery = (!query || item.title.toLowerCase().includes(query) || (item.sub && item.sub.toLowerCase().includes(query)) || (item.desc && item.desc.toLowerCase().includes(query)));
+      return matchFolder && matchQuery;
     });
 
+    const totalCount = state.studyLinks.length;
+
     container.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.25rem;flex-wrap:wrap;gap:1rem">
         <div>
-          <h2 style="font-family:var(--font-serif);font-size:1.6rem;font-weight:700;margin-bottom:4px">Study Resources & Files</h2>
-          <p style="font-size:13.5px;color:var(--label-2)">คลังรวม Google Classroom, Google Drive, สไลด์บรรยาย และคู่มือนักศึกษา BME ปี 1</p>
+          <h2 style="font-family:var(--font-serif);font-size:1.6rem;font-weight:700;margin-bottom:4px">Study Resources &amp; Documents</h2>
+          <p style="font-size:13px;color:var(--label-2)">คลังเอกสาร ชีทสรุป Google Classroom และคู่มือ BME พร้อมระบบโฟลเดอร์และลากไฟล์จัดหมวดหมู่ (Drag &amp; Drop บน iPad)</p>
         </div>
-        <button class="btn-pill" id="add-resource-btn" style="background:var(--accent);color:#FFFFFF;border-color:var(--accent)">
-          ＋ เพิ่มลิงค์ / ชีทเรียน
-        </button>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-secondary" id="create-folder-btn" style="font-size:12.5px;padding:7px 14px;display:inline-flex;align-items:center;gap:6px">
+            📁 สร้างโฟลเดอร์
+          </button>
+          <button class="btn btn-primary" id="add-resource-btn" style="font-size:12.5px;padding:7px 16px;display:inline-flex;align-items:center;gap:6px">
+            ➕ เพิ่มชีทเรียน / ลิงค์
+          </button>
+        </div>
       </div>
 
-      <!-- Category Filter Tabs -->
-      <div style="display:flex;gap:8px;overflow-x:auto;margin-bottom:1.75rem;padding-bottom:4px" id="study-filter-tabs">
-        <button class="view-mode-btn ${currentFilter === 'all' ? 'active' : ''}" data-filter="all">
-          ทั้งหมด (${totalCount})
-        </button>
-        <button class="view-mode-btn ${currentFilter === 'classroom' ? 'active' : ''}" data-filter="classroom">
-          🎓 Google Classroom (${classroomCount})
-        </button>
-        <button class="view-mode-btn ${currentFilter === 'drive' ? 'active' : ''}" data-filter="drive">
-          📁 Google Drive (${driveCount})
-        </button>
-        <button class="view-mode-btn ${currentFilter === 'pdf' ? 'active' : ''}" data-filter="pdf">
-          📄 เอกสาร &amp; PDF (${docCount})
-        </button>
+      <!-- Search & Status Bar -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
+        <div style="position:relative;flex:1;max-width:360px">
+          <input type="text" id="study-search-inp" class="form-input" placeholder="🔍 ค้นหาชีทเรียน, รหัสวิชา, หรือ Drive..." value="${escHtml(studySearchQuery)}" style="padding-left:32px;font-size:12.5px;border-radius:var(--r-pill)" />
+          <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--label-3);pointer-events:none">🔍</span>
+          ${studySearchQuery ? `<button id="study-clear-search" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--label-3);font-size:12px">✕</button>` : ''}
+        </div>
+        <div style="font-size:11.5px;color:var(--label-3);font-weight:600">
+          💡 สามารถลากการ์ดไฟล์ไปหย่อนใส่แถบโฟลเดอร์ หรือกดปุ่ม 📂 เพื่อย้ายได้ทันที
+        </div>
       </div>
 
-      <div class="cards-grid" id="study-links-grid">
-        ${filteredLinks.map((item, idx) => {
+      <!-- Interactive Folder Navigation Bar (Drop Zones) -->
+      <div class="study-folder-bar" id="study-folder-bar">
+        <button class="study-folder-pill ${currentFolder === 'all' ? 'active' : ''}" data-folder="all">
+          <span>📁 ทั้งหมด</span>
+          <span class="study-folder-count">${totalCount}</span>
+        </button>
+        ${state.studyFolders.map(f => {
+          const fCount = state.studyLinks.filter(l => l.folderId === f.id || (!l.folderId && f.id === 'f-notes')).length;
+          const isDefault = DEFAULT_STUDY_FOLDERS.some(df => df.id === f.id);
+          return `
+            <div class="study-folder-pill ${currentFolder === f.id ? 'active' : ''}" data-folder="${f.id}">
+              <span>${escHtml(f.name)}</span>
+              <span class="study-folder-count">${fCount}</span>
+              ${!isDefault ? `
+                <button class="folder-del-btn" data-folder-id="${f.id}" title="ลบโฟลเดอร์" style="background:none;border:none;cursor:pointer;color:currentColor;opacity:0.6;font-size:11px;padding:0 2px">✕</button>
+              ` : ''}
+            </div>
+          `;
+        }).join('')}
+      </div>
+
+      <!-- File Cards Grid -->
+      <div class="cards-grid" id="study-cards-grid">
+        ${filteredLinks.length === 0 ? `
+          <div style="grid-column:1/-1;padding:3rem;text-align:center;color:var(--label-3);background:var(--bg-2);border-radius:var(--r-l);border:1px dashed var(--sep)">
+            <div style="font-size:36px;margin-bottom:8px">📂</div>
+            <div style="font-weight:600;font-size:14px;color:var(--label-2)">ไม่มีเอกสารในโฟลเดอร์นี้</div>
+            <p style="font-size:12.5px;margin-top:4px">ลากไฟล์จากโฟลเดอร์อื่นมาใส่ หรือกดปุ่ม ➕ เพิ่มชีทเรียนใหม่</p>
+          </div>
+        ` : filteredLinks.map(item => {
           let badgeColor = 'var(--accent)';
           let badgeBg = 'var(--accent-bg)';
           let typeIcon = '🔗';
@@ -1192,28 +1258,31 @@
             typeIcon = '🖼️';
           }
 
+          const currentFObj = state.studyFolders.find(f => f.id === item.folderId);
           const isDefault = DEFAULT_STUDY_LINKS.some(d => d.id === item.id);
 
           return `
-            <div class="card-item study-resource-card" data-id="${item.id}" style="display:flex;flex-direction:column;justify-content:space-between;cursor:pointer">
+            <div class="card-item study-card" data-id="${item.id}" draggable="true" style="display:flex;flex-direction:column;justify-content:space-between;cursor:pointer">
               <div>
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
                   <span class="tag-chip" style="background:${badgeBg};color:${badgeColor};font-weight:700">
                     ${typeIcon} ${escHtml((item.type || 'LINK').toUpperCase())}
                   </span>
-                  ${!isDefault ? `
-                    <button class="delete-resource-btn" data-id="${item.id}" style="background:none;border:none;cursor:pointer;color:var(--label-4);font-size:13px;padding:2px 6px" title="ลบ">✕</button>
-                  ` : ''}
+                  <div class="study-card-actions">
+                    <button class="study-action-btn move-link-btn" data-id="${item.id}" title="ย้ายโฟลเดอร์ (iPad Quick Move)">📂</button>
+                    ${!isDefault ? `<button class="study-action-btn delete-link-btn" data-id="${item.id}" title="ลบ">✕</button>` : ''}
+                  </div>
                 </div>
                 <h3 style="font-size:15px;font-weight:700;margin-bottom:4px;color:var(--label);line-height:1.35">${escHtml(item.title)}</h3>
                 ${item.sub ? `<div style="font-size:11.5px;color:var(--label-3);font-weight:600;margin-bottom:6px">${escHtml(item.sub)}</div>` : ''}
                 <p style="font-size:12.5px;color:var(--label-2);line-height:1.5">${escHtml(item.desc || '')}</p>
               </div>
+
               <div style="margin-top:14px;border-top:1px solid var(--sep);padding-top:10px;display:flex;align-items:center;justify-content:space-between">
-                <button class="btn btn-secondary preview-trigger-btn" data-id="${item.id}" style="font-size:11.5px;padding:6px 12px;border-radius:var(--r-pill);flex:none">
+                <button class="btn btn-secondary preview-trigger-btn" data-id="${item.id}" style="font-size:11.5px;padding:5px 12px;border-radius:var(--r-pill);flex:none">
                   👁️ ดูตัวอย่าง
                 </button>
-                <a href="${escHtml(item.url)}" target="_blank" rel="noopener" class="resource-open-link" style="font-size:11.5px;color:var(--accent);font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:4px">
+                <a href="${escHtml(item.url)}" target="_blank" rel="noopener noreferrer" class="resource-open-link" style="font-size:11.5px;color:var(--accent);font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:4px">
                   เปิดตรง ↗
                 </a>
               </div>
@@ -1221,62 +1290,75 @@
           `;
         }).join('')}
       </div>
-
-      <!-- Add Link Modal Embedded -->
-      <div class="modal-overlay" id="resource-modal" role="dialog" aria-modal="true">
-        <div class="modal-box">
-          <div class="modal-header">
-            <span class="modal-title">เพิ่มชีทเรียน / ลิงค์ Drive</span>
-            <button class="modal-close" id="resource-modal-close">✕</button>
-          </div>
-          <div class="form-group">
-            <label class="form-label">ชื่อชีท / หัวข้อวิชา</label>
-            <input type="text" id="res-title" class="form-input" placeholder="เช่น GenPhy Chapter 1 Summary" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">ประเภท</label>
-            <select id="res-type" class="form-select">
-              <option value="classroom">Google Classroom</option>
-              <option value="drive">Google Drive</option>
-              <option value="pdf">ชีทสรุป / PDF</option>
-              <option value="image">รูปภาพ</option>
-              <option value="link">ลิงค์เว็บไซต์ทั่วไป</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">URL / ลิงค์</label>
-            <input type="text" id="res-url" class="form-input" placeholder="https://..." />
-          </div>
-          <div class="form-group">
-            <label class="form-label">คำอธิบายเพิ่มเติม</label>
-            <textarea id="res-desc" class="form-textarea" placeholder="รายละเอียดหรือหมายเหตุ..."></textarea>
-          </div>
-          <div class="modal-actions">
-            <button class="btn btn-secondary" id="res-cancel-btn">ยกเลิก</button>
-            <button class="btn btn-primary" id="res-save-btn">บันทึก</button>
-          </div>
-        </div>
-      </div>
     `;
 
-    // Filter tabs listeners
-    container.querySelectorAll('#study-filter-tabs .view-mode-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const filter = e.currentTarget.dataset.filter;
-        if (filter) {
-          state.studyFilter = filter;
+    // Folder selection
+    container.querySelectorAll('.study-folder-pill').forEach(pill => {
+      pill.addEventListener('click', (e) => {
+        if (e.target.closest('.folder-del-btn')) return;
+        const fId = pill.dataset.folder;
+        if (fId) {
+          state.selectedFolderId = fId;
+          localStorage.setItem('sd-selected-folder', fId);
           renderStudyView();
         }
       });
     });
 
-    // Card click -> In-App Preview
-    container.querySelectorAll('.study-resource-card').forEach(card => {
+    // Delete custom folder
+    container.querySelectorAll('.folder-del-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const fId = btn.dataset.folderId;
+        if (confirm('คุณต้องการลบโฟลเดอร์นี้หรือไม่? (เอกสารในโฟลเดอร์จะไม่ถูกลบ)')) {
+          state.studyFolders = state.studyFolders.filter(f => f.id !== fId);
+          state.studyLinks.forEach(l => { if (l.folderId === fId) l.folderId = 'f-notes'; });
+          if (state.selectedFolderId === fId) state.selectedFolderId = 'all';
+          saveStudyFolders();
+          saveStudyLinks();
+          renderStudyView();
+          showToast('🗑️ ลบโฟลเดอร์เรียบร้อย', 'info');
+        }
+      });
+    });
+
+    // Search input
+    const searchInp = document.getElementById('study-search-inp');
+    searchInp?.addEventListener('input', (e) => {
+      studySearchQuery = e.target.value;
+      renderStudyView();
+    });
+    document.getElementById('study-clear-search')?.addEventListener('click', () => {
+      studySearchQuery = '';
+      renderStudyView();
+    });
+
+    // Create folder button
+    document.getElementById('create-folder-btn')?.addEventListener('click', () => {
+      openFolderModal();
+    });
+
+    // Add resource button
+    document.getElementById('add-resource-btn')?.addEventListener('click', () => {
+      openAddResourceModal();
+    });
+
+    // Card click -> Preview
+    container.querySelectorAll('.study-card').forEach(card => {
       card.addEventListener('click', (e) => {
-        if (e.target.closest('.delete-resource-btn') || e.target.closest('.resource-open-link')) return;
+        if (e.target.closest('.study-action-btn') || e.target.closest('.resource-open-link')) return;
         const id = card.dataset.id;
         const item = state.studyLinks.find(l => l.id === id);
         if (item) openResourcePreview(item);
+      });
+    });
+
+    // Quick move button click (1-tap on iPad)
+    container.querySelectorAll('.move-link-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.id;
+        openMoveFileModal(id);
       });
     });
 
@@ -1290,130 +1372,201 @@
       });
     });
 
-    // Delete custom item
-    container.querySelectorAll('.delete-resource-btn').forEach(btn => {
+    // Delete link button
+    container.querySelectorAll('.delete-link-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const id = btn.dataset.id;
         state.studyLinks = state.studyLinks.filter(l => l.id !== id);
         saveStudyLinks();
         renderStudyView();
-        showToast('🗑️ ลบลิงค์แล้ว', 'info');
+        showToast('🗑️ ลบเอกสารแล้ว', 'info');
       });
     });
 
-    // Modal listeners
-    const modal = document.getElementById('resource-modal');
-    document.getElementById('add-resource-btn')?.addEventListener('click', () => {
-      if (modal) modal.classList.add('open');
-    });
-    document.getElementById('resource-modal-close')?.addEventListener('click', () => {
-      if (modal) modal.classList.remove('open');
-    });
-    document.getElementById('res-cancel-btn')?.addEventListener('click', () => {
-      if (modal) modal.classList.remove('open');
+    // Desktop HTML5 Drag and Drop Handlers
+    container.querySelectorAll('.study-card').forEach(card => {
+      card.addEventListener('dragstart', (e) => {
+        const id = card.dataset.id;
+        e.dataTransfer.setData('text/plain', id);
+        card.classList.add('dragging');
+      });
+      card.addEventListener('dragend', () => {
+        card.classList.remove('dragging');
+      });
     });
 
-    document.getElementById('res-save-btn')?.addEventListener('click', () => {
-      const title = document.getElementById('res-title')?.value.trim();
-      const type  = document.getElementById('res-type')?.value;
-      const url   = document.getElementById('res-url')?.value.trim();
-      const desc  = document.getElementById('res-desc')?.value.trim();
-      if (!title || !url) {
-        showToast('⚠️ กรุณากรอกชื่อและ URL', 'warning');
-        return;
-      }
-      state.studyLinks.push({ id: `link-${Date.now()}`, title, type, url, desc });
-      saveStudyLinks();
-      if (modal) modal.classList.remove('open');
-      showToast('✅ เพิ่มชีทเรียนแล้ว!', 'success');
-      renderStudyView();
+    container.querySelectorAll('.study-folder-pill').forEach(pill => {
+      pill.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        pill.classList.add('drag-over');
+      });
+      pill.addEventListener('dragleave', () => {
+        pill.classList.remove('drag-over');
+      });
+      pill.addEventListener('drop', (e) => {
+        e.preventDefault();
+        pill.classList.remove('drag-over');
+        const linkId = e.dataTransfer.getData('text/plain');
+        const targetFolder = pill.dataset.folder;
+        if (linkId && targetFolder) {
+          moveLinkToFolder(linkId, targetFolder);
+        }
+      });
     });
   }
 
-  // ─── In-App Resource Preview ──────────────────────────────
-  function openResourcePreview(item) {
-    const modal = document.getElementById('preview-modal');
+  function moveLinkToFolder(linkId, targetFolderId) {
+    const link = state.studyLinks.find(l => l.id === linkId);
+    if (!link) return;
+    if (targetFolderId === 'all') {
+      link.folderId = 'f-notes';
+    } else {
+      link.folderId = targetFolderId;
+    }
+    saveStudyLinks();
+    renderStudyView();
+    const folderObj = state.studyFolders.find(f => f.id === targetFolderId);
+    showToast(`📂 ย้ายไปยัง "${folderObj ? folderObj.name : 'โฟลเดอร์'}" สำเร็จ!`, 'success');
+  }
+
+  function openFolderModal() {
+    const modal = document.getElementById('folder-modal');
     if (!modal) return;
+    const nameInp = document.getElementById('folder-name-input');
+    if (nameInp) nameInp.value = '';
 
-    const badge = document.getElementById('preview-badge');
-    const title = document.getElementById('preview-modal-title');
-    const body = document.getElementById('preview-modal-body');
-    const metaInfo = document.getElementById('preview-meta-info');
-    const extBtn = document.getElementById('preview-open-ext-btn');
-    const copyBtn = document.getElementById('preview-copy-link-btn');
+    let selectedIcon = '📁';
+    modal.querySelectorAll('.folder-icon-choice').forEach(btn => {
+      btn.classList.remove('active');
+      if (btn.dataset.icon === '📁') btn.classList.add('active');
+      btn.onclick = () => {
+        modal.querySelectorAll('.folder-icon-choice').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        selectedIcon = btn.dataset.icon || '📁';
+      };
+    });
 
-    if (title) title.textContent = item.title;
-    if (metaInfo) metaInfo.textContent = item.sub || item.desc || item.url;
-    const safeUrl = item.url.startsWith('http') ? item.url : encodeURI(item.url);
-    if (extBtn) {
-      extBtn.href = safeUrl;
-      extBtn.textContent = '🚀 เปิดในแท็บใหม่';
-    }
-
-    if (badge) {
-      badge.textContent = (item.type || 'link').toUpperCase();
-      if (item.type === 'classroom') {
-        badge.style.background = 'rgba(59, 130, 246, 0.15)';
-        badge.style.color = '#2563eb';
-      } else if (item.type === 'drive') {
-        badge.style.background = 'rgba(16, 185, 129, 0.15)';
-        badge.style.color = '#059669';
-      } else if (item.type === 'pdf') {
-        badge.style.background = 'rgba(239, 68, 68, 0.15)';
-        badge.style.color = '#dc2626';
-      } else if (item.type === 'image') {
-        badge.style.background = 'rgba(217, 119, 6, 0.15)';
-        badge.style.color = '#d97706';
-      } else {
-        badge.style.background = 'var(--accent-bg)';
-        badge.style.color = 'var(--accent)';
-      }
-    }
-
-    if (body) {
-      if (item.type === 'pdf') {
-        body.innerHTML = `
-          <iframe src="${escHtml(safeUrl)}#toolbar=1" style="width:100%;height:68vh;border:none;border-radius:var(--r-m);background:#ffffff"></iframe>
-        `;
-      } else if (item.type === 'image') {
-        body.innerHTML = `
-          <img src="${escHtml(safeUrl)}" alt="${escHtml(item.title)}" style="max-width:100%;max-height:68vh;object-fit:contain;border-radius:var(--r-m);display:block;margin:0 auto" />
-        `;
-      } else {
-        // Classroom or Drive or Web Link
-        const isClassroom = item.type === 'classroom';
-        const isDrive = item.type === 'drive';
-        const icon = isClassroom ? '🎓' : isDrive ? '📁' : '🔗';
-        const typeLabel = isClassroom ? 'Google Classroom' : isDrive ? 'Google Drive Folder' : 'External Link';
-
-        body.innerHTML = `
-          <div style="padding:2.5rem 1.5rem;text-align:center;max-width:560px;margin:0 auto">
-            <div style="font-size:52px;margin-bottom:14px">${icon}</div>
-            <h3 style="font-family:var(--font-serif);font-size:1.35rem;font-weight:700;color:var(--label);margin-bottom:8px">
-              ${escHtml(item.title)}
-            </h3>
-            ${item.sub ? `<div style="font-size:12.5px;color:var(--label-3);font-weight:600;margin-bottom:12px">${escHtml(item.sub)}</div>` : ''}
-            <p style="font-size:13.5px;color:var(--label-2);line-height:1.6;margin-bottom:20px">
-              ${escHtml(item.desc || 'คลิกปุ่มด้านล่างเพื่อเข้าสู่เนื้อหาบทเรียน')}
-            </p>
-            <div style="background:var(--bg-3);padding:10px 14px;border-radius:var(--r-m);border:1px solid var(--sep);font-family:var(--font-mono);font-size:11.5px;color:var(--label-3);word-break:break-all;margin-bottom:24px;text-align:left">
-              🔗 ${escHtml(item.url)}
-            </div>
-            <a href="${escHtml(item.url)}" target="_blank" rel="noopener" class="btn btn-primary" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 28px;font-size:14px;text-decoration:none;border-radius:var(--r-pill);box-shadow:0 4px 14px rgba(196,90,27,0.3)">
-              🚀 เข้าสู่ ${typeLabel}
-            </a>
-          </div>
-        `;
-      }
-    }
-
-    if (copyBtn) {
-      copyBtn.onclick = () => {
-        navigator.clipboard.writeText(item.url);
-        showToast('📋 คัดลอกลิงค์แล้ว!', 'success');
+    const saveBtn = document.getElementById('folder-save-btn');
+    if (saveBtn) {
+      saveBtn.onclick = () => {
+        const name = nameInp?.value.trim();
+        if (!name) {
+          showToast('⚠️ กรุณากรอกชื่อโฟลเดอร์', 'warning');
+          return;
+        }
+        const newFolder = {
+          id: `f-custom-${Date.now()}`,
+          name: `${selectedIcon} ${name}`,
+          icon: selectedIcon
+        };
+        state.studyFolders.push(newFolder);
+        saveStudyFolders();
+        state.selectedFolderId = newFolder.id;
+        modal.classList.remove('open');
+        document.body.style.overflow = '';
+        renderStudyView();
+        showToast('✅ สร้างโฟลเดอร์ใหม่สำเร็จ!', 'success');
       };
     }
+
+    document.getElementById('folder-modal-close')?.addEventListener('click', () => closeModal('folder-modal'));
+    document.getElementById('folder-cancel-btn')?.addEventListener('click', () => closeModal('folder-modal'));
+
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function openMoveFileModal(linkId) {
+    const link = state.studyLinks.find(l => l.id === linkId);
+    if (!link) return;
+    const modal = document.getElementById('move-file-modal');
+    if (!modal) return;
+
+    const fileNameEl = document.getElementById('move-file-name');
+    if (fileNameEl) fileNameEl.textContent = `📄 ${link.title}`;
+
+    const optsContainer = document.getElementById('move-folder-options');
+    if (optsContainer) {
+      optsContainer.innerHTML = state.studyFolders.map(f => {
+        const isCurrent = link.folderId === f.id;
+        return `
+          <button class="btn btn-secondary move-dest-btn" data-folder-id="${f.id}" style="justify-content:space-between;text-align:left;padding:10px 14px;border-radius:var(--r-m);${isCurrent ? 'border-color:var(--accent);background:var(--accent-bg);' : ''}">
+            <span style="font-weight:600">${escHtml(f.name)}</span>
+            ${isCurrent ? '<span style="font-size:11px;color:var(--accent);font-weight:700">✓ อยู่ที่นี่</span>' : ''}
+          </button>
+        `;
+      }).join('');
+
+      optsContainer.querySelectorAll('.move-dest-btn').forEach(btn => {
+        btn.onclick = () => {
+          const fId = btn.dataset.folderId;
+          if (fId) {
+            moveLinkToFolder(linkId, fId);
+            closeModal('move-file-modal');
+          }
+        };
+      });
+    }
+
+    document.getElementById('move-modal-close')?.addEventListener('click', () => closeModal('move-file-modal'));
+    document.getElementById('move-cancel-btn')?.addEventListener('click', () => closeModal('move-file-modal'));
+
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function openAddResourceModal() {
+    const modal = document.getElementById('resource-modal');
+    if (!modal) return;
+
+    const titleInp = document.getElementById('res-title');
+    const folderSel = document.getElementById('res-folder');
+    const urlInp = document.getElementById('res-url');
+    const descInp = document.getElementById('res-desc');
+    const typeSel = document.getElementById('res-type');
+
+    if (titleInp) titleInp.value = '';
+    if (urlInp) urlInp.value = '';
+    if (descInp) descInp.value = '';
+
+    if (folderSel) {
+      folderSel.innerHTML = state.studyFolders.map(f => `
+        <option value="${f.id}" ${state.selectedFolderId === f.id ? 'selected' : ''}>${escHtml(f.name)}</option>
+      `).join('');
+    }
+
+    const saveBtn = document.getElementById('res-save-btn');
+    if (saveBtn) {
+      saveBtn.onclick = () => {
+        const title = titleInp?.value.trim();
+        const type = typeSel?.value || 'pdf';
+        const folderId = folderSel?.value || (state.selectedFolderId !== 'all' ? state.selectedFolderId : 'f-notes');
+        const url = urlInp?.value.trim();
+        const desc = descInp?.value.trim();
+
+        if (!title || !url) {
+          showToast('⚠️ กรุณากรอกชื่อและ URL ของเอกสาร', 'warning');
+          return;
+        }
+
+        state.studyLinks.push({
+          id: `link-${Date.now()}`,
+          folderId,
+          title,
+          type,
+          url,
+          desc
+        });
+        saveStudyLinks();
+        closeModal('resource-modal');
+        renderStudyView();
+        showToast('✅ เพิ่มชีทเรียนเรียบร้อย!', 'success');
+      };
+    }
+
+    document.getElementById('resource-modal-close')?.addEventListener('click', () => closeModal('resource-modal'));
+    document.getElementById('res-cancel-btn')?.addEventListener('click', () => closeModal('resource-modal'));
 
     modal.classList.add('open');
     document.body.style.overflow = 'hidden';

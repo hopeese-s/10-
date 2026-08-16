@@ -17,7 +17,8 @@ const CloudSync = (function() {
 
   const PRIMARY_CLOUD_API = 'https://daily-study-dashboard-production.up.railway.app/api/sync';
 
-  let syncKey = localStorage.getItem('sd-sync-key') || '';
+  // Default to key '1' so iPad, iPhone, and PC automatically sync out-of-the-box!
+  let syncKey = localStorage.getItem('sd-sync-key') || '1';
   let syncStatus = syncKey ? 'synced' : 'local'; // 'local' | 'synced' | 'syncing' | 'error'
   let autoSyncTimer = null;
   let lastSyncTime = parseInt(localStorage.getItem('sd-last-sync-time') || '0', 10);
@@ -86,6 +87,7 @@ const CloudSync = (function() {
             checklist: data.checklist || {},
             subjects: data.subjects || {},
             customBlocks: data.customBlocks || {},
+            studyFolders: data.studyFolders || [],
             studyLinks: data.studyLinks || [],
             updatedAt: currentUpdatedAt
           }
@@ -110,6 +112,7 @@ const CloudSync = (function() {
       checklist: data.checklist || {},
       subjects: data.subjects || {},
       customBlocks: data.customBlocks || {},
+      studyFolders: data.studyFolders || [],
       studyLinks: data.studyLinks || [],
       updatedAt: currentUpdatedAt
     });

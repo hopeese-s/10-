@@ -213,6 +213,206 @@ function getDayKey(jsDay) {
 }
 
 // ============================================================
+// Study Resources Folders & Default Links
+// ============================================================
+const DEFAULT_STUDY_FOLDERS = [
+  { id: 'f-handbook', name: '📘 คู่มือ & ตารางเรียนจำลอง', icon: '📘' },
+  { id: 'f-classroom', name: '🏫 Google Classroom รายวิชา', icon: '🏫' },
+  { id: 'f-drive', name: '📂 Google Drive ชีท & โค้ด', icon: '📂' },
+  { id: 'f-notes', name: '📑 เอกสารประกอบการสอน', icon: '📑' }
+];
+
+const DEFAULT_STUDY_LINKS = [
+  // ─── Google Classroom Links ───
+  {
+    id: 'gc-1',
+    folderId: 'f-classroom',
+    title: '2026_SCPY161 General Physics I',
+    sub: 'SCBE#1, ENNM#1, EGBI#1, EGCG#1, EGIT#1',
+    type: 'classroom',
+    url: 'https://classroom.google.com/u/6/c/ODcwMjc5NzAyMjcy',
+    desc: 'Google Classroom ฟิสิกส์ทั่วไป 1 (SCPY161)'
+  },
+  {
+    id: 'gc-2',
+    folderId: 'f-classroom',
+    title: '2026_SCCH161 General Chemistry',
+    sub: 'EGIT#1, EGBI#1, SCBE#1, EGNN#1',
+    type: 'classroom',
+    url: 'https://classroom.google.com/u/6/c/ODU1NzE4MDAyNzE5',
+    desc: 'Google Classroom เคมีทั่วไป (SCCH161)'
+  },
+  {
+    id: 'gc-3',
+    folderId: 'f-classroom',
+    title: '2026_SCMA101 Mathematics I (Math 1)',
+    sub: 'EG (EGBI, EGIT, EGMU), SCBE, ENNM',
+    type: 'classroom',
+    url: 'https://classroom.google.com/u/6/c/ODcxNjY1MDM2MTY2',
+    desc: 'Google Classroom คณิตศาสตร์ 1 (SCMA101)'
+  },
+  {
+    id: 'gc-4',
+    folderId: 'f-classroom',
+    title: '2026_SCSL 190 Wonderful Life (ชีววิทยา)',
+    sub: 'EGBI#1, SCBE#1',
+    type: 'classroom',
+    url: 'https://classroom.google.com/u/6/c/Nzk4Mzk2MTI3MDI1',
+    desc: 'Google Classroom ชีววิทยาสิ่งมีชีวิต (SCSL190)'
+  },
+  {
+    id: 'gc-5',
+    folderId: 'f-classroom',
+    title: '2026_EGBI100 BME in the Real World',
+    sub: 'Biomedical Engineering',
+    type: 'classroom',
+    url: 'https://classroom.google.com/u/6/c/ODcwMzEwOTI0OTg2',
+    desc: 'Google Classroom วิศวกรรมชีวการแพทย์ในโลกจริง (EGBI100)'
+  },
+  {
+    id: 'gc-6',
+    folderId: 'f-classroom',
+    title: '2026_SCPY111 Physics Laboratory I',
+    sub: 'SCBE#1, ENNM#1, EGBI#1, EGCG#1, EGIT#1',
+    type: 'classroom',
+    url: 'https://classroom.google.com/u/6/c/ODcxMTQzMDA0NzAw',
+    desc: 'Google Classroom ปฏิบัติการฟิสิกส์ 1 (SCPY111)'
+  },
+  {
+    id: 'gc-7',
+    folderId: 'f-classroom',
+    title: '2026_SCBE 102 General Biology Laboratory 1',
+    sub: 'SCBE#1, EGBI#1',
+    type: 'classroom',
+    url: 'https://classroom.google.com/u/6/c/ODY3NjU2OTgwNDEz',
+    desc: 'Google Classroom ปฏิบัติการชีววิทยาทั่วไป 1 (SCBE102)'
+  },
+  {
+    id: 'gc-8',
+    folderId: 'f-classroom',
+    title: '2026_SCCH 159/169 & SCCT Chemistry Laboratory',
+    sub: 'SCBE#1, ENNM#1, EGBI#1, EGCG#1,...',
+    type: 'classroom',
+    url: 'https://classroom.google.com/u/6/c/ODU1NTg5NDU4MDQ1',
+    desc: 'Google Classroom ปฏิบัติการเคมี (SCCH169)'
+  },
+
+  // ─── Google Drive ───
+  {
+    id: 'gd-eng',
+    folderId: 'f-drive',
+    title: 'LAEN182 English for General Academic Purposes',
+    sub: 'Google Drive Folder',
+    type: 'drive',
+    url: 'https://drive.google.com/drive/folders/1mT_NMiY6c0j8mCyVBvsO4ceUFQfgZwri',
+    desc: 'โฟลเดอร์ Google Drive ชีทและเอกสารวิชาภาษาอังกฤษ LAEN182'
+  },
+  {
+    id: 'gd-comppro',
+    folderId: 'f-drive',
+    title: 'EGBI122 Computer Programming (คอมโปร)',
+    sub: 'Google Drive Folder',
+    type: 'drive',
+    url: 'https://drive.google.com/drive/u/0/mobile/folders/1XqQUjsxsj8VvhchExhS44nEJOL20WFto?usp=sharing',
+    desc: 'โฟลเดอร์ Google Drive ชีท สไลด์ และโค้ดตัวอย่างวิชา Computer Programming'
+  },
+
+  // ─── PDF & Schedule Documents (In-App Preview) ───
+  {
+    id: 'doc-handbook',
+    folderId: 'f-handbook',
+    title: '📘 BME Undergraduate Student Handbook 2026',
+    sub: 'PDF Document (In-App Preview)',
+    type: 'pdf',
+    url: '2026_Handbok for Biomedical Engineering Undergraduate Student.pdf',
+    desc: 'คู่มือนักศึกษาหลักสูตรวิศวกรรมชีวแพทย์ มหาวิทยาลัยมหิดล'
+  },
+  {
+    id: 'doc-egbi100-l1',
+    folderId: 'f-notes',
+    title: '🏥 EGBI100 Lecture 1: Intro to BME',
+    sub: 'PDF Lecture Slides (In-App Preview)',
+    type: 'pdf',
+    url: '2026-EGBI100_Lecture1_Intro_PN.pdf',
+    desc: 'เอกสารประกอบการสอน BME in the Real World คาบที่ 1'
+  },
+  {
+    id: 'doc-schedule',
+    folderId: 'f-handbook',
+    title: '📆 ตารางเรียนปี 1 ภาคเรียนที่ 1/2026 (Program B-BI)',
+    sub: 'Image Schedule (In-App Preview)',
+    type: 'image',
+    url: 'egmu-class-schedule-2026-1-program_B-BI.png',
+    desc: 'ภาพตารางเรียนหลักสูตร BME ภาคเรียนที่ 1/2026 ความละเอียดสูง'
+  },
+
+  // ─── BME Assumed Schedules (Year 1 - Year 4 from BMEASSUMESCHE) ───
+  {
+    id: 'doc-sche-y1s2',
+    folderId: 'f-handbook',
+    title: '📅 ตารางเรียนจำลอง ปี 1 เทอม 2 (Year 1 Sem 2)',
+    sub: 'BME Assumed Schedule (PDF)',
+    type: 'pdf',
+    url: 'BMEASSUMESCHE/year1s2.pdf',
+    desc: 'ผังตารางเรียนและเวลาเรียนจำลองหลักสูตร BME ชั้นปีที่ 1 ภาคการศึกษาที่ 2'
+  },
+  {
+    id: 'doc-sche-y2s1',
+    folderId: 'f-handbook',
+    title: '📅 ตารางเรียนจำลอง ปี 2 เทอม 1 (Year 2 Sem 1)',
+    sub: 'BME Assumed Schedule (PDF)',
+    type: 'pdf',
+    url: 'BMEASSUMESCHE/year2s1.pdf',
+    desc: 'ผังตารางเรียนและเวลาเรียนจำลองหลักสูตร BME ชั้นปีที่ 2 ภาคการศึกษาที่ 1'
+  },
+  {
+    id: 'doc-sche-y2s2',
+    folderId: 'f-handbook',
+    title: '📅 ตารางเรียนจำลอง ปี 2 เทอม 2 (Year 2 Sem 2)',
+    sub: 'BME Assumed Schedule (PDF)',
+    type: 'pdf',
+    url: 'BMEASSUMESCHE/year2s2.pdf',
+    desc: 'ผังตารางเรียนและเวลาเรียนจำลองหลักสูตร BME ชั้นปีที่ 2 ภาคการศึกษาที่ 2'
+  },
+  {
+    id: 'doc-sche-y3s1',
+    folderId: 'f-handbook',
+    title: '📅 ตารางเรียนจำลอง ปี 3 เทอม 1 (Year 3 Sem 1)',
+    sub: 'BME Assumed Schedule (PDF)',
+    type: 'pdf',
+    url: 'BMEASSUMESCHE/year3s1.pdf',
+    desc: 'ผังตารางเรียนและเวลาเรียนจำลองหลักสูตร BME ชั้นปีที่ 3 ภาคการศึกษาที่ 1'
+  },
+  {
+    id: 'doc-sche-y3s2',
+    folderId: 'f-handbook',
+    title: '📅 ตารางเรียนจำลอง ปี 3 เทอม 2 (Year 3 Sem 2)',
+    sub: 'BME Assumed Schedule (PDF)',
+    type: 'pdf',
+    url: 'BMEASSUMESCHE/year3s2.pdf',
+    desc: 'ผังตารางเรียนและเวลาเรียนจำลองหลักสูตร BME ชั้นปีที่ 3 ภาคการศึกษาที่ 2'
+  },
+  {
+    id: 'doc-sche-y4s1',
+    folderId: 'f-handbook',
+    title: '📅 ตารางเรียนจำลอง ปี 4 เทอม 1 (Year 4 Sem 1)',
+    sub: 'BME Assumed Schedule (PDF)',
+    type: 'pdf',
+    url: 'BMEASSUMESCHE/year4s1.pdf',
+    desc: 'ผังตารางเรียนและเวลาเรียนจำลองหลักสูตร BME ชั้นปีที่ 4 ภาคการศึกษาที่ 1'
+  },
+  {
+    id: 'doc-sche-y4s2',
+    folderId: 'f-handbook',
+    title: '📅 ตารางเรียนจำลอง ปี 4 เทอม 2 (Year 4 Sem 2)',
+    sub: 'BME Assumed Schedule (PDF)',
+    type: 'pdf',
+    url: 'BMEASSUMESCHE/year4s2.pdf',
+    desc: 'ผังตารางเรียนและเวลาเรียนจำลองหลักสูตร BME ชั้นปีที่ 4 ภาคการศึกษาที่ 2'
+  }
+];
+
+// ============================================================
 // 4-Year BME Curriculum Knowledge & Prerequisite Graph Data
 // ============================================================
 const BME_PILLARS = {

@@ -13,6 +13,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
+  <!-- PDF.js Multi-Page Viewer for iPadOS & Modern Browsers -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
 
@@ -59,134 +61,224 @@
       </div>
     </div>
 
-    <!-- ─── Main Content ─── -->
+    <!-- ─── Main Content Container ─── -->
     <main class="main-content" id="main-content" role="main">
 
-      <!-- VIEW 0: HOME LANDING PAGE (3rd EgBE Memory Engine exact copy) -->
-      <div id="view-egbe-home" class="view view-page active" role="tabpanel">
-        <div class="hero-section">
-          <div class="hero-badge">
-            <span class="hero-badge-dot"></span>
-            <span class="hero-badge-text">MAHIDOL BME CURRICULUM</span>
-          </div>
+      <!-- View 0: Home Hero (3rd EgBE style) -->
+      <div class="view-page active" id="view-egbe-home"></div>
 
-          <h1 class="hero-title">
-            Master biomedical engineering with <span class="hero-italic">intelligent workflows</span>
-          </h1>
-
-          <p class="hero-subtitle">
-            The all-in-one platform that helps BME students conquer their curriculum in record time. Powered by FSRS-5, designed for clinical excellence.
-          </p>
-
-          <div class="hero-ctas">
-            <button class="btn-hero-accent" data-view="dashboard">Daily Dashboard →</button>
-            <button class="btn-hero-dark" data-view="study">Start studying →</button>
-            <button class="btn-hero-outline" data-view="curriculum">Explore modules</button>
-          </div>
-
-          <div class="hero-features-grid">
-            <div class="feature-card" role="button" tabindex="0" data-view="dashboard">
-              <div class="feature-icon">🗓️</div>
-              <h3 class="feature-title">Daily Routine &amp; Timeline</h3>
-              <p class="feature-desc">ตารางกิจกรรมประจำวันสำหรับนักศึกษา BME Mahidol พร้อมระบบ Cloud Sync ข้ามเครื่อง</p>
-            </div>
-            <div class="feature-card" role="button" tabindex="0" data-view="study">
-              <div class="feature-icon">📂</div>
-              <h3 class="feature-title">Study Resources</h3>
-              <p class="feature-desc">รวม Link Sheet Drive คลิป และไฟล์เรียนทุกวิชา BME ปี 1 เข้าไว้ในที่เดียว</p>
-            </div>
-            <div class="feature-card" role="button" tabindex="0" data-view="curriculum">
-              <div class="feature-icon">📚</div>
-              <h3 class="feature-title">BME Curriculum 2026</h3>
-              <p class="feature-desc">โครงสร้างรายวิชา ตารางเรียน และข้อมูลหลักสูตรวิศวกรรมชีวแพทย์ Mahidol ปีที่ 1</p>
-            </div>
-            <div class="feature-card" role="button" tabindex="0" data-view="graph">
-              <div class="feature-icon">🕸️</div>
-              <h3 class="feature-title">Concept Knowledge Graph</h3>
-              <p class="feature-desc">ผังเชื่อมโยงความสัมพันธ์ของหัวข้อวิชา BME 2026 เพื่อมองเห็นภาพรวมและ prerequisite</p>
-            </div>
-          </div>
+      <!-- View 1: Daily Dashboard (1st Verbatim with 9th internals) -->
+      <div class="view-page" id="view-egbe-dashboard">
+        <!-- Subview 1: Timeline -->
+        <div class="sub-view-panel active" id="subview-timeline">
+          <div class="timeline-wrap" id="timeline-view-container"></div>
+        </div>
+        <!-- Subview 2: Week Matrix -->
+        <div class="sub-view-panel" id="subview-week">
+          <div id="week-view-container"></div>
+        </div>
+        <!-- Subview 3: Schedule Grid (9th Verbatim) -->
+        <div class="sub-view-panel" id="subview-schedule">
+          <div id="schedule-view-container"></div>
         </div>
       </div>
 
-      <!-- VIEW 1: DAILY DASHBOARD (9th full workspace — views rendered by 9th app.js into these exact IDs) -->
-      <div id="view-egbe-dashboard" class="view view-page" role="tabpanel">
-        <div id="view-timeline" class="view active" role="tabpanel"></div>
-        <div id="view-week"     class="view"        role="tabpanel"></div>
-        <div id="view-schedule" class="view"        role="tabpanel"></div>
-      </div>
+      <!-- View 2: Curriculum (Table 3.2 Mahidol BME) -->
+      <div class="view-page" id="view-egbe-curriculum"></div>
 
-      <!-- VIEW 2: CURRICULUM -->
-      <div id="view-egbe-curriculum" class="view view-page" role="tabpanel"></div>
+      <!-- View 3: Study Resources (Folders, Search, Google Classrooms, Drive, In-App Previews) -->
+      <div class="view-page" id="view-egbe-study"></div>
 
-      <!-- VIEW 3: STUDY (resource links / sheets) -->
-      <div id="view-egbe-study" class="view view-page" role="tabpanel"></div>
-
-      <!-- VIEW 4: GRAPH (concept knowledge graph) -->
-      <div id="view-egbe-graph" class="view view-page" role="tabpanel"></div>
+      <!-- View 4: Concept Knowledge & Prerequisite Graph -->
+      <div class="view-page" id="view-egbe-graph"></div>
 
     </main>
 
-    <!-- ─── Footer ─── -->
-    <footer class="app-footer">
-      EgBE Memory Engine · Mahidol University · Biomedical Engineering
-    </footer>
-
     <!-- ─── Mobile Bottom Navigation ─── -->
-    <nav class="mobile-nav" aria-label="เมนูล่าง">
-      <button class="mob-nav-btn active" data-view="home">
-        <span class="mob-icon">🏠</span>
-        <span>Home</span>
-      </button>
-      <button class="mob-nav-btn" data-view="dashboard">
-        <span class="mob-icon">🗓</span>
-        <span>Dashboard</span>
-      </button>
-      <button class="mob-nav-btn" data-view="curriculum">
-        <span class="mob-icon">📚</span>
-        <span>Curriculum</span>
-      </button>
-      <button class="mob-nav-btn" data-view="study">
-        <span class="mob-icon">📂</span>
-        <span>Study</span>
-      </button>
-      <button class="mob-nav-btn" data-view="graph">
-        <span class="mob-icon">🕸️</span>
-        <span>Graph</span>
-      </button>
-      <button class="mob-nav-btn" id="mob-theme-toggle">
-        <span class="mob-icon">🌙</span>
-        <span>Theme</span>
-      </button>
+    <nav class="mobile-nav" aria-label="Mobile Navigation">
+      <div class="mobile-nav-inner">
+        <button class="mob-btn active" data-view="home" aria-label="Home">
+          <span class="mob-icon">🏠</span>
+          <span class="mob-lbl">Home</span>
+        </button>
+        <button class="mob-btn" data-view="dashboard" aria-label="Daily">
+          <span class="mob-icon">📅</span>
+          <span class="mob-lbl">Daily</span>
+        </button>
+        <button class="mob-btn" data-view="curriculum" aria-label="Curriculum">
+          <span class="mob-icon">📚</span>
+          <span class="mob-lbl">Curriculum</span>
+        </button>
+        <button class="mob-btn" data-view="study" aria-label="Study">
+          <span class="mob-icon">📝</span>
+          <span class="mob-lbl">Study</span>
+        </button>
+        <button class="mob-btn" data-view="graph" aria-label="Graph">
+          <span class="mob-icon">🕸️</span>
+          <span class="mob-lbl">Graph</span>
+        </button>
+        <button class="mob-btn" id="mob-theme-toggle" aria-label="Dark/Light Mode">
+          <span class="mob-icon">🌙</span>
+          <span class="mob-lbl">Theme</span>
+        </button>
+      </div>
     </nav>
 
-    <!-- ─── Edit Modal (9th verbatim) ─── -->
+    <!-- ─── Edit Modal (9th Verbatim) ─── -->
     <div class="modal-overlay" id="edit-modal" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">
       <div class="modal-box">
         <div class="modal-header">
-          <span class="modal-title" id="edit-modal-title">แก้ไขกิจกรรม</span>
+          <span class="modal-title" id="edit-modal-title">✏️ แก้ไขกิจกรรม</span>
           <button class="modal-close" id="edit-cancel-btn" aria-label="ปิด">✕</button>
         </div>
         <div class="modal-body"></div>
         <div class="modal-actions">
-          <button class="btn btn-danger"    id="edit-delete-btn">ลบ</button>
-          <button class="btn btn-secondary" id="edit-cancel-btn-footer">ยกเลิก</button>
-          <button class="btn btn-primary"   id="edit-save-btn">บันทึก</button>
+          <button class="btn btn-danger" id="edit-delete-btn">🗑️ ลบกิจกรรม</button>
+          <button class="btn btn-secondary" id="edit-cancel-action-btn">ยกเลิก</button>
+          <button class="btn btn-primary" id="edit-save-btn">💾 บันทึก</button>
         </div>
       </div>
     </div>
 
-    <!-- ─── Add Modal (9th verbatim) ─── -->
+    <!-- ─── Add Block Modal (9th Verbatim) ─── -->
     <div class="modal-overlay" id="add-modal" role="dialog" aria-modal="true" aria-labelledby="add-modal-title">
       <div class="modal-box">
         <div class="modal-header">
-          <span class="modal-title" id="add-modal-title">เพิ่มกิจกรรม</span>
+          <span class="modal-title" id="add-modal-title">➕ เพิ่มกิจกรรมใหม่</span>
           <button class="modal-close" id="add-cancel-btn" aria-label="ปิด">✕</button>
         </div>
-        <div class="modal-body"></div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">หัวข้อกิจกรรม *</label>
+            <input id="add-title" class="form-input" type="text" placeholder="เช่น ทบทวนวิชา Math 1..." />
+          </div>
+          <div class="form-group">
+            <label class="form-label">ชื่อย่อ / ห้องเรียน</label>
+            <input id="add-subtitle" class="form-input" type="text" placeholder="เช่น SCMA101 / ห้อง 405" />
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">เวลาเริ่ม</label>
+              <input id="add-start" class="form-input" type="time" value="18:00" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">เวลาสิ้นสุด</label>
+              <input id="add-end" class="form-input" type="time" value="19:00" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">หมวดหมู่</label>
+            <div class="tag-selector" id="add-tag-selector"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">บันทึกเพิ่มเติม</label>
+            <input id="add-notes" class="form-input" type="text" placeholder="เช่น ทำแบบฝึกหัดท้ายบท..." />
+          </div>
+          <div class="form-group">
+            <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="checkbox" id="add-is-study" style="width:16px;height:16px;cursor:pointer" />
+              <span>เป็นบล็อกอ่านหนังสือ (มี Checklist ให้ติ๊ก)</span>
+            </label>
+          </div>
+        </div>
         <div class="modal-actions">
-          <button class="btn btn-secondary" id="add-cancel-btn-footer">ยกเลิก</button>
-          <button class="btn btn-primary"   id="add-save-btn">เพิ่ม</button>
+          <button class="btn btn-secondary" id="add-cancel-action-btn">ยกเลิก</button>
+          <button class="btn btn-primary" id="add-save-btn">➕ เพิ่มกิจกรรม</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── Add/Edit Study Resource Modal ─── -->
+    <div class="modal-overlay" id="resource-modal" role="dialog" aria-modal="true" aria-labelledby="resource-modal-title">
+      <div class="modal-box">
+        <div class="modal-header">
+          <span class="modal-title" id="resource-modal-title">➕ เพิ่มชีทเรียน / ลิงค์ใหม่</span>
+          <button class="modal-close" id="resource-modal-close" aria-label="ปิด">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">ชื่อชีท / เอกสาร / ลิงค์ *</label>
+            <input id="res-title" class="form-input" type="text" placeholder="เช่น สรุปสูตรเคมี Final, ชีทสรุป BME..." />
+          </div>
+          <div class="form-group">
+            <label class="form-label">โฟลเดอร์จัดเก็บ</label>
+            <select id="res-folder" class="form-input"></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">ประเภทเอกสาร</label>
+            <select id="res-type" class="form-input">
+              <option value="pdf">📄 PDF Document (พรีวิวในแอป)</option>
+              <option value="classroom">🏫 Google Classroom</option>
+              <option value="drive">📁 Google Drive Folder</option>
+              <option value="image">🖼️ ภาพตาราง / Mindmap</option>
+              <option value="link">🔗 ลิงค์เว็บไซต์ทั่วไป</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">URL หรือชื่อไฟล์ PDF/รูปภาพ *</label>
+            <input id="res-url" class="form-input" type="text" placeholder="https://drive.google.com/... หรือชื่อไฟล์.pdf" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">คำอธิบายเพิ่มเติม</label>
+            <input id="res-desc" class="form-input" type="text" placeholder="เช่น สรุปบทที่ 1-4 ใช้สอบ Midterm" />
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="res-cancel-btn">ยกเลิก</button>
+          <button class="btn btn-primary" id="res-save-btn">💾 บันทึกเอกสาร</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── Folder Modal (Create / Rename Folder) ─── -->
+    <div class="modal-overlay" id="folder-modal" role="dialog" aria-modal="true" aria-labelledby="folder-modal-title">
+      <div class="modal-box">
+        <div class="modal-header">
+          <span class="modal-title" id="folder-modal-title">📁 โฟลเดอร์</span>
+          <button class="modal-close" id="folder-modal-close" aria-label="ปิด">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">ชื่อโฟลเดอร์ *</label>
+            <input id="folder-name-input" class="form-input" type="text" placeholder="เช่น 📁 ชีทสรุปเตรียมสอบ..." />
+          </div>
+          <div class="form-group">
+            <label class="form-label">ไอคอนแสดงผล</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button type="button" class="folder-icon-choice active" data-icon="📁">📁</button>
+              <button type="button" class="folder-icon-choice" data-icon="📘">📘</button>
+              <button type="button" class="folder-icon-choice" data-icon="📑">📑</button>
+              <button type="button" class="folder-icon-choice" data-icon="🏫">🏫</button>
+              <button type="button" class="folder-icon-choice" data-icon="🔬">🔬</button>
+              <button type="button" class="folder-icon-choice" data-icon="⚡">⚡</button>
+              <button type="button" class="folder-icon-choice" data-icon="💡">💡</button>
+              <button type="button" class="folder-icon-choice" data-icon="⭐">⭐</button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="folder-cancel-btn">ยกเลิก</button>
+          <button class="btn btn-primary" id="folder-save-btn">💾 บันทึกโฟลเดอร์</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── Move File Modal (Quick Move for iPad & Touch) ─── -->
+    <div class="modal-overlay" id="move-file-modal" role="dialog" aria-modal="true" aria-labelledby="move-modal-title">
+      <div class="modal-box">
+        <div class="modal-header">
+          <span class="modal-title" id="move-modal-title">📂 ย้ายเอกสารไปยังโฟลเดอร์</span>
+          <button class="modal-close" id="move-modal-close" aria-label="ปิด">✕</button>
+        </div>
+        <div class="modal-body">
+          <div id="move-file-name" style="font-weight:600;margin-bottom:12px;color:var(--label)"></div>
+          <div class="form-group">
+            <label class="form-label">เลือกโฟลเดอร์ปลายทาง</label>
+            <div id="move-folder-options" style="display:flex;flex-direction:column;gap:8px"></div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="move-cancel-btn">ยกเลิก</button>
         </div>
       </div>
     </div>
@@ -200,17 +292,17 @@
         </div>
         <div class="modal-body">
           <p style="font-size:12.5px;color:var(--label-2);line-height:1.5;margin-bottom:12px">
-            ตั้งค่า <strong>Sync Key</strong> เดียวกัน (เช่น <code>my-bme-2026</code>) บน iPad, iPhone, Mac และ PC เพื่อซิงค์ตารางเรียน, Checklist และชีทสรุปแบบเรียลไทม์!
+            ตั้งค่า <strong>Sync Key</strong> เดียวกัน (ค่าเริ่มต้นคือ <code>1</code>) บน iPad, iPhone, Mac และ PC เพื่อซิงค์ตารางเรียน, Checklist และโฟลเดอร์ชีทเรียนแบบเรียลไทม์อัตโนมัติ!
           </p>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:6px">
-            <div id="modal-sync-status" class="status-badge">⚪ ข้อมูลเก็บในเครื่องนี้เท่านั้น</div>
+            <div id="modal-sync-status" class="status-badge">⚪ กำลังตรวจสอบสถานะ Cloud...</div>
             <div id="modal-sync-time" style="font-size:11px;color:var(--label-3);font-family:var(--font-mono)"></div>
           </div>
           <div class="form-group">
             <label class="form-label">Sync Key / รหัสเชื่อมต่อ</label>
-            <input id="sync-key-input" class="form-input" type="text" placeholder="เช่น my-bme-pass-99" />
+            <input id="sync-key-input" class="form-input" type="text" placeholder="เช่น 1 หรือ my-bme-pass" />
           </div>
-          <div style="display:flex;gap:8px;margin-top:12px">
+          <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
             <button class="btn btn-secondary" id="sync-force-pull-btn" style="font-size:11.5px;padding:7px 10px" title="ดึงข้อมูลจาก Cloud มาเขียนทับเครื่องนี้">
               📥 ดึงข้อมูลจาก Cloud
             </button>
@@ -226,22 +318,28 @@
       </div>
     </div>
 
-    <!-- ─── In-App Resource Preview Modal ─── -->
+    <!-- ─── In-App Multi-Page PDF & Resource Preview Modal ─── -->
     <div class="modal-overlay" id="preview-modal" role="dialog" aria-modal="true" aria-labelledby="preview-modal-title">
       <div class="modal-box modal-box-large">
-        <div class="modal-header">
+        <div class="modal-header" style="position:sticky;top:0;z-index:20;background:var(--bg-1);border-bottom:1px solid var(--sep)">
           <div style="display:flex;align-items:center;gap:8px;min-width:0">
+            <button class="btn btn-secondary" id="preview-back-btn" style="font-size:12px;padding:5px 12px;display:inline-flex;align-items:center;gap:4px;font-weight:600">
+              🔙 กลับหน้าหลัก
+            </button>
             <span id="preview-badge" class="online-pill" style="background:var(--accent-bg);color:var(--accent)">PREVIEW</span>
             <span class="modal-title" id="preview-modal-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">ตัวอย่างเอกสาร</span>
           </div>
           <button class="modal-close" id="preview-close-btn" aria-label="ปิด">✕</button>
         </div>
-        <div class="resource-preview-body" id="preview-modal-body"></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px" id="preview-modal-actions">
+        
+        <!-- Multi-page scrollable canvas/document container -->
+        <div class="resource-preview-body" id="preview-modal-body" style="overflow-y:auto;-webkit-overflow-scrolling:touch;max-height:calc(85vh - 120px)"></div>
+        
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 18px;border-top:1px solid var(--sep);background:var(--bg-1)" id="preview-modal-actions">
           <div style="font-size:12px;color:var(--label-3)" id="preview-meta-info"></div>
           <div style="display:flex;gap:8px">
             <button class="btn btn-secondary" id="preview-copy-link-btn">📋 คัดลอกลิงค์</button>
-            <a href="#" target="_blank" rel="noopener" class="btn btn-primary" id="preview-open-ext-btn" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:6px">
+            <a href="#" target="_blank" rel="noopener noreferrer" class="btn btn-primary" id="preview-open-ext-btn" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:6px">
               🚀 เปิดในแท็บใหม่
             </a>
           </div>
