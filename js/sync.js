@@ -1,42 +1,37 @@
 // ============================================================
 // sync.js — Real-Time Cloud Sync Module (Passcode / Sync Key)
-// Multi-Tier Sync: Local Server, Production Cloud Backend, & Offline Fallback
+// Ultra Fast Real-Time Sync: Cached Active Endpoints, BroadcastChannel,
+// Push Queuing, Fast Polling & Instant Refresh
 // ============================================================
 
 const CloudSync = (function() {
   'use strict';
 
-  // Primary API endpoints to try
-  function getApiEndpoints(key) {
-    const encodedKey = encodeURIComponent(key.trim());
-    const endpoints = [];
-
-    // 1. Current Origin if served over HTTP/HTTPS
-    if (window.location.protocol.startsWith('http')) {
-      endpoints.push(`${window.location.origin}/api/sync/${encodedKey}`);
+  // BroadcastChannel for instant 0ms cross-tab sync on same device
+  let syncChannel = null;
+  try {
+    if (typeof BroadcastChannel !== 'undefined') {
+      syncChannel = new BroadcastChannel('egbe-realtime-sync');
     }
-
-    // 2. Local Node dev server
-    endpoints.push(`http://localhost:3000/api/sync/${encodedKey}`);
-    endpoints.push(`http://127.0.0.1:3000/api/sync/${encodedKey}`);
-
-    // 3. Fallback Cloud Production Gateway (Railway / Public Backend)
-    endpoints.push(`https://daily-study-dashboard-production.up.railway.app/api/sync/${encodedKey}`);
-
-    return endpoints;
-  }
+  } catch (e) {}
 
   let syncKey = localStorage.getItem('sd-sync-key') || '';
   let syncStatus = syncKey ? 'synced' : 'local'; // 'local' | 'synced' | 'syncing' | 'error'
   let autoSyncTimer = null;
   let lastSyncTime = parseInt(localStorage.getItem('sd-last-sync-time') || '0', 10);
-  let isSyncing = false;
+  
+  let isPushing = false;
+  let hasPendingPush = false;
+  let pendingData = null;
+  let cachedWorkingBaseUrl = null;
+  let isPulling = false;
 
   function getSyncKey() { return syncKey; }
   function getLastSyncTime() { return lastSyncTime; }
 
   function setSyncKey(key) {
     syncKey = (key || '').trim();
+    cachedWorkingBaseUrl = null; // reset cache on key change
     if (syncKey) {
       localStorage.setItem('sd-sync-key', syncKey);
       syncStatus = 'synced';
@@ -45,13 +40,63 @@ const CloudSync = (function() {
       syncStatus = 'local';
     }
     updateUIStatus();
+
+    // Broadcast key change to other tabs
+    if (syncChannel) {
+      syncChannel.postMessage({ type: 'SYNC_KEY_CHANGED', syncKey });
+    }
   }
 
-  // Push local state to Cloud
+  // Get candidate URLs for current sync key
+  function getCandidateBaseUrls() {
+    const urls = [];
+    if (cachedWorkingBaseUrl) {
+      urls.push(cachedWorkingBaseUrl);
+    }
+    if (window.location.protocol.startsWith('http')) {
+      const originUrl = `${window.location.origin}/api/sync`;
+      if (!urls.includes(originUrl)) urls.push(originUrl);
+    }
+    const local1 = 'http://localhost:3000/api/sync';
+    const local2 = 'http://127.0.0.1:3000/api/sync';
+    const cloud1 = 'https://daily-study-dashboard-production.up.railway.app/api/sync';
+
+    if (!urls.includes(local1)) urls.push(local1);
+    if (!urls.includes(local2)) urls.push(local2);
+    if (!urls.includes(cloud1)) urls.push(cloud1);
+
+    return urls;
+  }
+
+  // Push local state to Cloud with Queuing & Immediate Tab Broadcast
   async function pushToCloud(data) {
-    if (!syncKey || isSyncing) return { ok: false, reason: 'no-key-or-busy' };
+    // 1. Broadcast locally to all other tabs on this device immediately (0ms)
+    if (syncChannel) {
+      try {
+        syncChannel.postMessage({
+          type: 'REMOTE_DATA_UPDATED',
+          data: {
+            checklist: data.checklist || {},
+            subjects: data.subjects || {},
+            customBlocks: data.customBlocks || {},
+            studyLinks: data.studyLinks || [],
+            updatedAt: new Date().toISOString()
+          }
+        });
+      } catch (e) {}
+    }
+
+    if (!syncKey) return { ok: false, reason: 'no-key' };
+
+    // Queue push if already in progress
+    if (isPushing) {
+      hasPendingPush = true;
+      pendingData = data;
+      return { ok: true, queued: true };
+    }
+
+    isPushing = true;
     syncStatus = 'syncing';
-    isSyncing = true;
     updateUIStatus();
 
     const payload = JSON.stringify({
@@ -62,16 +107,17 @@ const CloudSync = (function() {
       updatedAt: new Date().toISOString()
     });
 
-    const endpoints = getApiEndpoints(syncKey);
+    const candidateUrls = getCandidateBaseUrls();
     let success = false;
     let lastError = null;
 
-    for (const url of endpoints) {
+    for (const baseUrl of candidateUrls) {
       try {
+        const targetUrl = `${baseUrl}/${encodeURIComponent(syncKey)}`;
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
 
-        const res = await fetch(url, {
+        const res = await fetch(targetUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: payload,
@@ -81,52 +127,60 @@ const CloudSync = (function() {
 
         if (res.ok) {
           success = true;
-          syncStatus = 'synced';
+          cachedWorkingBaseUrl = baseUrl;
           lastSyncTime = Date.now();
           localStorage.setItem('sd-last-sync-time', String(lastSyncTime));
           break;
         }
       } catch (err) {
         lastError = err;
-        // Continue trying fallback endpoint
       }
     }
 
-    isSyncing = false;
+    isPushing = false;
+
     if (success) {
       syncStatus = 'synced';
       updateUIStatus();
-      return { ok: true };
     } else {
       syncStatus = 'error';
       updateUIStatus();
-      return { ok: false, error: lastError };
     }
+
+    // Process queued push if another modification occurred while pushing
+    if (hasPendingPush && pendingData) {
+      hasPendingPush = false;
+      const nextData = pendingData;
+      pendingData = null;
+      return pushToCloud(nextData);
+    }
+
+    return success ? { ok: true } : { ok: false, error: lastError };
   }
 
-  // Pull data from Cloud
+  // Pull data from Cloud with Active Endpoint Caching
   async function pullFromCloud(isBackground = false) {
     if (!syncKey) return { ok: false, reason: 'no-key' };
-    if (isSyncing) return { ok: false, reason: 'busy' };
+    if (isPulling) return { ok: false, reason: 'pull-in-progress' };
 
     if (!isBackground) {
       syncStatus = 'syncing';
       updateUIStatus();
     }
-    isSyncing = true;
+    isPulling = true;
 
-    const endpoints = getApiEndpoints(syncKey);
+    const candidateUrls = getCandidateBaseUrls();
     let foundData = null;
     let is404 = false;
     let lastError = null;
 
-    for (const baseUrl of endpoints) {
+    for (const baseUrl of candidateUrls) {
       try {
-        const url = `${baseUrl}?t=${Date.now()}`;
+        const targetUrl = `${baseUrl}/${encodeURIComponent(syncKey)}?t=${Date.now()}`;
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
 
-        const res = await fetch(url, {
+        const res = await fetch(targetUrl, {
           method: 'GET',
           signal: controller.signal
         });
@@ -134,20 +188,21 @@ const CloudSync = (function() {
 
         if (res.status === 404) {
           is404 = true;
+          cachedWorkingBaseUrl = baseUrl;
           break;
         }
 
         if (res.ok) {
           foundData = await res.json();
+          cachedWorkingBaseUrl = baseUrl;
           break;
         }
       } catch (err) {
         lastError = err;
-        // Continue trying fallback endpoint
       }
     }
 
-    isSyncing = false;
+    isPulling = false;
 
     if (foundData) {
       syncStatus = 'synced';
@@ -187,7 +242,7 @@ const CloudSync = (function() {
       }
     } else if (syncStatus === 'syncing') {
       btn.innerHTML = '🔄 Syncing...';
-      btn.title = 'กำลังส่งข้อมูลไปยัง Cloud...';
+      btn.title = 'กำลังซิงค์ข้อมูลกับ Cloud...';
       if (modalBadge) {
         modalBadge.className = 'status-badge dorm';
         modalBadge.textContent = '🔄 กำลังซิงค์ข้อมูลกับ Cloud...';
@@ -201,7 +256,7 @@ const CloudSync = (function() {
       }
     } else if (syncStatus === 'error') {
       btn.innerHTML = '⚠️ Offline';
-      btn.title = 'ไม่สามารถเชื่อมต่อ Cloud ได้ชั่วคราว (จะซิงค์ใหม่อัตโนมัติเมื่อออนไลน์)';
+      btn.title = 'เชื่อมต่อแบบออฟไลน์ชั่วคราว (จะซิงค์ใหม่อัตโนมัติเมื่อออนไลน์)';
       if (modalBadge) {
         modalBadge.className = 'status-badge';
         modalBadge.style.background = 'rgba(239,68,68,0.12)';
@@ -211,20 +266,42 @@ const CloudSync = (function() {
     }
   }
 
+  // Fast Real-Time Auto Sync (2.5s Polling + Visibility + Focus + BroadcastChannel)
   function startAutoSync(onRemoteUpdate) {
     if (autoSyncTimer) clearInterval(autoSyncTimer);
 
-    // Poll every 8 seconds silently if syncKey is set
+    // 1. Listen for instant local updates across tabs (0ms)
+    if (syncChannel) {
+      syncChannel.onmessage = (event) => {
+        if (event.data && event.data.type === 'REMOTE_DATA_UPDATED' && event.data.data) {
+          if (onRemoteUpdate) onRemoteUpdate(event.data.data);
+        } else if (event.data && event.data.type === 'SYNC_KEY_CHANGED') {
+          syncKey = event.data.syncKey;
+          updateUIStatus();
+        }
+      };
+    }
+
+    // 2. Poll every 2.5 seconds if tab is visible
     autoSyncTimer = setInterval(async () => {
-      if (syncKey && document.visibilityState === 'visible') {
+      if (syncKey && document.visibilityState === 'visible' && !isPushing) {
         const result = await pullFromCloud(true);
         if (result.ok && result.data && onRemoteUpdate) {
           onRemoteUpdate(result.data);
         }
       }
-    }, 8000);
+    }, 2500);
 
-    // Pull when window gets focused
+    // 3. Instant pull when user switches to tab or focuses window
+    document.addEventListener('visibilitychange', async () => {
+      if (document.visibilityState === 'visible' && syncKey) {
+        const result = await pullFromCloud(true);
+        if (result.ok && result.data && onRemoteUpdate) {
+          onRemoteUpdate(result.data);
+        }
+      }
+    });
+
     window.addEventListener('focus', async () => {
       if (syncKey) {
         const result = await pullFromCloud(true);

@@ -170,13 +170,18 @@
     renderDayTabs();
     switchTopView('home');
 
-    // Auto sync background polling (smooth, no flicker)
+    // Auto sync background polling & BroadcastChannel (Instant real-time update)
     if (window.CloudSync) {
       CloudSync.startAutoSync(cloudData => {
         if (cloudData && hasDataChanged(cloudData)) {
           applyCloudData(cloudData);
+          const isTyping = document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
           if (state.currentTopView === 'dashboard') {
-            renderDashboardCurrentView();
+            if (!isTyping) {
+              renderDashboardCurrentView();
+            }
+          } else if (state.currentTopView === 'study' && !isTyping) {
+            renderStudyView();
           }
         }
       });
@@ -484,16 +489,24 @@
       });
     });
 
-    // Attach subject input listeners
+    // Attach subject input listeners (real-time input debounce + change)
+    let subjectDebounceTimer = null;
     container.querySelectorAll('.study-subject-input').forEach(inp => {
-      inp.addEventListener('change', (e) => {
+      const handleSave = () => {
         const blockId = inp.dataset.blockId;
         const sbIdx   = parseInt(inp.dataset.sbIdx, 10);
         const ck = getCheckKey(dayKey);
         if (!state.subjects[ck]) state.subjects[ck] = {};
-        state.subjects[ck][`${blockId}-${sbIdx}`] = e.target.value;
+        state.subjects[ck][`${blockId}-${sbIdx}`] = inp.value;
         saveSubjects();
+      };
+
+      inp.addEventListener('input', () => {
+        clearTimeout(subjectDebounceTimer);
+        subjectDebounceTimer = setTimeout(handleSave, 300);
       });
+
+      inp.addEventListener('change', handleSave);
     });
 
     // Attach edit listeners
