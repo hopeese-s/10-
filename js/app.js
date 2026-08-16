@@ -547,8 +547,8 @@
     state.currentDashboardView = subviewName;
 
     // Show/hide subviews in Dashboard
-    document.querySelectorAll('#view-egbe-dashboard .view').forEach(v => v.classList.remove('active'));
-    const target = document.getElementById(`view-${subviewName}`);
+    document.querySelectorAll('#view-egbe-dashboard .sub-view-panel').forEach(v => v.classList.remove('active'));
+    const target = document.getElementById(`subview-${subviewName}`);
     if (target) target.classList.add('active');
 
     // Update segmented control buttons
@@ -1215,20 +1215,6 @@
     });
   }
 
-  // ─── View 3: Study Resources (Link Drive / Sheet / Files) ─
-  function renderStudyView() {
-    const container = document.getElementById('view-egbe-study');
-    if (!container) return;
-
-    const currentFilter = state.studyFilter || 'all';
-
-    // Count statistics
-    const totalCount     = state.studyLinks.length;
-    const classroomCount = state.studyLinks.filter(l => l.type === 'classroom').length;
-    const driveCount     = state.studyLinks.filter(l => l.type === 'drive').length;
-    const docCount       = state.studyLinks.filter(l => l.type === 'pdf' || l.type === 'image' || l.type === 'sheet').length;
-
-    // Filter items
   // ─── View 3: Study Resources (Folders, Search, Multi-Page PDF.js, Drag & Drop) ─
   let studySearchQuery = '';
 
