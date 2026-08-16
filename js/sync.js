@@ -72,7 +72,7 @@ const CloudSync = (function () {
 
     try {
       const ctrl = new AbortController();
-      const tid = setTimeout(() => ctrl.abort(), 5000);
+      const tid = setTimeout(() => ctrl.abort(), 15000);
       const res = await fetch(`${API}/${encodeURIComponent(syncKey)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -115,7 +115,7 @@ const CloudSync = (function () {
 
     try {
       const ctrl = new AbortController();
-      const tid = setTimeout(() => ctrl.abort(), 5000);
+      const tid = setTimeout(() => ctrl.abort(), 15000);
       const res = await fetch(`${API}/${encodeURIComponent(syncKey)}?t=${Date.now()}`, {
         signal: ctrl.signal
       });

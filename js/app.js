@@ -2431,16 +2431,28 @@
       if (key) {
         showToast('🔄 กำลังเชื่อมต่อและซิงค์ข้อมูลกับ Cloud...', 'info');
         const pullRes = await CloudSync.pullFromCloud();
-        if (pullRes && pullRes.ok && pullRes.data) {
-          const syncRes = syncSmartWithCloud(pullRes.data);
-          if (syncRes === 'pulled' || syncRes === 'merged') {
-            if (state.currentTopView === 'dashboard') renderDashboardCurrentView();
-            else if (state.currentTopView === 'study') renderStudyView();
-            showToast('✅ ดึงข้อมูลล่าสุดจาก Cloud มาอัปเดตเครื่องนี้แล้ว!', 'success');
-          } else if (syncRes === 'pushed') {
-            showToast('✅ ข้อมูลในเครื่องนี้ล่าสุดกว่า! อัปเดตขึ้น Cloud เรียบร้อย', 'success');
+        if (pullRes && pullRes.ok) {
+          if (pullRes.notFound || !pullRes.data) {
+            const pushRes = await CloudSync.pushToCloud(state);
+            if (pushRes.ok) showToast('✅ สร้างฐานข้อมูลบน Cloud เรียบร้อย', 'success');
+            else showToast('❌ ไม่สามารถสร้างฐานข้อมูลบน Cloud ได้', 'error');
           } else {
-            showToast('✅ ข้อมูลตรงกันกับ Cloud เรียบร้อย', 'success');
+            const syncRes = syncSmartWithCloud(pullRes.data);
+            if (syncRes === 'pulled' || syncRes === 'merged') {
+              if (state.currentTopView === 'dashboard') renderDashboardCurrentView();
+              else if (state.currentTopView === 'study') renderStudyView();
+              showToast('✅ ดึงข้อมูลล่าสุดจาก Cloud มาอัปเดตเครื่องนี้แล้ว!', 'success');
+            } else if (syncRes === 'pushed') {
+              showToast('✅ ข้อมูลในเครื่องนี้ล่าสุดกว่า! อัปเดตขึ้น Cloud เรียบร้อย', 'success');
+            } else {
+              showToast('✅ ข้อมูลตรงกันกับ Cloud เรียบร้อย', 'success');
+            }
+          }
+        } else {
+          if (pullRes && pullRes.reason === 'busy') {
+            showToast('⚠️ ระบบกำลังซิงค์อยู่แล้ว โปรดรอสักครู่', 'warning');
+          } else {
+            showToast('❌ ขาดการเชื่อมต่อกับ Cloud หรือ Server ไม่ตอบสนอง', 'error');
           }
         }
       }
