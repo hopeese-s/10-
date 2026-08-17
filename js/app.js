@@ -2062,14 +2062,18 @@
     const metaEl = document.getElementById('preview-meta-info');
     if (metaEl) metaEl.textContent = item.sub || item.desc || '';
 
-    // External open button
+    // External open button -> opens dedicated viewer.html with persistent Back to E-Calendar bar!
     const extBtn = document.getElementById('preview-open-ext-btn');
     if (extBtn) {
-      if (item.type === 'local') {
-        extBtn.style.display = 'none';
+      extBtn.style.display = 'inline-flex';
+      if (item.url && item.url.startsWith('data:')) {
+        extBtn.href = `viewer.html?id=${encodeURIComponent(item.id)}&title=${encodeURIComponent(item.title || 'เอกสาร')}&type=${encodeURIComponent(item.type || 'pdf')}`;
+        extBtn.onclick = () => {
+          try { sessionStorage.setItem('viewer_data_' + item.id, item.url); } catch (_) {}
+        };
       } else {
-        extBtn.style.display = 'inline-flex';
-        extBtn.href = item.url || '#';
+        extBtn.href = `viewer.html?url=${encodeURIComponent(item.url || '')}&title=${encodeURIComponent(item.title || 'เอกสาร')}&type=${encodeURIComponent(item.type || 'pdf')}`;
+        extBtn.onclick = null;
       }
     }
 

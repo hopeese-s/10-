@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="th" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>เอกสาร — E-Calendar Viewer</title>
+  <link rel="icon" type="image/x-icon" href="favicon.ico" />
+  <link rel="shortcut icon" type="image/x-icon" href="favicon.ico" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg-3);
+      font-family: var(--font-sans);
+    }
+    .viewer-app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      width: 100vw;
+    }
+    .viewer-header {
+      background: var(--bg-1);
+      border-bottom: 1px solid var(--sep);
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      z-index: 100;
+      box-shadow: var(--shadow-1);
+      flex-wrap: wrap;
+    }
+    .viewer-title-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      flex: 1;
+    }
+    .viewer-title {
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--label);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .viewer-main {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      background: var(--bg-3);
+    }
+    .pdf-page-wrapper {
+      background: #fff;
+      border-radius: 6px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+      margin-bottom: 20px;
+      overflow: hidden;
+    }
+    .back-btn-main {
+      background: var(--accent);
+      color: #fff;
+      font-weight: 700;
+      font-size: 13px;
+      padding: 8px 16px;
+      border-radius: var(--r-pill);
+      border: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      text-decoration: none;
+      box-shadow: 0 2px 8px rgba(196, 90, 27, 0.35);
+      transition: transform 0.15s, filter 0.15s;
+      flex-shrink: 0;
+    }
+    .back-btn-main:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.08);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="viewer-app">
+    <!-- Top Persistent Navigation Bar -->
+    <header class="viewer-header">
+      <div class="viewer-title-group">
+        <button id="viewer-back-btn" class="back-btn-main" title="กลับสู่หน้า E-Calendar">
+          🔙 ย้อนกลับ E-Calendar
+        </button>
+        <span class="online-pill" id="viewer-type-badge" style="background:var(--accent-bg);color:var(--accent)">DOC</span>
+        <span class="viewer-title" id="viewer-doc-title">กำลังเปิดเอกสาร...</span>
+      </div>
+
+      <!-- Controls toolbar (Zoom, Modes) -->
+      <div id="viewer-toolbar" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <div style="display:flex;border-radius:var(--r-pill);overflow:hidden;border:1px solid var(--sep)" id="mode-switch-group">
+          <button id="viewer-mode-scroll" class="btn btn-secondary" style="padding:5px 12px;font-size:12px;font-weight:700;border-radius:0;background:var(--accent-bg);color:var(--accent)">📜 เลื่อนดูต่อเนื่อง</button>
+          <button id="viewer-mode-page" class="btn btn-secondary" style="padding:5px 12px;font-size:12px;font-weight:600;border-radius:0">📄 ทีละหน้า</button>
+        </div>
+        <div id="viewer-nav-btns" style="display:none;align-items:center;gap:4px">
+          <button id="viewer-prev" class="btn btn-secondary" style="padding:5px 10px;font-size:12px">◀️</button>
+          <span id="viewer-page-info" style="font-size:12px;font-weight:600;color:var(--label-2);min-width:50px;text-align:center">1 / 1</span>
+          <button id="viewer-next" class="btn btn-secondary" style="padding:5px 10px;font-size:12px">▶️</button>
+        </div>
+        <button id="viewer-zoom-out" class="btn btn-secondary" style="padding:5px 10px;font-size:12px;font-weight:600" title="ย่อ">🔍 -</button>
+        <span id="viewer-zoom-val" style="font-size:12px;font-weight:600;min-width:40px;text-align:center;color:var(--label)">100%</span>
+        <button id="viewer-zoom-in" class="btn btn-secondary" style="padding:5px 10px;font-size:12px;font-weight:600" title="ขยาย">🔍 +</button>
+        <button id="viewer-zoom-fit" class="btn btn-secondary" style="padding:5px 10px;font-size:12px;font-weight:600" title="ปรับให้พอดีจอ">📐 พอดีจอ</button>
+      </div>
+    </header>
+
+    <!-- Document Viewing Container -->
+    <main class="viewer-main" id="viewer-main-container">
+      <div id="viewer-loading" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;gap:14px;color:var(--label-2)">
+        <div style="font-size:36px">⏳</div>
+        <div style="font-weight:600;font-size:15px">กำลังโหลดเอกสาร...</div>
+      </div>
+      <div id="viewer-content" style="width:100%;display:flex;flex-direction:column;align-items:center;"></div>
+    </main>
+  </div>
+
+  <script>
+    (function() {
+      // Parse query params
+      const params = new URLSearchParams(window.location.search);
+      const title = params.get('title') || 'เอกสาร';
+      let url = params.get('url') || '';
+      const id = params.get('id') || '';
+      const type = params.get('type') || 'pdf';
+
+      // Title & Badge setup
+      document.title = `${title} — E-Calendar`;
+      document.getElementById('viewer-doc-title').textContent = title;
+      const badge = document.getElementById('viewer-type-badge');
+      if (badge) {
+        const map = { pdf: '📄 PDF', image: '🖼️ IMAGE', local: '💾 UPLOAD', drive: '📁 DRIVE', classroom: '🎓 CLASS' };
+        badge.textContent = map[type] || '📄 DOC';
+      }
+
+      // Check session storage for large/local base64 file payloads
+      if (!url && id) {
+        url = sessionStorage.getItem('viewer_data_' + id) || '';
+      }
+
+      // Back Button Handler: focus parent tab or close, or redirect to home
+      const backBtn = document.getElementById('viewer-back-btn');
+      backBtn.onclick = function(e) {
+        e.preventDefault();
+        try {
+          if (window.opener && !window.opener.closed) {
+            window.opener.focus();
+            window.close();
+            return;
+          }
+        } catch (_) {}
+        // Fallback: navigate to main app
+        window.location.href = './';
+      };
+
+      const container = document.getElementById('viewer-main-container');
+      const contentEl = document.getElementById('viewer-content');
+      const loadingEl = document.getElementById('viewer-loading');
+      const toolbar = document.getElementById('viewer-toolbar');
+
+      if (!url) {
+        loadingEl.innerHTML = `
+          <div style="font-size:36px">⚠️</div>
+          <div style="font-weight:600;font-size:15px;color:var(--danger)">ไม่พบ URL หรือข้อมูลเอกสาร</div>
+          <button class="back-btn-main" onclick="window.location.href='./'">🔙 กลับสู่ E-Calendar</button>
+        `;
+        toolbar.style.display = 'none';
+        return;
+      }
+
+      // Check file type
+      const isPdf = type === 'pdf' || (type === 'local' && (url.startsWith('data:application/pdf') || url.endsWith('.pdf'))) || url.includes('.pdf');
+      const isImage = type === 'image' || (type === 'local' && url.startsWith('data:image/'));
+
+      if (isImage) {
+        toolbar.style.display = 'none';
+        loadingEl.style.display = 'none';
+        contentEl.innerHTML = `
+          <div style="display:flex;flex-direction:column;align-items:center;padding:20px;max-width:100%">
+            <img src="${url}" alt="${title}" style="max-width:100%;height:auto;max-height:85vh;object-fit:contain;border-radius:var(--r-m);box-shadow:var(--shadow-3)" />
+          </div>
+        `;
+        return;
+      }
+
+      if (!isPdf) {
+        // External link / Google Classroom / Drive
+        toolbar.style.display = 'none';
+        loadingEl.style.display = 'none';
+        contentEl.innerHTML = `
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:65vh;gap:20px;text-align:center;padding:24px">
+            <div style="font-size:54px">🚀</div>
+            <div style="font-size:18px;font-weight:700;color:var(--label)">${title}</div>
+            <div style="font-size:12.5px;color:var(--label-3);background:var(--bg-1);padding:10px 18px;border-radius:var(--r-m);border:1px solid var(--sep);word-break:break-all;max-width:600px">${url}</div>
+            <div style="display:flex;gap:12px;margin-top:8px">
+              <button class="back-btn-main" onclick="window.location.href='./'">🔙 กลับหน้าหลัก</button>
+              <a href="${url}" target="_blank" rel="noopener noreferrer" style="background:var(--accent);color:#fff;font-weight:700;padding:8px 20px;border-radius:var(--r-pill);text-decoration:none;display:inline-flex;align-items:center;gap:6px">เปิดเว็บไซต์ต้นทาง ↗</a>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      // PDF.js Viewer Engine
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+      let pdfDoc = null;
+      let numPages = 0;
+      let currentPage = 1;
+      let currentScale = 1.1;
+      let viewMode = 'scroll'; // default scroll
+      let isRendering = false;
+
+      const zoomVal = document.getElementById('viewer-zoom-val');
+      const pageInfo = document.getElementById('viewer-page-info');
+      const navGroup = document.getElementById('viewer-nav-btns');
+      const modeScrollBtn = document.getElementById('viewer-mode-scroll');
+      const modePageBtn = document.getElementById('viewer-mode-page');
+      const prevBtn = document.getElementById('viewer-prev');
+      const nextBtn = document.getElementById('viewer-next');
+
+      pdfjsLib.getDocument(url).promise.then(async (pdf) => {
+        pdfDoc = pdf;
+        numPages = pdf.numPages;
+        loadingEl.style.display = 'none';
+
+        // Calculate auto-fit scale
+        const firstPage = await pdfDoc.getPage(1);
+        const vp = firstPage.getViewport({ scale: 1.0 });
+        const availW = Math.max(280, window.innerWidth - 60);
+        currentScale = Math.max(0.4, Math.min(1.5, availW / vp.width));
+        zoomVal.textContent = `${Math.round(currentScale * 100)}%`;
+
+        renderDocument();
+      }).catch(err => {
+        console.warn('PDF.js loading error:', err);
+        loadingEl.innerHTML = `
+          <div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:24px">
+            <div style="font-size:36px">📄</div>
+            <div style="font-weight:600;font-size:15px;color:var(--label)">เปิดเอกสาร PDF ผ่านเบราว์เซอร์</div>
+            <iframe src="${url}" style="width:90vw;height:75vh;border:none;border-radius:var(--r-m);box-shadow:var(--shadow-2)"></iframe>
+          </div>
+        `;
+        toolbar.style.display = 'none';
+      });
+
+      async function renderDocument() {
+        if (!pdfDoc) return;
+        contentEl.innerHTML = '';
+        container.scrollTop = 0;
+
+        if (viewMode === 'scroll') {
+          navGroup.style.display = 'none';
+          modeScrollBtn.style.background = 'var(--accent-bg)';
+          modeScrollBtn.style.color = 'var(--accent)';
+          modeScrollBtn.style.fontWeight = '700';
+          modePageBtn.style.background = '';
+          modePageBtn.style.color = '';
+          modePageBtn.style.fontWeight = '600';
+
+          for (let i = 1; i <= numPages; i++) {
+            const page = await pdfDoc.getPage(i);
+            const viewport = page.getViewport({ scale: currentScale });
+            const outputScale = window.devicePixelRatio || 1;
+
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.floor(viewport.width * outputScale);
+            canvas.height = Math.floor(viewport.height * outputScale);
+            canvas.style.width = Math.floor(viewport.width) + 'px';
+            canvas.style.height = Math.floor(viewport.height) + 'px';
+            canvas.style.display = 'block';
+
+            const ctx = canvas.getContext('2d');
+            const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null;
+
+            await page.render({ canvasContext: ctx, transform, viewport }).promise;
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'pdf-page-wrapper';
+            wrapper.appendChild(canvas);
+
+            const label = document.createElement('div');
+            label.style.cssText = 'text-align:center;font-size:11px;color:var(--label-3);padding:6px 0;background:var(--bg-2);border-top:1px solid var(--sep)';
+            label.textContent = `หน้า ${i} / ${numPages}`;
+            wrapper.appendChild(label);
+
+            contentEl.appendChild(wrapper);
+          }
+        } else {
+          // Page mode
+          navGroup.style.display = 'flex';
+          modePageBtn.style.background = 'var(--accent-bg)';
+          modePageBtn.style.color = 'var(--accent)';
+          modePageBtn.style.fontWeight = '700';
+          modeScrollBtn.style.background = '';
+          modeScrollBtn.style.color = '';
+          modeScrollBtn.style.fontWeight = '600';
+
+          pageInfo.textContent = `${currentPage} / ${numPages}`;
+          prevBtn.disabled = (currentPage <= 1);
+          nextBtn.disabled = (currentPage >= numPages);
+
+          const page = await pdfDoc.getPage(currentPage);
+          const viewport = page.getViewport({ scale: currentScale });
+          const outputScale = window.devicePixelRatio || 1;
+
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.floor(viewport.width * outputScale);
+          canvas.height = Math.floor(viewport.height * outputScale);
+          canvas.style.width = Math.floor(viewport.width) + 'px';
+          canvas.style.height = Math.floor(viewport.height) + 'px';
+          canvas.style.display = 'block';
+
+          const ctx = canvas.getContext('2d');
+          const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null;
+
+          await page.render({ canvasContext: ctx, transform, viewport }).promise;
+
+          const wrapper = document.createElement('div');
+          wrapper.className = 'pdf-page-wrapper';
+          wrapper.appendChild(canvas);
+          contentEl.appendChild(wrapper);
+        }
+      }
+
+      // Event Listeners
+      modeScrollBtn.onclick = () => { viewMode = 'scroll'; renderDocument(); };
+      modePageBtn.onclick = () => { viewMode = 'page'; renderDocument(); };
+
+      prevBtn.onclick = () => { if (currentPage > 1) { currentPage--; renderDocument(); } };
+      nextBtn.onclick = () => { if (currentPage < numPages) { currentPage++; renderDocument(); } };
+
+      document.getElementById('viewer-zoom-in').onclick = () => {
+        currentScale = Math.min(2.5, currentScale + 0.15);
+        zoomVal.textContent = `${Math.round(currentScale * 100)}%`;
+        renderDocument();
+      };
+
+      document.getElementById('viewer-zoom-out').onclick = () => {
+        currentScale = Math.max(0.3, currentScale - 0.15);
+        zoomVal.textContent = `${Math.round(currentScale * 100)}%`;
+        renderDocument();
+      };
+
+      document.getElementById('viewer-zoom-fit').onclick = async () => {
+        if (!pdfDoc) return;
+        const page = await pdfDoc.getPage(1);
+        const vp = page.getViewport({ scale: 1.0 });
+        const availW = Math.max(280, window.innerWidth - 60);
+        currentScale = Math.max(0.3, Math.min(2.0, availW / vp.width));
+        zoomVal.textContent = `${Math.round(currentScale * 100)}%`;
+        renderDocument();
+      };
+
+      // Keyboard navigation
+      document.addEventListener('keydown', (e) => {
+        if (viewMode === 'page') {
+          if (e.key === 'ArrowLeft' && currentPage > 1) { currentPage--; renderDocument(); }
+          if (e.key === 'ArrowRight' && currentPage < numPages) { currentPage++; renderDocument(); }
+        }
+        if (e.key === 'Escape') {
+          backBtn.click();
+        }
+      });
+
+    })();
+  </script>
+</body>
+</html>
