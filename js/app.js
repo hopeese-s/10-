@@ -1247,6 +1247,7 @@
 
   // ─── View 3: Study Resources (Folders, Search, Multi-Page PDF.js, Drag & Drop) ─
   let studySearchQuery = '';
+  let studyViewMode = localStorage.getItem('sd-study-mode') || 'grid';
 
   function renderStudyView() {
     const container = document.getElementById('view-egbe-study');
@@ -1267,18 +1268,25 @@
 
     const totalCount = state.studyLinks.length;
 
+    const isListMode = studyViewMode === 'list';
+
     container.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.25rem;flex-wrap:wrap;gap:1rem">
         <div>
           <h2 style="font-family:var(--font-serif);font-size:1.6rem;font-weight:700;margin-bottom:4px">Study Resources &amp; Documents</h2>
-          <p style="font-size:13px;color:var(--label-2)">คลังเอกสาร ชีทสรุป Google Classroom และคู่มือ BME พร้อมระบบโฟลเดอร์และลากไฟล์จัดหมวดหมู่ (Drag &amp; Drop บน iPad)</p>
+          <p style="font-size:13px;color:var(--label-2)">คลังเอกสาร ชีทสรุป Google Classroom และคู่มือ BME พร้อมระบบโฟลเดอร์</p>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <!-- Grid / List toggle -->
+          <div class="view-mode-toggle" aria-label="รูปแบบการแสดงผล">
+            <button class="view-mode-btn ${!isListMode ? 'active' : ''}" data-study-mode="grid" title="แสดงแบบการ์ด"><span>⊞</span> Grid</button>
+            <button class="view-mode-btn ${isListMode ? 'active' : ''}" data-study-mode="list" title="แสดงแบบรายการ"><span>☰</span> List</button>
+          </div>
           <button class="btn btn-secondary" id="create-folder-btn" style="font-size:12.5px;padding:7px 14px;display:inline-flex;align-items:center;gap:6px">
             📁 สร้างโฟลเดอร์
           </button>
           <button class="btn btn-primary" id="add-resource-btn" style="font-size:12.5px;padding:7px 16px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;">
-            ➕ เพิ่มชีทเรียน / ลิงค์
+            ➕ เพิ่มไฟล์ / ลิงค์
           </button>
         </div>
       </div>
@@ -1291,7 +1299,7 @@
           ${studySearchQuery ? `<button id="study-clear-search" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--label-3);font-size:12px">✕</button>` : ''}
         </div>
         <div style="font-size:11.5px;color:var(--label-3);font-weight:600">
-          💡 สามารถลากการ์ดไฟล์ไปหย่อนใส่แถบโฟลเดอร์ หรือกดปุ่ม 📂 เพื่อย้ายได้ทันที
+          ${filteredLinks.length} ไฟล์ · กด 📂 เพื่อย้ายโฟลเดอร์
         </div>
       </div>
 
@@ -1316,69 +1324,83 @@
         }).join('')}
       </div>
 
-      <!-- File Cards Grid -->
-      <div class="cards-grid" id="study-cards-grid">
-        ${filteredLinks.length === 0 ? `
-          <div style="grid-column:1/-1;padding:3rem;text-align:center;color:var(--label-3);background:var(--bg-2);border-radius:var(--r-l);border:1px dashed var(--sep)">
-            <div style="font-size:36px;margin-bottom:8px">📂</div>
-            <div style="font-weight:600;font-size:14px;color:var(--label-2)">ไม่มีเอกสารในโฟลเดอร์นี้</div>
-            <p style="font-size:12.5px;margin-top:4px">ลากไฟล์จากโฟลเดอร์อื่นมาใส่ หรือกดปุ่ม ➕ เพิ่มชีทเรียนใหม่</p>
-          </div>
-        ` : filteredLinks.map(item => {
-          let badgeColor = 'var(--accent)';
-          let badgeBg = 'var(--accent-bg)';
-          let typeIcon = '🔗';
-          if (item.type === 'classroom') {
-            badgeColor = '#2563eb';
-            badgeBg = 'rgba(59, 130, 246, 0.12)';
-            typeIcon = '🎓';
-          } else if (item.type === 'drive') {
-            badgeColor = '#059669';
-            badgeBg = 'rgba(16, 185, 129, 0.12)';
-            typeIcon = '📁';
-          } else if (item.type === 'pdf') {
-            badgeColor = '#dc2626';
-            badgeBg = 'rgba(239, 68, 68, 0.12)';
-            typeIcon = '📄';
-          } else if (item.type === 'image') {
-            badgeColor = '#d97706';
-            badgeBg = 'rgba(217, 119, 6, 0.12)';
-            typeIcon = '🖼️';
-          }
-
-          const currentFObj = state.studyFolders.find(f => f.id === item.folderId);
-          const isDefault = DEFAULT_STUDY_LINKS.some(d => d.id === item.id);
-
-          return `
-            <div class="card-item study-card" data-id="${item.id}" draggable="true" style="display:flex;flex-direction:column;justify-content:space-between;cursor:pointer">
-              <div>
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-                  <span class="tag-chip" style="background:${badgeBg};color:${badgeColor};font-weight:700">
-                    ${typeIcon} ${escHtml((item.type || 'LINK').toUpperCase())}
-                  </span>
-                  <div class="study-card-actions">
-                    <button class="study-action-btn move-link-btn" data-id="${item.id}" title="ย้ายโฟลเดอร์ (iPad Quick Move)">📂</button>
-                    ${!isDefault ? `<button class="study-action-btn delete-link-btn" data-id="${item.id}" title="ลบ">✕</button>` : ''}
-                  </div>
+      <!-- File Cards (Grid or List) -->
+      ${filteredLinks.length === 0 ? `
+        <div style="padding:3rem;text-align:center;color:var(--label-3);background:var(--bg-2);border-radius:var(--r-l);border:1px dashed var(--sep)">
+          <div style="font-size:36px;margin-bottom:8px">📂</div>
+          <div style="font-weight:600;font-size:14px;color:var(--label-2)">ไม่มีเอกสารในโฟลเดอร์นี้</div>
+          <p style="font-size:12.5px;margin-top:4px">กดปุ่ม ➕ เพิ่มไฟล์ / ลิงค์ เพื่อเพิ่มเอกสารใหม่</p>
+        </div>
+      ` : isListMode ? `
+        <div class="study-list-view" id="study-cards-grid">
+          ${filteredLinks.map(item => {
+            let badgeColor = 'var(--accent)'; let badgeBg = 'var(--accent-bg)'; let typeIcon = '🔗';
+            if (item.type === 'classroom') { badgeColor = '#2563eb'; badgeBg = 'rgba(59,130,246,0.12)'; typeIcon = '🎓'; }
+            else if (item.type === 'drive') { badgeColor = '#059669'; badgeBg = 'rgba(16,185,129,0.12)'; typeIcon = '📁'; }
+            else if (item.type === 'pdf') { badgeColor = '#dc2626'; badgeBg = 'rgba(239,68,68,0.12)'; typeIcon = '📄'; }
+            else if (item.type === 'image') { badgeColor = '#d97706'; badgeBg = 'rgba(217,119,6,0.12)'; typeIcon = '🖼️'; }
+            else if (item.type === 'local') { badgeColor = '#7c3aed'; badgeBg = 'rgba(124,58,237,0.12)'; typeIcon = '💾'; }
+            const isDefault = DEFAULT_STUDY_LINKS.some(d => d.id === item.id);
+            const folderName = state.studyFolders.find(f => f.id === item.folderId)?.name || '';
+            return `
+              <div class="study-list-item study-card" data-id="${item.id}" style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:var(--r-m);background:var(--bg-2);border:1px solid var(--sep);cursor:pointer;transition:background 0.15s">
+                <span style="font-size:20px;flex:none;width:28px;text-align:center">${typeIcon}</span>
+                <div style="flex:1;min-width:0">
+                  <div style="font-weight:700;font-size:13.5px;color:var(--label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(item.title)}</div>
+                  <div style="font-size:11px;color:var(--label-3);margin-top:1px">${escHtml(folderName)} ${item.desc ? '· ' + escHtml(item.desc.substring(0,40)) : ''}</div>
                 </div>
-                <h3 style="font-size:15px;font-weight:700;margin-bottom:4px;color:var(--label);line-height:1.35">${escHtml(item.title)}</h3>
-                ${item.sub ? `<div style="font-size:11.5px;color:var(--label-3);font-weight:600;margin-bottom:6px">${escHtml(item.sub)}</div>` : ''}
-                <p style="font-size:12.5px;color:var(--label-2);line-height:1.5">${escHtml(item.desc || '')}</p>
+                <div style="display:flex;align-items:center;gap:6px;flex:none">
+                  <button class="btn btn-secondary preview-trigger-btn" data-id="${item.id}" style="font-size:11px;padding:4px 10px;border-radius:var(--r-pill)">👁️</button>
+                  <button class="study-action-btn move-link-btn" data-id="${item.id}" title="ย้ายโฟลเดอร์">📂</button>
+                  ${!isDefault ? `<button class="study-action-btn delete-link-btn" data-id="${item.id}" title="ลบ">✕</button>` : ''}
+                </div>
               </div>
-
-              <div style="margin-top:14px;border-top:1px solid var(--sep);padding-top:10px;display:flex;align-items:center;justify-content:space-between">
-                <button class="btn btn-secondary preview-trigger-btn" data-id="${item.id}" style="font-size:11.5px;padding:5px 12px;border-radius:var(--r-pill);flex:none">
-                  👁️ ดูตัวอย่าง
-                </button>
-                <a href="${escHtml(item.url)}" target="_blank" rel="noopener noreferrer" class="resource-open-link" style="font-size:11.5px;color:var(--accent);font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:4px">
-                  เปิดตรง ↗
-                </a>
+            `;
+          }).join('')}
+        </div>
+      ` : `
+        <div class="cards-grid" id="study-cards-grid">
+          ${filteredLinks.map(item => {
+            let badgeColor = 'var(--accent)'; let badgeBg = 'var(--accent-bg)'; let typeIcon = '🔗';
+            if (item.type === 'classroom') { badgeColor = '#2563eb'; badgeBg = 'rgba(59,130,246,0.12)'; typeIcon = '🎓'; }
+            else if (item.type === 'drive') { badgeColor = '#059669'; badgeBg = 'rgba(16,185,129,0.12)'; typeIcon = '📁'; }
+            else if (item.type === 'pdf') { badgeColor = '#dc2626'; badgeBg = 'rgba(239,68,68,0.12)'; typeIcon = '📄'; }
+            else if (item.type === 'image') { badgeColor = '#d97706'; badgeBg = 'rgba(217,119,6,0.12)'; typeIcon = '🖼️'; }
+            else if (item.type === 'local') { badgeColor = '#7c3aed'; badgeBg = 'rgba(124,58,237,0.12)'; typeIcon = '💾'; }
+            const isDefault = DEFAULT_STUDY_LINKS.some(d => d.id === item.id);
+            return `
+              <div class="card-item study-card" data-id="${item.id}" draggable="true" style="display:flex;flex-direction:column;justify-content:space-between;cursor:pointer">
+                <div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <span class="tag-chip" style="background:${badgeBg};color:${badgeColor};font-weight:700">${typeIcon} ${escHtml((item.type === 'local' ? 'UPLOAD' : item.type || 'LINK').toUpperCase())}</span>
+                    <div class="study-card-actions">
+                      <button class="study-action-btn move-link-btn" data-id="${item.id}" title="ย้ายโฟลเดอร์">📂</button>
+                      ${!isDefault ? `<button class="study-action-btn delete-link-btn" data-id="${item.id}" title="ลบ">✕</button>` : ''}
+                    </div>
+                  </div>
+                  <h3 style="font-size:15px;font-weight:700;margin-bottom:4px;color:var(--label);line-height:1.35">${escHtml(item.title)}</h3>
+                  ${item.sub ? `<div style="font-size:11.5px;color:var(--label-3);font-weight:600;margin-bottom:6px">${escHtml(item.sub)}</div>` : ''}
+                  <p style="font-size:12.5px;color:var(--label-2);line-height:1.5">${escHtml(item.desc || '')}</p>
+                </div>
+                <div style="margin-top:14px;border-top:1px solid var(--sep);padding-top:10px;display:flex;align-items:center;justify-content:space-between">
+                  <button class="btn btn-secondary preview-trigger-btn" data-id="${item.id}" style="font-size:11.5px;padding:5px 12px;border-radius:var(--r-pill);flex:none">👁️ ดูตัวอย่าง</button>
+                  ${item.type !== 'local' ? `<a href="${escHtml(item.url)}" target="_blank" rel="noopener noreferrer" class="resource-open-link" style="font-size:11.5px;color:var(--accent);font-weight:600;text-decoration:none">เปิดตรง ↗</a>` : '<span style="font-size:11px;color:var(--label-3)">ไฟล์ในเครื่อง</span>'}
+                </div>
               </div>
-            </div>
-          `;
-        }).join('')}
-      </div>
+            `;
+          }).join('')}
+        </div>
+      `}
     `;
+
+    // Grid/List toggle
+    container.querySelectorAll('[data-study-mode]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        studyViewMode = btn.dataset.studyMode;
+        localStorage.setItem('sd-study-mode', studyViewMode);
+        renderStudyView();
+      });
+    });
 
     // Folder selection
     container.querySelectorAll('.study-folder-pill').forEach(pill => {
@@ -1618,6 +1640,57 @@
     if (urlInp) urlInp.value = '';
     if (descInp) descInp.value = '';
 
+    // Inject upload UI dynamically into the modal body
+    const modalBody = modal.querySelector('.modal-body');
+    if (modalBody && !modalBody.querySelector('#res-file-upload-section')) {
+      const uploadSection = document.createElement('div');
+      uploadSection.id = 'res-file-upload-section';
+      uploadSection.style.cssText = 'border:2px dashed var(--sep);border-radius:var(--r-m);padding:14px 16px;margin-bottom:16px;background:var(--bg-3)';
+      uploadSection.innerHTML = `
+        <div style="font-size:12px;font-weight:700;color:var(--label-2);margin-bottom:8px">📎 อัพโหลดไฟล์จากอุปกรณ์</div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <button type="button" id="res-pick-file-btn" class="btn btn-secondary" style="font-size:12.5px;padding:7px 14px;display:inline-flex;align-items:center;gap:6px">
+            📂 เลือกไฟล์จากเครื่อง
+          </button>
+          <span id="res-file-chosen" style="font-size:12px;color:var(--label-3);font-style:italic">ยังไม่ได้เลือกไฟล์</span>
+        </div>
+        <div style="font-size:11px;color:var(--label-3);margin-top:6px">รองรับ PDF, รูปภาพ (PNG, JPG), สูงสุด 8MB · หรือกรอก URL ด้านล่างแทนก็ได้</div>
+        <input type="file" id="res-file-input" accept=".pdf,.png,.jpg,.jpeg,.gif,.webp" style="display:none" />
+      `;
+      modalBody.insertBefore(uploadSection, modalBody.firstChild);
+    }
+
+    // Track selected file data URL
+    let selectedFileDataUrl = null;
+    let selectedFileType = null;
+
+    const fileInput = modal.querySelector('#res-file-input');
+    const pickBtn = modal.querySelector('#res-pick-file-btn');
+    const fileChosen = modal.querySelector('#res-file-chosen');
+
+    if (pickBtn && fileInput) {
+      pickBtn.onclick = () => fileInput.click();
+      fileInput.onchange = () => {
+        const file = fileInput.files && fileInput.files[0];
+        if (!file) return;
+        if (file.size > 8 * 1024 * 1024) {
+          showToast('⚠️ ไฟล์ใหญ่เกิน 8MB กรุณาใช้ URL แทน', 'warning');
+          fileInput.value = '';
+          return;
+        }
+        const ext = file.name.split('.').pop().toLowerCase();
+        selectedFileType = ['png','jpg','jpeg','gif','webp'].includes(ext) ? 'image' : 'pdf';
+        if (!titleInp.value.trim()) titleInp.value = file.name.replace(/\.[^.]+$/, '');
+        if (typeSel) typeSel.value = selectedFileType;
+        if (fileChosen) fileChosen.textContent = `✅ ${file.name} (${(file.size/1024).toFixed(0)} KB)`;
+        if (urlInp) urlInp.value = '';
+
+        const reader = new FileReader();
+        reader.onload = (ev) => { selectedFileDataUrl = ev.target.result; };
+        reader.readAsDataURL(file);
+      };
+    }
+
     if (folderSel) {
       folderSel.innerHTML = state.studyFolders.map(f => `
         <option value="${f.id}" ${state.selectedFolderId === f.id ? 'selected' : ''}>${escHtml(f.name)}</option>
@@ -1628,13 +1701,17 @@
     if (saveBtn) {
       saveBtn.onclick = () => {
         const title = titleInp?.value.trim();
-        const type = typeSel?.value || 'pdf';
         const folderId = folderSel?.value || (state.selectedFolderId !== 'all' ? state.selectedFolderId : 'f-notes');
-        const url = urlInp?.value.trim();
         const desc = descInp?.value.trim();
 
+        // If file was uploaded, use dataURL; else use URL field
+        const useUpload = !!(selectedFileDataUrl);
+        const type = useUpload ? (selectedFileType === 'image' ? 'image' : 'pdf') : (typeSel?.value || 'pdf');
+        const url = useUpload ? selectedFileDataUrl : urlInp?.value.trim();
+        const isLocal = useUpload;
+
         if (!title || !url) {
-          showToast('⚠️ กรุณากรอกชื่อและ URL ของเอกสาร', 'warning');
+          showToast('⚠️ กรุณากรอกชื่อ และเลือกไฟล์หรือใส่ URL', 'warning');
           return;
         }
 
@@ -1642,14 +1719,19 @@
           id: `link-${Date.now()}`,
           folderId,
           title,
-          type,
+          type: isLocal ? 'local' : type,
           url,
-          desc
+          desc,
+          isLocal
         });
         saveStudyLinks();
+        // Reset file selection
+        selectedFileDataUrl = null;
+        if (fileInput) fileInput.value = '';
+        if (fileChosen) fileChosen.textContent = 'ยังไม่ได้เลือกไฟล์';
         closeModal('resource-modal');
         renderStudyView();
-        showToast('✅ เพิ่มชีทเรียนเรียบร้อย!', 'success');
+        showToast('✅ เพิ่มไฟล์เรียบร้อย!', 'success');
       };
     }
 
@@ -1780,7 +1862,7 @@
           };
 
           await page.render(renderContext).promise;
-          container.scrollTop = 0;
+          // Only reset scroll when explicitly switching pages/modes, not on zoom
         } catch (e) {
           console.error('Error rendering page:', e);
         } finally {
@@ -1866,10 +1948,11 @@
       bodyEl.querySelector('#pdf-mode-page')?.addEventListener('click', () => switchViewMode('page'));
       bodyEl.querySelector('#pdf-mode-scroll')?.addEventListener('click', () => switchViewMode('scroll'));
 
-      // Page change handlers
+      // Page change handlers — reset scroll to top on explicit navigation
       prevBtn?.addEventListener('click', async () => {
         if (currentPage > 1) {
           currentPage--;
+          container.scrollTop = 0;
           await renderCurrentPage();
         }
       });
@@ -1877,6 +1960,7 @@
       nextBtn?.addEventListener('click', async () => {
         if (currentPage < numPages) {
           currentPage++;
+          container.scrollTop = 0;
           await renderCurrentPage();
         }
       });
@@ -1886,6 +1970,7 @@
         if (isNaN(val) || val < 1) val = 1;
         if (val > numPages) val = numPages;
         currentPage = val;
+        container.scrollTop = 0;
         await renderCurrentPage();
       });
 
@@ -1907,7 +1992,8 @@
       bodyEl.querySelector('#pdf-zoom-fit')?.addEventListener('click', async () => {
         const page = await pdf.getPage(currentPage);
         const vp = page.getViewport({ scale: 1.0 });
-        const cW = Math.max(280, (container.clientWidth || window.innerWidth * 0.9) - 40);
+        // Use bodyEl width as reference — works correctly in both page and scroll mode
+        const cW = Math.max(280, (bodyEl.clientWidth || window.innerWidth * 0.9) - 48);
         currentScale = Math.max(0.3, Math.min(2.0, cW / vp.width));
         if (zoomValEl) zoomValEl.textContent = `${Math.round(currentScale * 100)}%`;
         if (viewMode === 'scroll') { renderedPages = {}; await renderAllPagesScroll(); }
@@ -1994,9 +2080,14 @@
     if (body) {
       body.innerHTML = '';
 
-      if (item.type === 'pdf' && item.url) {
+      if ((item.type === 'pdf' || (item.type === 'local' && item.url && item.url.startsWith('data:application/pdf'))) && item.url) {
         // Multi-page PDF rendering via PDF.js (works on iPad, iPhone, PC)
         renderPdfWithPdfJs(item.url, body, item.title);
+      } else if (item.type === 'local' && item.url && item.url.startsWith('data:image/')) {
+        body.innerHTML = `
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;min-height:300px;max-height:calc(90vh - 130px);overflow:auto">
+            <img src="${item.url}" alt="${escHtml(item.title)}" style="max-width:100%;height:auto;max-height:75vh;object-fit:contain;border-radius:var(--r-m);box-shadow:var(--shadow-2)" />
+          </div>`;
       } else if (item.type === 'image' && item.url) {
         body.innerHTML = `
           <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;min-height:300px;max-height:calc(90vh - 130px);overflow:auto">

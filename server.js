@@ -8,6 +8,7 @@ const path = require('path');
 
 const PORT = process.env.PORT || 3000;
 const DB_FILE = path.join(__dirname, 'sync_store.json');
+const DB_BACKUP_FILE = path.join(__dirname, 'sync_store.backup.json');
 
 // In-memory store + file persistence
 let store = {};
@@ -21,9 +22,15 @@ try {
 
 function saveStore() {
   try {
+    // Rolling backup: copy current DB to backup before overwriting
+    if (fs.existsSync(DB_FILE)) {
+      try { fs.copyFileSync(DB_FILE, DB_BACKUP_FILE); } catch (_) {}
+    }
     fs.writeFileSync(DB_FILE, JSON.stringify(store, null, 2));
   } catch (e) {
     console.error('Error saving DB file:', e);
+    // Try backup if primary fails
+    try { fs.writeFileSync(DB_BACKUP_FILE, JSON.stringify(store, null, 2)); } catch (_) {}
   }
 }
 
@@ -53,6 +60,15 @@ const server = http.createServer((req, res) => {
 
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = url.pathname;
+
+  // Backup Download: GET /api/backup — download all data as JSON
+  if (pathname === '/api/backup' && req.method === 'GET') {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Content-Disposition', `attachment; filename="ecalendar-backup-${new Date().toISOString().slice(0,10)}.json"`);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(store, null, 2));
+    return;
+  }
 
   // API Endpoint: /api/sync/:key
   if (pathname.startsWith('/api/sync/')) {

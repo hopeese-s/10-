@@ -2198,6 +2198,20 @@ body {
 }
 .study-folder-bar::-webkit-scrollbar { display: none; }
 
+/* Study List View mode */
+.study-list-view {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.study-list-item {
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.study-list-item:hover {
+  background: var(--bg-3) !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+}
+
 /* Glass folder pills */
 .study-folder-pill {
   display: inline-flex;
