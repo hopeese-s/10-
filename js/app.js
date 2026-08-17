@@ -1349,8 +1349,8 @@
                   <div style="font-weight:700;font-size:13.5px;color:var(--label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(item.title)}</div>
                   <div style="font-size:11px;color:var(--label-3);margin-top:1px">${escHtml(folderName)} ${item.desc ? '· ' + escHtml(item.desc.substring(0,40)) : ''}</div>
                 </div>
-                <div style="display:flex;align-items:center;gap:6px;flex:none">
-                  <button class="btn btn-secondary preview-trigger-btn" data-id="${item.id}" style="font-size:11px;padding:4px 10px;border-radius:var(--r-pill)">👁️</button>
+                <div style="display:flex;align-items:center;gap:6px;flex-none">
+                  <button class="btn btn-secondary preview-trigger-btn" data-id="${item.id}" style="font-size:11px;padding:4px 10px;border-radius:var(--r-pill)">👁️ ดูตัวอย่าง</button>
                   <button class="study-action-btn move-link-btn" data-id="${item.id}" title="ย้ายโฟลเดอร์">📂</button>
                   ${!isDefault ? `<button class="study-action-btn delete-link-btn" data-id="${item.id}" title="ลบ">✕</button>` : ''}
                 </div>
@@ -1384,7 +1384,9 @@
                 </div>
                 <div style="margin-top:14px;border-top:1px solid var(--sep);padding-top:10px;display:flex;align-items:center;justify-content:space-between">
                   <button class="btn btn-secondary preview-trigger-btn" data-id="${item.id}" style="font-size:11.5px;padding:5px 12px;border-radius:var(--r-pill);flex:none">👁️ ดูตัวอย่าง</button>
-                  ${item.type !== 'local' ? `<a href="${escHtml(item.url)}" target="_blank" rel="noopener noreferrer" class="resource-open-link" style="font-size:11.5px;color:var(--accent);font-weight:600;text-decoration:none">เปิดตรง ↗</a>` : '<span style="font-size:11px;color:var(--label-3)">ไฟล์ในเครื่อง</span>'}
+                  <button class="btn btn-ghost direct-open-trigger-btn" data-id="${item.id}" style="font-size:11.5px;color:var(--accent);font-weight:600;background:none;border:none;cursor:pointer;padding:4px 8px;display:inline-flex;align-items:center;gap:4px">
+                    เปิดตรงนี้ ↗
+                  </button>
                 </div>
               </div>
             `;
@@ -1472,8 +1474,8 @@
       });
     });
 
-    // Preview button click
-    container.querySelectorAll('.preview-trigger-btn').forEach(btn => {
+    // Preview button & direct-open button click
+    container.querySelectorAll('.preview-trigger-btn, .direct-open-trigger-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const id = btn.dataset.id;
@@ -1809,11 +1811,11 @@
           </div>
         </div>
 
-        <div id="pdf-page-container" style="display:flex;align-items:center;justify-content:center;padding:16px 8px;background:var(--bg-3);overflow:auto;-webkit-overflow-scrolling:touch;min-height:350px;max-height:calc(90vh - 170px)">
-          <div id="pdf-single-page-wrapper" style="position:relative;background:#fff;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.15);overflow:hidden;transition:transform 0.1s ease">
+        <div id="pdf-page-container" style="display:block;text-align:center;padding:16px 8px;background:var(--bg-3);overflow-y:auto;overflow-x:auto;-webkit-overflow-scrolling:touch;min-height:350px;max-height:calc(90vh - 170px)">
+          <div id="pdf-single-page-wrapper" style="display:inline-block;position:relative;background:#fff;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.15);overflow:hidden;margin:0 auto;text-align:left">
             <canvas id="pdf-canvas" style="display:block;max-width:100%;height:auto"></canvas>
           </div>
-          <div id="pdf-scroll-container" style="display:none;flex-direction:column;align-items:center;gap:16px;width:100%"></div>
+          <div id="pdf-scroll-container" style="display:none;flex-direction:column;align-items:center;gap:16px;width:100%;max-width:100%;margin:0 auto"></div>
         </div>
       `;
 
@@ -1830,7 +1832,7 @@
       // Calculate initial auto-fit scale
       const firstPage = await pdf.getPage(1);
       const initialVp = firstPage.getViewport({ scale: 1.0 });
-      const availableWidth = Math.max(280, (container.clientWidth || window.innerWidth * 0.9) - 40);
+      const availableWidth = Math.max(280, (bodyEl.clientWidth || window.innerWidth * 0.9) - 48);
       currentScale = Math.min(1.3, Math.max(0.4, availableWidth / initialVp.width));
       if (zoomValEl) zoomValEl.textContent = `${Math.round(currentScale * 100)}%`;
 
@@ -1862,7 +1864,6 @@
           };
 
           await page.render(renderContext).promise;
-          // Only reset scroll when explicitly switching pages/modes, not on zoom
         } catch (e) {
           console.error('Error rendering page:', e);
         } finally {
@@ -1900,11 +1901,11 @@
             }).promise;
 
             const wrapper = document.createElement('div');
-            wrapper.style.cssText = 'background:#fff;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.15);overflow:hidden;width:100%;max-width:100%';
+            wrapper.style.cssText = 'background:#fff;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.15);overflow:hidden;width:100%;max-width:100%;text-align:center;display:flex;flex-direction:column;align-items:center;';
             wrapper.appendChild(pageCanvas);
 
             const pageLabel = document.createElement('div');
-            pageLabel.style.cssText = 'text-align:center;font-size:11px;color:var(--label-3);padding:4px 0';
+            pageLabel.style.cssText = 'text-align:center;font-size:11px;color:var(--label-3);padding:6px 0;background:var(--bg-2);width:100%;border-top:1px solid var(--sep)';
             pageLabel.textContent = `หน้า ${i} / ${numPages}`;
             wrapper.appendChild(pageLabel);
 
@@ -1924,11 +1925,15 @@
         const scrollModeBtn = bodyEl.querySelector('#pdf-mode-scroll');
 
         if (mode === 'page') {
-          singleWrapper.style.display = '';
+          singleWrapper.style.display = 'inline-block';
           scrollContainer.style.display = 'none';
-          navBtns.style.display = '';
+          navBtns.style.display = 'flex';
+          if (prevBtn) prevBtn.disabled = (currentPage <= 1);
+          if (nextBtn) nextBtn.disabled = (currentPage >= numPages);
+          if (pageInput) pageInput.value = currentPage;
           if (pageModeBtn) { pageModeBtn.style.background = 'var(--accent-bg)'; pageModeBtn.style.color = 'var(--accent)'; pageModeBtn.style.fontWeight = '700'; }
           if (scrollModeBtn) { scrollModeBtn.style.background = ''; scrollModeBtn.style.color = ''; scrollModeBtn.style.fontWeight = '600'; }
+          container.scrollTop = 0;
           renderCurrentPage();
         } else {
           singleWrapper.style.display = 'none';
@@ -1936,6 +1941,7 @@
           navBtns.style.display = 'none';
           if (pageModeBtn) { pageModeBtn.style.background = ''; pageModeBtn.style.color = ''; pageModeBtn.style.fontWeight = '600'; }
           if (scrollModeBtn) { scrollModeBtn.style.background = 'var(--accent-bg)'; scrollModeBtn.style.color = 'var(--accent)'; scrollModeBtn.style.fontWeight = '700'; }
+          container.scrollTop = 0;
           if (Object.keys(renderedPages).length === 0) {
             renderAllPagesScroll();
           }
@@ -1990,11 +1996,10 @@
       });
 
       bodyEl.querySelector('#pdf-zoom-fit')?.addEventListener('click', async () => {
-        const page = await pdf.getPage(currentPage);
+        const page = await pdf.getPage(1);
         const vp = page.getViewport({ scale: 1.0 });
-        // Use bodyEl width as reference — works correctly in both page and scroll mode
-        const cW = Math.max(280, (bodyEl.clientWidth || window.innerWidth * 0.9) - 48);
-        currentScale = Math.max(0.3, Math.min(2.0, cW / vp.width));
+        const availableW = Math.max(280, (bodyEl.clientWidth || window.innerWidth * 0.9) - 48);
+        currentScale = Math.max(0.3, Math.min(2.0, availableW / vp.width));
         if (zoomValEl) zoomValEl.textContent = `${Math.round(currentScale * 100)}%`;
         if (viewMode === 'scroll') { renderedPages = {}; await renderAllPagesScroll(); }
         else await renderCurrentPage();
@@ -2049,7 +2054,7 @@
 
     const badge = document.getElementById('preview-badge');
     if (badge) {
-      const typeMap = { pdf: '📄 PDF', drive: '📁 Drive', classroom: '🎓 Classroom', image: '🖼️ Image', link: '🔗 Link' };
+      const typeMap = { pdf: '📄 PDF', drive: '📁 Drive', classroom: '🎓 Classroom', image: '🖼️ Image', link: '🔗 Link', local: '💾 Upload' };
       badge.textContent = typeMap[item.type] || '🔗 LINK';
     }
 
@@ -2059,20 +2064,36 @@
 
     // External open button
     const extBtn = document.getElementById('preview-open-ext-btn');
-    if (extBtn) extBtn.href = item.url || '#';
+    if (extBtn) {
+      if (item.type === 'local') {
+        extBtn.style.display = 'none';
+      } else {
+        extBtn.style.display = 'inline-flex';
+        extBtn.href = item.url || '#';
+      }
+    }
 
     // Copy link button
     const copyBtn = document.getElementById('preview-copy-link-btn');
     if (copyBtn) {
-      copyBtn.onclick = () => {
-        navigator.clipboard.writeText(item.url || '').then(() => showToast('📋 คัดลอกลิงค์แล้ว', 'success'));
-      };
+      if (item.type === 'local') {
+        copyBtn.style.display = 'none';
+      } else {
+        copyBtn.style.display = 'inline-flex';
+        copyBtn.onclick = () => {
+          navigator.clipboard.writeText(item.url || '').then(() => showToast('📋 คัดลอกลิงค์แล้ว', 'success'));
+        };
+      }
     }
 
-    // Back button
+    // Back buttons
     const backBtn = document.getElementById('preview-back-btn');
     if (backBtn) {
       backBtn.onclick = () => closeModal('preview-modal');
+    }
+    const footerBackBtn = document.getElementById('preview-footer-back-btn');
+    if (footerBackBtn) {
+      footerBackBtn.onclick = () => closeModal('preview-modal');
     }
 
     // Populate preview body
@@ -2962,6 +2983,8 @@
 
     // In-App Preview modal
     document.getElementById('preview-close-btn')?.addEventListener('click', () => closeModal('preview-modal'));
+    document.getElementById('preview-back-btn')?.addEventListener('click', () => closeModal('preview-modal'));
+    document.getElementById('preview-footer-back-btn')?.addEventListener('click', () => closeModal('preview-modal'));
     document.getElementById('preview-modal')?.addEventListener('click', e => {
       if (e.target === e.currentTarget) closeModal('preview-modal');
     });

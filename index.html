@@ -16,14 +16,26 @@
   <meta name="twitter:description" content="E-Calendar for personal use" />
   <meta name="twitter:image" content="icons/icon-512.png" />
 
-  <!-- iOS Apple Touch Icon & PWA Manifest -->
+  <!-- macOS, iOS & Universal Icons -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="E-Calendar" />
   <meta name="application-name" content="E-Calendar" />
+  
+  <link rel="icon" type="image/x-icon" href="favicon.ico" />
+  <link rel="shortcut icon" type="image/x-icon" href="favicon.ico" />
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png" />
   <link rel="icon" type="image/png" href="favicon.png" />
+  
+  <!-- Apple Touch Icons for iOS & macOS Safari PWA -->
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+  <link rel="apple-touch-icon" sizes="152x152" href="apple-touch-icon.png" />
+  <link rel="apple-touch-icon" sizes="120x120" href="apple-touch-icon.png" />
+  <link rel="apple-touch-icon" sizes="76x76" href="apple-touch-icon.png" />
+  <link rel="mask-icon" href="icons/icon-512.png" color="#C45A1B" />
   <link rel="manifest" href="manifest.json" />
 
   <meta name="theme-color" content="#FDFBF7" media="(prefers-color-scheme: light)" />
@@ -344,26 +356,31 @@
     <!-- ─── In-App Multi-Page PDF & Resource Preview Modal ─── -->
     <div class="modal-overlay" id="preview-modal" role="dialog" aria-modal="true" aria-labelledby="preview-modal-title">
       <div class="modal-box modal-box-large">
-        <div class="modal-header" style="position:sticky;top:0;z-index:20;background:var(--bg-1);border-bottom:1px solid var(--sep)">
-          <div style="display:flex;align-items:center;gap:8px;min-width:0">
-            <button class="btn btn-secondary" id="preview-back-btn" style="font-size:12px;padding:5px 12px;display:inline-flex;align-items:center;gap:4px;font-weight:600">
-              🔙 กลับหน้าหลัก
+        <div class="modal-header" style="position:sticky;top:0;z-index:20;background:var(--bg-1);border-bottom:1px solid var(--sep);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1">
+            <button class="btn btn-primary" id="preview-back-btn" style="font-size:12.5px;padding:6px 14px;display:inline-flex;align-items:center;gap:6px;font-weight:700;flex-shrink:0;box-shadow:0 2px 8px rgba(196,90,27,0.25)">
+              🔙 ย้อนกลับหน้าเว็บ
             </button>
-            <span id="preview-badge" class="online-pill" style="background:var(--accent-bg);color:var(--accent)">PREVIEW</span>
-            <span class="modal-title" id="preview-modal-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">ตัวอย่างเอกสาร</span>
+            <span id="preview-badge" class="online-pill" style="background:var(--accent-bg);color:var(--accent);flex-shrink:0">PREVIEW</span>
+            <span class="modal-title" id="preview-modal-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:1.05rem">ตัวอย่างเอกสาร</span>
           </div>
-          <button class="modal-close" id="preview-close-btn" aria-label="ปิด">✕</button>
+          <div style="display:flex;align-items:center;gap:8px">
+            <button class="modal-close" id="preview-close-btn" aria-label="ปิด" style="font-size:16px;padding:4px 8px">✕</button>
+          </div>
         </div>
         
         <!-- Multi-page scrollable canvas/document container -->
         <div class="resource-preview-body" id="preview-modal-body" style="overflow-y:auto;-webkit-overflow-scrolling:touch;max-height:calc(85vh - 120px)"></div>
         
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 18px;border-top:1px solid var(--sep);background:var(--bg-1)" id="preview-modal-actions">
-          <div style="font-size:12px;color:var(--label-3)" id="preview-meta-info"></div>
-          <div style="display:flex;gap:8px">
-            <button class="btn btn-secondary" id="preview-copy-link-btn">📋 คัดลอกลิงค์</button>
-            <a href="#" target="_blank" rel="noopener noreferrer" class="btn btn-primary" id="preview-open-ext-btn" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:6px">
-              🚀 เปิดในแท็บใหม่
+          <button class="btn btn-primary" id="preview-footer-back-btn" style="font-size:12px;padding:6px 14px;font-weight:700;display:inline-flex;align-items:center;gap:6px">
+            🔙 ย้อนกลับหน้าเว็บ
+          </button>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <div style="font-size:12px;color:var(--label-3)" id="preview-meta-info"></div>
+            <button class="btn btn-secondary" id="preview-copy-link-btn" style="font-size:12px;padding:6px 12px">📋 คัดลอกลิงค์</button>
+            <a href="#" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" id="preview-open-ext-btn" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:6px;font-size:12px;padding:6px 12px">
+              🚀 เปิดในแท็บใหม่แยก
             </a>
           </div>
         </div>
@@ -375,8 +392,8 @@
 
   </div><!-- #app -->
 
-  <script src="js/data.js?v=3.1"></script>
-  <script src="js/sync.js?v=3.1"></script>
-  <script src="js/app.js?v=3.1"></script>
+  <script src="js/data.js?v=3.2"></script>
+  <script src="js/sync.js?v=3.2"></script>
+  <script src="js/app.js?v=3.2"></script>
 </body>
 </html>
