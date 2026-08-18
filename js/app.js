@@ -2257,14 +2257,42 @@
   async function checkPublicShareRoute() {
     const urlParams = new URLSearchParams(window.location.search);
     const shareParam = urlParams.get('share');
-    if (!shareParam) return;
+    if (!shareParam) return false;
+
+    // 1. ISOLATE PERSONAL DATA: Clear memory so personal data does not leak into the preview
+    state.checklist = {};
+    state.subjects = {};
+    state.customBlocks = {};
+    state.curriculum = [];
+    state.studyFolders = [];
+    state.studyLinks = [];
+
+    // 2. HIDE PRIVATE TABS & ACTIONS
+    document.querySelectorAll('.nav-link[data-view="home"], .nav-link[data-view="dashboard"], .nav-link[data-view="graph"]').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.mob-btn[data-view="home"], .mob-btn[data-view="dashboard"], .mob-btn[data-view="graph"]').forEach(el => el.style.display = 'none');
+    
+    const calBtn = document.getElementById('calendar-sync-btn');
+    const cloudBtn = document.getElementById('cloud-sync-btn');
+    const authBtn = document.getElementById('auth-user-btn');
+    if(calBtn) calBtn.style.setProperty('display', 'none', 'important');
+    if(cloudBtn) cloudBtn.style.setProperty('display', 'none', 'important');
+    if(authBtn) authBtn.style.setProperty('display', 'none', 'important');
 
     // Token-based share bundle (sh_xxxxxxxxxxxxxxxx)
     if (/^sh_[a-f0-9]{18}$/i.test(shareParam)) {
       try {
         const bundle = await CloudSync.fetchShareBundle(shareParam);
+        
+        // Also fetch public curriculum so the Curriculum tab isn't blank
+        try {
+          const hub = await CloudSync.getPublicHub();
+          if (hub && hub.curriculum && hub.curriculum.length > 0) {
+            state.curriculum = hub.curriculum;
+          }
+        } catch (_) {}
+
         if (bundle && bundle.resources) {
-          const safeLinks = (bundle.resources || []).map(r => ({
+          const safeLinks = bundle.resources.map(r => ({
             id: r.id,
             title: r.title,
             sub: r.sub || '',
@@ -2277,37 +2305,48 @@
           state.studyLinks = safeLinks;
           state.selectedFolderId = 'f-shared';
           localStorage.setItem('sd-study-active-folder', 'f-shared');
-      setTimeout(() => {
+          setTimeout(() => {
             switchTopView('study');
-            showToast(`เปิดลิงก์แชร์: ${bundle.label || 'เอกสารที่แชร์'}`, 'info');
+            showToast(`โหมดเปิดอ่าน: ${bundle.label || 'เอกสารที่แชร์'}`, 'info');
           }, 100);
           return true;
         } else {
-          showToast('ลิงก์แชร์นี้ไม่พบหรือหมดอายุแล้ว', 'warning');
+          showToast('ลิงก์แชร์นี้ไม่มีข้อมูลหรือหมดอายุแล้ว', 'warning');
         }
       } catch (_) {
         showToast('ไม่สามารถโหลดลิงก์แชร์ได้', 'warning');
       }
+      setTimeout(() => switchTopView('study'), 100);
       return true;
     }
 
-    // Legacy public hub (curriculum-only, no personal data)
-    if (shareParam === 'curriculum') {
+    // Legacy public hub (curriculum, study, hub)
+    if (shareParam === 'curriculum' || shareParam === 'study' || shareParam === 'hub') {
       try {
         const hub = await CloudSync.getPublicHub();
-        if (hub && hub.curriculum && hub.curriculum.length > 0) {
-          state.curriculum = hub.curriculum;
+        if (hub) {
+          if (hub.curriculum && hub.curriculum.length > 0) {
+            state.curriculum = hub.curriculum;
+          }
+          if (hub.studyFolders && hub.studyFolders.length > 0) {
+            state.studyFolders = hub.studyFolders;
+          }
+          if (hub.studyLinks && hub.studyLinks.length > 0) {
+            state.studyLinks = hub.studyLinks;
+          }
         }
       } catch (_) {}
+      const targetView = shareParam === 'hub' ? 'study' : shareParam;
       setTimeout(() => {
-        switchTopView('curriculum');
-        showToast('โหมดแชร์สาธารณะ: หน้ารายวิชา BME', 'info');
+        switchTopView(targetView);
+        showToast(`โหมดเปิดอ่านสาธารณะ: ${shareParam === 'curriculum' ? 'หน้ารายวิชา' : 'คลังเอกสาร'}`, 'info');
       }, 100);
       return true;
     }
 
-    // Invalid/unknown share param — treat as share route to prevent any personal data sync
+    // Invalid/unknown share param
     showToast('ลิงก์แชร์ไม่ถูกต้อง', 'warning');
+    setTimeout(() => switchTopView('study'), 100);
     return true;
   }
 
