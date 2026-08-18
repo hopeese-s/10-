@@ -44,7 +44,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/style.css?v=3.4" />
+  <link rel="stylesheet" href="css/style.css?v=3.5" />
   <!-- PDF.js Multi-Page Viewer for iPadOS & Modern Browsers -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
@@ -71,7 +71,9 @@
         <div class="online-pill" title="System Online">
           <span class="online-dot"></span>ONLINE
         </div>
-        <button class="btn-pill" id="cloud-sync-btn">☁️ Sync Now</button>
+        <button class="btn-pill" id="calendar-sync-btn" title="เชื่อมต่อ Apple &amp; Google Calendar">📅 Calendar</button>
+        <button class="btn-pill" id="auth-user-btn" title="บัญชีผู้ใช้งาน / ล็อกอิน">👤 บัญชี</button>
+        <button class="btn-pill" id="cloud-sync-btn">☁️ Sync</button>
         <span id="clock" aria-live="polite" aria-label="เวลาปัจจุบัน">00:00:00</span>
         <button class="icon-btn" id="theme-toggle" title="Dark / Light mode" aria-label="Toggle theme">🌙</button>
       </div>
@@ -416,13 +418,142 @@
       </div>
     </div>
 
+  
+    <!-- ─── Live Calendar Integration Modal ─── -->
+    <div class="modal-overlay" id="calendar-modal" role="dialog" aria-modal="true" aria-labelledby="calendar-modal-title">
+      <div class="modal-box" style="max-width:540px">
+        <div class="modal-header">
+          <span class="modal-title" id="calendar-modal-title">📅 เชื่อมต่อ Apple &amp; Google Calendar</span>
+          <button class="modal-close" id="calendar-modal-close" aria-label="ปิด">✕</button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size:12.5px;color:var(--label-2);line-height:1.5;margin-bottom:14px">
+            ซิงค์ <strong>Study Blocks (9 อัน/สัปดาห์)</strong> และ <strong>ตารางเรียน BME</strong> เข้าสู่ปฏิทินของเครื่องคุณ (iPhone, iPad, Mac, Android) อัตโนมัติ พร้อมระบบตั้งเตือนล่วงหน้า 15 นาที!
+          </p>
+
+          <!-- 1-Click Action Buttons -->
+          <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
+            <a id="cal-apple-btn" href="#" class="btn btn-primary" style="padding:12px 18px;border-radius:var(--r-m);display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;font-weight:700;box-shadow:0 4px 14px rgba(196,90,27,0.25)">
+              <span style="font-size:18px">🍎</span> เพิ่มใน Apple Calendar (iPhone / iPad / Mac)
+            </a>
+            <a id="cal-google-btn" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="padding:12px 18px;border-radius:var(--r-m);display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;font-weight:700">
+              <span style="font-size:18px">🌐</span> เพิ่มใน Google Calendar
+            </a>
+          </div>
+
+          <!-- Subscription Link Box -->
+          <div style="background:var(--bg-3);padding:12px;border-radius:var(--r-m);border:1px solid var(--sep);margin-bottom:14px">
+            <div style="font-size:11.5px;font-weight:700;color:var(--label-2);margin-bottom:6px">🔗 Live Subscription Feed URL (.ics):</div>
+            <div style="display:flex;gap:6px">
+              <input id="cal-feed-url-input" class="form-input" type="text" readonly style="font-size:11.5px;font-family:var(--font-mono);background:var(--bg-1)" />
+              <button class="btn btn-secondary" id="cal-copy-url-btn" style="flex:none;padding:6px 12px;font-size:12px">📋 ก๊อปปี้</button>
+            </div>
+            <div style="font-size:11px;color:var(--label-3);margin-top:6px">
+              💡 ปฏิทินจะคอยดึงข้อมูลใหม่อัตโนมัติเมื่อคุณแก้ไขเวลาหรือวิชาในเว็บนี้
+            </div>
+          </div>
+
+          <!-- Options -->
+          <div style="border-top:1px solid var(--sep);padding-top:12px">
+            <div style="font-size:12px;font-weight:700;color:var(--label);margin-bottom:8px">⚙️ ตัวเลือกเนื้อหาในปฏิทิน:</div>
+            <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--label);margin-bottom:6px;cursor:pointer">
+              <input type="checkbox" id="cal-opt-study" checked disabled />
+              <span>📚 Study Blocks 9 อันต่อสัปดาห์ (พร้อมแจ้งเตือนก่อนเริ่ม 15 นาที)</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--label);margin-bottom:6px;cursor:pointer">
+              <input type="checkbox" id="cal-opt-class" checked disabled />
+              <span>🎓 ตารางเรียนประจำภาคการศึกษา (Class Schedule)</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--label);cursor:pointer">
+              <input type="checkbox" id="cal-opt-routines" />
+              <span>🌅 รวมกิจวัตรประจำวันอื่นๆ (เวลาละหมาด, มื้ออาหาร, พักผ่อน)</span>
+            </label>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <a id="cal-download-ics-btn" href="#" download="bme-study-schedule.ics" class="btn btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px">
+            📥 ดาวน์โหลดไฟล์ .ics
+          </a>
+          <button class="btn btn-primary" id="cal-done-btn">เสร็จสิ้น</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── Multi-User Auth & Account Modal ─── -->
+    <div class="modal-overlay" id="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+      <div class="modal-box" style="max-width:440px">
+        <div class="modal-header">
+          <span class="modal-title" id="auth-modal-title">👤 บัญชีผู้ใช้งาน</span>
+          <button class="modal-close" id="auth-modal-close" aria-label="ปิด">✕</button>
+        </div>
+        
+        <!-- Logged Out View: Login / Register Form -->
+        <div id="auth-form-container" class="modal-body">
+          <div style="display:flex;gap:6px;background:var(--bg-3);padding:4px;border-radius:var(--r-pill);margin-bottom:16px;border:1px solid var(--sep)">
+            <button type="button" id="auth-tab-login" class="btn btn-secondary active" style="flex:1;padding:7px;font-size:12px;font-weight:700;border-radius:var(--r-pill);border:none;background:var(--accent-bg);color:var(--accent);cursor:pointer">
+              🔑 เข้าสู่ระบบ
+            </button>
+            <button type="button" id="auth-tab-register" class="btn btn-secondary" style="flex:1;padding:7px;font-size:12px;font-weight:600;border-radius:var(--r-pill);border:none;background:transparent;color:var(--label-2);cursor:pointer">
+              ✨ สมัครสมาชิกใหม่
+            </button>
+          </div>
+
+          <div class="form-group" id="auth-name-group" style="display:none">
+            <label class="form-label">ชื่อที่แสดง (Display Name)</label>
+            <input id="auth-name-input" class="form-input" type="text" placeholder="เช่น Hope หรือ Somchai" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">ชื่อผู้ใช้ (Username) *</label>
+            <input id="auth-username-input" class="form-input" type="text" placeholder="ตัวอักษรภาษาอังกฤษหรือตัวเลข" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">รหัสผ่าน (Password) *</label>
+            <input id="auth-password-input" class="form-input" type="password" placeholder="รหัสผ่านสำหรับเข้าใช้งาน" />
+          </div>
+          <p id="auth-form-tip" style="font-size:11.5px;color:var(--label-3);line-height:1.4;margin-top:4px">
+            🔒 ทุกบัญชีจะมีพื้นที่เก็บข้อมูลส่วนตัวแยกกัน 100% ไม่ปนกับผู้อื่น
+          </p>
+        </div>
+
+        <!-- Logged In Profile View -->
+        <div id="auth-profile-container" class="modal-body" style="display:none">
+          <div style="display:flex;align-items:center;gap:14px;padding:16px;background:var(--bg-3);border-radius:var(--r-m);margin-bottom:14px;border:1px solid var(--sep)">
+            <div style="font-size:42px" id="auth-avatar-icon">👤</div>
+            <div>
+              <div style="font-size:16px;font-weight:700;color:var(--label)" id="auth-display-name">Username</div>
+              <div style="font-size:12px;color:var(--label-2)" id="auth-username-tag">@username</div>
+              <div style="margin-top:4px" id="auth-role-badge" class="online-pill">STUDENT</div>
+            </div>
+          </div>
+
+          <div style="font-size:12.5px;color:var(--label-2);line-height:1.5;margin-bottom:14px">
+            ✅ คุณกำลังเชื่อมต่อในโหมด <strong>บัญชีส่วนตัว (Isolated Cloud Storage)</strong> ข้อมูลตาราง Checklist และเอกสารทั้งหมดถูกบันทึกอย่างปลอดภัย
+          </div>
+
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-secondary" id="auth-open-calendar-btn" style="font-size:12px;padding:8px 14px">
+              📅 จัดการ Calendar Feed
+            </button>
+            <button class="btn btn-danger" id="auth-logout-btn" style="font-size:12px;padding:8px 14px">
+              🚪 ออกจากระบบ
+            </button>
+          </div>
+        </div>
+
+        <div class="modal-actions" id="auth-form-actions">
+          <button class="btn btn-secondary" id="auth-cancel-btn">ยกเลิก</button>
+          <button class="btn btn-primary" id="auth-submit-btn" style="padding:8px 22px">เข้าสู่ระบบ</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ─── Toast ─── -->
     <div class="toast-container" id="toast-container" role="status" aria-live="polite"></div>
 
   </div><!-- #app -->
 
-  <script src="js/data.js?v=3.4"></script>
-  <script src="js/sync.js?v=3.4"></script>
-  <script src="js/app.js?v=3.4"></script>
+  <script src="js/data.js?v=3.5"></script>
+  <script src="js/sync.js?v=3.5"></script>
+  <script src="js/app.js?v=3.5"></script>
 </body>
 </html>

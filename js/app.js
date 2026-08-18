@@ -1650,6 +1650,187 @@
     document.body.style.overflow = 'hidden';
   }
 
+  
+  // ─── Calendar & Auth Modal Controllers ──────────────────────
+  let currentAuthTab = 'login'; // 'login' or 'register'
+
+  function openCalendarModal() {
+    const modal = document.getElementById('calendar-modal');
+    if (!modal) return;
+
+    const optRoutines = document.getElementById('cal-opt-routines');
+    const urlInput = document.getElementById('cal-feed-url-input');
+    const appleBtn = document.getElementById('cal-apple-btn');
+    const googleBtn = document.getElementById('cal-google-btn');
+    const downloadBtn = document.getElementById('cal-download-ics-btn');
+
+    function refreshCalendarUrls() {
+      const includeRoutines = optRoutines ? optRoutines.checked : false;
+      const { httpsUrl, webcalUrl } = CloudSync.getCalendarFeedUrl(includeRoutines);
+
+      if (urlInput) urlInput.value = webcalUrl;
+      if (appleBtn) appleBtn.href = webcalUrl;
+      if (googleBtn) {
+        googleBtn.href = 'https://calendar.google.com/calendar/render?cid=' + encodeURIComponent(webcalUrl);
+      }
+      if (downloadBtn) {
+        downloadBtn.href = httpsUrl;
+      }
+    }
+
+    if (optRoutines) {
+      optRoutines.onchange = refreshCalendarUrls;
+    }
+    refreshCalendarUrls();
+
+    document.getElementById('cal-copy-url-btn').onclick = () => {
+      if (urlInput) {
+        navigator.clipboard.writeText(urlInput.value).then(() => {
+          showToast('📋 คัดลอก Calendar Feed URL แล้ว!', 'success');
+        });
+      }
+    };
+
+    document.getElementById('calendar-modal-close').onclick = () => closeModal('calendar-modal');
+    document.getElementById('cal-done-btn').onclick = () => closeModal('calendar-modal');
+
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function openAuthModal() {
+    const modal = document.getElementById('auth-modal');
+    if (!modal) return;
+
+    const user = CloudSync.getCurrentUser();
+    const formContainer = document.getElementById('auth-form-container');
+    const profileContainer = document.getElementById('auth-profile-container');
+    const formActions = document.getElementById('auth-form-actions');
+    const tabLogin = document.getElementById('auth-tab-login');
+    const tabRegister = document.getElementById('auth-tab-register');
+    const nameGroup = document.getElementById('auth-name-group');
+    const submitBtn = document.getElementById('auth-submit-btn');
+
+    const usernameInp = document.getElementById('auth-username-input');
+    const passwordInp = document.getElementById('auth-password-input');
+    const nameInp = document.getElementById('auth-name-input');
+
+    if (user) {
+      // Show Profile view
+      if (formContainer) formContainer.style.display = 'none';
+      if (formActions) formActions.style.display = 'none';
+      if (profileContainer) profileContainer.style.display = 'block';
+
+      const displayNameEl = document.getElementById('auth-display-name');
+      const usernameTagEl = document.getElementById('auth-username-tag');
+      const roleBadgeEl = document.getElementById('auth-role-badge');
+      const avatarIconEl = document.getElementById('auth-avatar-icon');
+
+      if (displayNameEl) displayNameEl.textContent = user.displayName || user.username;
+      if (usernameTagEl) usernameTagEl.textContent = '@' + user.username;
+      if (roleBadgeEl) {
+        roleBadgeEl.textContent = user.role === 'admin' ? '👑 MASTER ADMIN' : '👤 STUDENT';
+        roleBadgeEl.style.background = user.role === 'admin' ? 'var(--accent-bg)' : 'rgba(59,130,246,0.12)';
+        roleBadgeEl.style.color = user.role === 'admin' ? 'var(--accent)' : '#2563eb';
+      }
+      if (avatarIconEl) avatarIconEl.textContent = user.role === 'admin' ? '👑' : '🎓';
+
+      document.getElementById('auth-open-calendar-btn').onclick = () => {
+        closeModal('auth-modal');
+        openCalendarModal();
+      };
+
+      document.getElementById('auth-logout-btn').onclick = async () => {
+        if (confirm('คุณต้องการออกจากระบบหรือไม่?')) {
+          await CloudSync.logout();
+          closeModal('auth-modal');
+          showToast('🚪 ออกจากระบบเรียบร้อย', 'info');
+          setTimeout(() => window.location.reload(), 500);
+        }
+      };
+    } else {
+      // Show Login/Register Form
+      if (profileContainer) profileContainer.style.display = 'none';
+      if (formContainer) formContainer.style.display = 'block';
+      if (formActions) formActions.style.display = 'flex';
+
+      function setAuthTab(tab) {
+        currentAuthTab = tab;
+        if (tab === 'login') {
+          if (tabLogin) { tabLogin.style.background = 'var(--accent-bg)'; tabLogin.style.color = 'var(--accent)'; tabLogin.style.fontWeight = '700'; }
+          if (tabRegister) { tabRegister.style.background = 'transparent'; tabRegister.style.color = 'var(--label-2)'; tabRegister.style.fontWeight = '600'; }
+          if (nameGroup) nameGroup.style.display = 'none';
+          if (submitBtn) submitBtn.textContent = 'เข้าสู่ระบบ';
+        } else {
+          if (tabRegister) { tabRegister.style.background = 'var(--accent-bg)'; tabRegister.style.color = 'var(--accent)'; tabRegister.style.fontWeight = '700'; }
+          if (tabLogin) { tabLogin.style.background = 'transparent'; tabLogin.style.color = 'var(--label-2)'; tabLogin.style.fontWeight = '600'; }
+          if (nameGroup) nameGroup.style.display = 'block';
+          if (submitBtn) submitBtn.textContent = 'สร้างบัญชี & เริ่มใช้งาน';
+        }
+      }
+
+      if (tabLogin) tabLogin.onclick = () => setAuthTab('login');
+      if (tabRegister) tabRegister.onclick = () => setAuthTab('register');
+      setAuthTab('login');
+
+      if (submitBtn) {
+        submitBtn.onclick = async () => {
+          const username = usernameInp?.value.trim();
+          const password = passwordInp?.value;
+          const displayName = nameInp?.value.trim();
+
+          if (!username || !password) {
+            showToast('⚠️ กรุณากรอกชื่อผู้ใช้และรหัสผ่าน', 'warning');
+            return;
+          }
+
+          submitBtn.disabled = true;
+          submitBtn.textContent = '⏳ กำลังประมวลผล...';
+
+          if (currentAuthTab === 'login') {
+            const res = await CloudSync.login(username, password);
+            if (res.ok) {
+              closeModal('auth-modal');
+              showToast(`✅ ยินดีต้อนรับ ${res.user.displayName}!`, 'success');
+              // Pull user data
+              const pull = await CloudSync.pullFromCloud();
+              if (pull.ok && pull.data) {
+                applyCloudData(pull.data);
+                renderDashboardCurrentView();
+              }
+            } else {
+              showToast(`⚠️ ${res.error}`, 'warning');
+            }
+          } else {
+            const res = await CloudSync.register(username, password, displayName);
+            if (res.ok) {
+              closeModal('auth-modal');
+              showToast(`🎉 สมัครสมาชิกสำเร็จ ยินดีต้อนรับ ${res.user.displayName}!`, 'success');
+              // Pull initial template
+              const pull = await CloudSync.pullFromCloud();
+              if (pull.ok && pull.data) {
+                applyCloudData(pull.data);
+                renderDashboardCurrentView();
+              }
+            } else {
+              showToast(`⚠️ ${res.error}`, 'warning');
+            }
+          }
+
+          submitBtn.disabled = false;
+          submitBtn.textContent = currentAuthTab === 'login' ? 'เข้าสู่ระบบ' : 'สร้างบัญชี & เริ่มใช้งาน';
+        };
+      }
+    }
+
+    document.getElementById('auth-modal-close').onclick = () => closeModal('auth-modal');
+    document.getElementById('auth-cancel-btn').onclick = () => closeModal('auth-modal');
+
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+
   function openMoveFileModal(linkId) {
     const link = state.studyLinks.find(l => l.id === linkId);
     if (!link) return;

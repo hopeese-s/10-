@@ -1,17 +1,25 @@
 // ============================================================
-// sync.js — Real-Time Cloud Sync Module  (Key: "1")
-// Simple, ultra-reliable, real-time server-timestamp sync
+// sync.js — Real-Time Cloud Sync, Auth & Live Calendar Feed Module
+// Multi-User Data Isolation & WebCal Sync
 // ============================================================
 
 const CloudSync = (function () {
   'use strict';
 
-  const API = 'https://daily-study-dashboard-production.up.railway.app/api/sync';
-  const PUSH_DEBOUNCE_MS = 20;     // 20ms ultra-fast push
-  const POLL_INTERVAL_MS = 1500;   // Poll every 1.5 seconds for instant multi-device sync
+  // Dynamic host determination (Railway production vs localhost)
+  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const BASE_URL = isLocal ? window.location.origin : 'https://daily-study-dashboard-production.up.railway.app';
+  const SYNC_API = `${BASE_URL}/api/sync`;
+  const AUTH_API = `${BASE_URL}/api/auth`;
+  const CAL_API  = `${BASE_URL}/api/calendar`;
 
+  const PUSH_DEBOUNCE_MS = 20;     // 20ms ultra-fast push
+  const POLL_INTERVAL_MS = 1500;   // Poll every 1.5 seconds for multi-device sync
+
+  let currentUser  = null;
+  let authToken    = localStorage.getItem('sd-auth-token') || '';
   let syncKey      = localStorage.getItem('sd-sync-key') || '1';
-  let syncStatus   = syncKey ? 'synced' : 'local';
+  let syncStatus   = 'local';
   let lastSyncTime = parseInt(localStorage.getItem('sd-last-sync-time') || '0', 10);
 
   let isPushing       = false;
@@ -19,11 +27,10 @@ const CloudSync = (function () {
   let pendingPushData = null;
   let pushDebounceId  = null;
   let pollTimer       = null;
-  let listenersAdded  = false;
 
   let _onRemoteUpdate = null;
 
-  // BroadcastChannel (same-device cross-tab, 0ms)
+  // BroadcastChannel (cross-tab same device, 0ms)
   let bc = null;
   try {
     if (typeof BroadcastChannel !== 'undefined') {
@@ -31,9 +38,105 @@ const CloudSync = (function () {
     }
   } catch (_) {}
 
-  // ─── Public API ─────────────────────────────────────────────
+  // ─── Authentication API ──────────────────────────────────────
+  async function register(username, password, displayName) {
+    try {
+      const res = await fetch(`${AUTH_API}/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password, displayName })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        authToken = data.token;
+        currentUser = data.user;
+        localStorage.setItem('sd-auth-token', authToken);
+        setSyncKey(currentUser.id);
+        updateUIStatus();
+        return { ok: true, user: currentUser };
+      } else {
+        return { ok: false, error: data.error || 'สมัครสมาชิกไม่สำเร็จ' };
+      }
+    } catch (e) {
+      return { ok: false, error: 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้' };
+    }
+  }
+
+  async function login(username, password) {
+    try {
+      const res = await fetch(`${AUTH_API}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        authToken = data.token;
+        currentUser = data.user;
+        localStorage.setItem('sd-auth-token', authToken);
+        setSyncKey(currentUser.id);
+        updateUIStatus();
+        return { ok: true, user: currentUser };
+      } else {
+        return { ok: false, error: data.error || 'เข้าสู่ระบบไม่สำเร็จ' };
+      }
+    } catch (e) {
+      return { ok: false, error: 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้' };
+    }
+  }
+
+  async function checkAuth() {
+    if (!authToken) return null;
+    try {
+      const res = await fetch(`${AUTH_API}/me`, {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        currentUser = data.user;
+        setSyncKey(currentUser.id);
+        updateUIStatus();
+        return currentUser;
+      } else {
+        authToken = '';
+        currentUser = null;
+        localStorage.removeItem('sd-auth-token');
+        updateUIStatus();
+        return null;
+      }
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function logout() {
+    if (authToken) {
+      try {
+        await fetch(`${AUTH_API}/logout`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+      } catch (_) {}
+    }
+    authToken = '';
+    currentUser = null;
+    localStorage.removeItem('sd-auth-token');
+    setSyncKey('1');
+    updateUIStatus();
+  }
+
+  // ─── Public Getters & Setters ───────────────────────────────
+  function getCurrentUser()  { return currentUser; }
   function getSyncKey()      { return syncKey; }
   function getLastSyncTime() { return lastSyncTime; }
+
+  function getCalendarFeedUrl(routines = false) {
+    const key = currentUser ? currentUser.calendarKey : (syncKey === '1' ? 'default' : syncKey);
+    const suffix = routines ? '?routines=1' : '';
+    const httpsUrl = `${CAL_API}/${key}/feed.ics${suffix}`;
+    const webcalUrl = httpsUrl.replace(/^https?:\/\//, 'webcal://');
+    return { httpsUrl, webcalUrl, key };
+  }
 
   function setSyncKey(key) {
     syncKey = (key || '').trim();
@@ -54,7 +157,6 @@ const CloudSync = (function () {
   function pushToCloud(data) {
     const cleanData = _sanitize(data);
 
-    // Instant cross-tab broadcast (0ms)
     if (bc) {
       try {
         bc.postMessage({
@@ -95,9 +197,12 @@ const CloudSync = (function () {
     try {
       const ctrl = new AbortController();
       const tid = setTimeout(() => ctrl.abort(), 12000);
-      const res = await fetch(`${API}/${encodeURIComponent(syncKey)}`, {
+      const res = await fetch(`${SYNC_API}/${encodeURIComponent(syncKey)}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
+        },
         body: payload,
         signal: ctrl.signal
       });
@@ -123,7 +228,6 @@ const CloudSync = (function () {
     }
     updateUIStatus();
 
-    // If more changes arrived while pushing, push again immediately!
     if (pendingPushData) {
       _executePush();
     }
@@ -131,7 +235,7 @@ const CloudSync = (function () {
     return { ok, updatedAt: serverUpdatedAt };
   }
 
-  // ─── Pull ───────────────────────────────────────────────────
+  // ─── Pull (Polling & Manual Sync) ───────────────────────────
   async function pullFromCloud(isBackground = false) {
     if (!syncKey) return { ok: false, reason: 'no-key' };
     if (isPulling) return { ok: false, reason: 'busy' };
@@ -142,107 +246,107 @@ const CloudSync = (function () {
       updateUIStatus();
     }
 
-    let foundData = null;
-    let is404 = false;
+    let result = { ok: false };
 
     try {
       const ctrl = new AbortController();
-      const tid = setTimeout(() => ctrl.abort(), 12000);
-      const res = await fetch(`${API}/${encodeURIComponent(syncKey)}?t=${Date.now()}`, {
+      const tid = setTimeout(() => ctrl.abort(), 10000);
+      const res = await fetch(`${SYNC_API}/${encodeURIComponent(syncKey)}?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
+        },
         signal: ctrl.signal
       });
       clearTimeout(tid);
 
-      if (res.status === 404) {
-        is404 = true;
-      } else if (res.ok) {
-        foundData = await res.json();
+      if (res.status === 200) {
+        const cloudData = await res.json();
+        lastSyncTime = Date.now();
+        localStorage.setItem('sd-last-sync-time', String(lastSyncTime));
+        syncStatus = 'synced';
+        result = { ok: true, data: cloudData };
+      } else if (res.status === 404) {
+        syncStatus = 'synced';
+        result = { ok: false, notFound: true };
+      } else {
+        syncStatus = 'error';
       }
-    } catch (_) {}
+    } catch (_) {
+      syncStatus = 'error';
+    }
 
     isPulling = false;
-
-    if (foundData) {
-      lastSyncTime = Date.now();
-      localStorage.setItem('sd-last-sync-time', String(lastSyncTime));
-      syncStatus = 'synced';
-      updateUIStatus();
-      return { ok: true, data: foundData };
-    } else if (is404) {
-      syncStatus = 'synced';
-      updateUIStatus();
-      return { ok: true, notFound: true, data: null };
-    } else {
-      if (!isBackground) {
-        syncStatus = 'error';
-        updateUIStatus();
-      }
-      return { ok: false, data: null };
-    }
+    updateUIStatus();
+    return result;
   }
 
-  // ─── Auto Sync (Background Polling + Listeners) ─────────────
+  // ─── Auto Sync (Real-Time Polling + Event Wakeup) ────────────
   function startAutoSync(onRemoteUpdate) {
     _onRemoteUpdate = onRemoteUpdate;
 
-    // Cross-tab broadcast listener
     if (bc) {
-      bc.onmessage = (e) => {
-        if (!e.data) return;
-        if (e.data.type === 'DATA_UPDATED' && e.data.data && _onRemoteUpdate) {
-          _onRemoteUpdate(e.data.data);
-        } else if (e.data.type === 'KEY_CHANGED') {
-          syncKey = e.data.syncKey;
-          updateUIStatus();
+      bc.onmessage = (event) => {
+        if (!event.data) return;
+        if (event.data.type === 'DATA_UPDATED' && event.data.data) {
+          if (typeof _onRemoteUpdate === 'function') {
+            _onRemoteUpdate(event.data.data);
+          }
         }
       };
     }
 
-    if (!listenersAdded) {
-      listenersAdded = true;
-
-      document.addEventListener('visibilitychange', async () => {
-        if (document.visibilityState === 'visible' && syncKey) {
-          const r = await pullFromCloud(true);
-          if (r.ok && r.data && _onRemoteUpdate) _onRemoteUpdate(r.data);
+    // Check auth on boot
+    checkAuth().then(user => {
+      pullFromCloud(true).then(res => {
+        if (res && res.ok && res.data && typeof _onRemoteUpdate === 'function') {
+          _onRemoteUpdate(res.data);
         }
       });
+    });
 
-      window.addEventListener('focus', async () => {
-        if (syncKey) {
-          const r = await pullFromCloud(true);
-          if (r.ok && r.data && _onRemoteUpdate) _onRemoteUpdate(r.data);
-        }
-      });
-    }
-
-    // High frequency 2-second background poll
+    // Smart polling
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(async () => {
-      if (!syncKey || document.visibilityState !== 'visible' || isPushing) return;
-      const r = await pullFromCloud(true);
-      if (r.ok && r.data && _onRemoteUpdate) {
-        _onRemoteUpdate(r.data);
+      if (document.hidden || isPushing || !syncKey) return;
+      const res = await pullFromCloud(true);
+      if (res.ok && res.data && typeof _onRemoteUpdate === 'function') {
+        _onRemoteUpdate(res.data);
       }
     }, POLL_INTERVAL_MS);
+
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && syncKey) {
+        pullFromCloud(true).then(res => {
+          if (res.ok && res.data && typeof _onRemoteUpdate === 'function') {
+            _onRemoteUpdate(res.data);
+          }
+        });
+      }
+    });
+
+    window.addEventListener('online', () => {
+      if (syncKey) pullFromCloud(false);
+    });
   }
 
-  // ─── UI Status ──────────────────────────────────────────────
+  // ─── UI Status Updates ──────────────────────────────────────
   function updateUIStatus() {
-    const btn        = document.getElementById('cloud-sync-btn');
+    const btn = document.getElementById('cloud-sync-btn');
+    const authBtn = document.getElementById('auth-user-btn');
     const modalBadge = document.getElementById('modal-sync-status');
-    const timeEl     = document.getElementById('modal-sync-time');
 
-    if (timeEl && lastSyncTime > 0) {
-      const d = new Date(lastSyncTime);
-      timeEl.textContent = `ซิงค์ล่าสุด: ${_pad(d.getHours())}:${_pad(d.getMinutes())}:${_pad(d.getSeconds())} น.`;
+    let displayUserText = currentUser ? (currentUser.role === 'admin' ? `👑 ${currentUser.displayName}` : `👤 ${currentUser.displayName}`) : '👤 เข้าสู่ระบบ';
+
+    if (authBtn) {
+      authBtn.innerHTML = displayUserText;
     }
 
     const states = {
-      local:   { icon: '☁️', label: 'Sync Key',   tip: 'คลิกเพื่อตั้งค่า Sync Key',             badge: '⚪ ข้อมูลในเครื่องนี้เท่านั้น' },
-      syncing: { icon: '🔄', label: 'Syncing…',   tip: 'กำลังซิงค์…',                           badge: '🔄 กำลังซิงค์…' },
-      synced:  { icon: '☁️', label: 'Synced',     tip: `เชื่อมต่อแล้ว (Key: ${syncKey})`,      badge: `✅ เชื่อมต่อแล้ว (Key: ${syncKey})` },
-      error:   { icon: '⚠️', label: 'Offline',    tip: 'ออฟไลน์ชั่วคราว — จะซิงค์ใหม่อัตโนมัติ', badge: '⚠️ ออฟไลน์ (บันทึกลงเครื่องแล้ว)' },
+      local:   { icon: '☁️', label: currentUser ? currentUser.displayName : 'Sync Key', tip: 'คลิกเพื่อตั้งค่า Cloud Sync', badge: '⚪ ข้อมูลในเครื่องนี้เท่านั้น' },
+      syncing: { icon: '🔄', label: 'Syncing…', tip: 'กำลังซิงค์ข้อมูล…', badge: '🔄 กำลังซิงค์ข้อมูล…' },
+      synced:  { icon: '☁️', label: currentUser ? currentUser.displayName : 'Synced', tip: `เชื่อมต่อ Cloud แล้ว (${currentUser ? currentUser.username : syncKey})`, badge: `✅ เชื่อมต่อ Cloud แล้ว (${currentUser ? 'บัญชี: ' + currentUser.displayName : 'Key: ' + syncKey})` },
+      error:   { icon: '⚠️', label: 'Offline', tip: 'ออฟไลน์ชั่วคราว — จะซิงค์ใหม่อัตโนมัติเมื่อออนไลน์', badge: '⚠️ ออฟไลน์ (บันทึกลงเครื่องแล้ว)' },
     };
 
     const s = states[syncStatus] || states.local;
@@ -265,12 +369,16 @@ const CloudSync = (function () {
     };
   }
 
-  function _pad(n) { return String(n).padStart(2, '0'); }
-
   return {
+    register,
+    login,
+    checkAuth,
+    logout,
+    getCurrentUser,
     getSyncKey,
     setSyncKey,
     getLastSyncTime,
+    getCalendarFeedUrl,
     pushToCloud,
     pullFromCloud,
     startAutoSync,
@@ -278,6 +386,4 @@ const CloudSync = (function () {
   };
 })();
 
-// Expose on window so app.js can reference it
-// (top-level `const` does NOT create a `window` property in browsers)
 window.CloudSync = CloudSync;
