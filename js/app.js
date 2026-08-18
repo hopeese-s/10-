@@ -91,8 +91,23 @@
     studyFilter: 'all',
 
     // Study Resource Links (Classroom, Drive, PDF documents, and custom links)
-    studyLinks: []
+    studyLinks: [],
+    curriculum: []
   };
+
+  
+  const DEFAULT_CURRICULUM = [
+    { code: 'SCPY161', name: 'General Physics I', credits: '3 (3-0-6)', type: 'บรรยาย', room: 'L2-002', schedule: 'จันทร์ 09:30 - 12:30', day: 'monday', start: '09:30', end: '12:30', classroomUrl: 'https://classroom.google.com/u/6/c/ODcwMjc5NzAyMjcy', driveUrl: '', desc: 'กลศาสตร์ การเคลื่อนที่ งานและพลังงาน โมเมนตัม การหมุน และคลื่นกล' },
+    { code: 'EGBI122', name: 'Computer Programming', credits: '3 (2-2-5)', type: 'บรรยาย + ปฏิบัติการ', room: 'R335/1, R335/2', schedule: 'จันทร์ 13:30 - 17:30', day: 'monday', start: '13:30', end: '17:30', classroomUrl: '', driveUrl: '', desc: 'หลักการเขียนโปรแกรม โครงสร้างข้อมูล และการประยุกต์ใช้ในงานวิศวกรรมชีวแพทย์' },
+    { code: 'LAEN182', name: 'English for General Academic Purposes', credits: '2 (2-0-4)', type: 'บรรยาย', room: 'Room 320', schedule: 'อังคาร 08:30 - 10:30', day: 'tuesday', start: '08:30', end: '10:30', classroomUrl: '', driveUrl: '', desc: 'ภาษาอังกฤษเพื่อการสื่อสารเชิงวิชาการ ทักษะการอ่าน เขียน และการนำเสนอ' },
+    { code: 'SCBE102', name: 'General Biology Laboratory 1', credits: '1 (0-3-1)', type: 'ปฏิบัติการ', room: 'Lab SC', schedule: 'อังคาร 13:30 - 16:30', day: 'tuesday', start: '13:30', end: '16:30', classroomUrl: '', driveUrl: '', desc: 'ปฏิบัติการชีววิทยาทั่วไป กล้องจุลทรรศน์ โครงสร้างเซลล์และเนื้อเยื่อ' },
+    { code: 'EGBI100', name: 'BME in the Real World', credits: '1 (1-0-2)', type: 'บรรยาย', room: 'R238', schedule: 'อังคาร 17:40 - 18:40', day: 'tuesday', start: '17:40', end: '18:40', classroomUrl: '', driveUrl: '', desc: 'บทนำสู่วิศวกรรมชีวแพทย์ เครื่องมือแพทย์ และระบบสาธารณสุขในโลกจริง' },
+    { code: 'SCMA101', name: 'Mathematics I', credits: '3 (3-0-6)', type: 'บรรยาย', room: 'SC1-152', schedule: 'พุธ 09:00 - 11:00', day: 'wednesday', start: '09:00', end: '11:00', classroomUrl: '', driveUrl: '', desc: 'แคลคูลัส อนุพันธ์ อินทิกรัล และการประยุกต์ใช้ในทางวิศวกรรมศาสตร์' },
+    { code: 'SCSL190', name: 'Wonderful Life (Biology)', credits: '3 (3-0-6)', type: 'บรรยาย', room: 'SC3-303', schedule: 'พฤหัสบดี 09:30 - 12:30', day: 'thursday', start: '09:30', end: '12:30', classroomUrl: '', driveUrl: '', desc: 'ชีววิทยาของสิ่งมีชีวิต วิวัฒนาการ และความหลากหลายทางชีวภาพ' },
+    { code: 'SCCH161', name: 'General Chemistry', credits: '3 (3-0-6)', type: 'บรรยาย', room: 'SC2-323', schedule: 'พฤหัสบดี 13:30 - 16:30', day: 'thursday', start: '13:30', end: '16:30', classroomUrl: 'https://classroom.google.com/u/6/c/ODcwMjc5NzAyMjcy', driveUrl: '', desc: 'เคมีทั่วไป โครงสร้างอะตอม พันธะเคมี จลนศาสตร์ และสมดุลเคมี' },
+    { code: 'SCPY111', name: 'Physics Laboratory I', credits: '1 (0-3-1)', type: 'ปฏิบัติการ', room: 'Lab SC', schedule: 'ศุกร์ 09:30 - 12:30', day: 'friday', start: '09:30', end: '12:30', classroomUrl: '', driveUrl: '', desc: 'การทดลองฟิสิกส์พื้นฐาน การวัด ค่าความคลาดเคลื่อน และการวิเคราะห์ผล' },
+    { code: 'SCCH169', name: 'Chemistry Laboratory', credits: '1 (0-3-1)', type: 'ปฏิบัติการ', room: 'L2-201', schedule: 'ศุกร์ 13:30 - 16:30', day: 'friday', start: '13:30', end: '16:30', classroomUrl: '', driveUrl: '', desc: 'ปฏิบัติการเคมี การไตเตรท การสังเคราะห์สาร และการทดสอบคุณสมบัติ' }
+  ];
 
   const DEFAULT_STUDY_LINKS = [
     // ─── Google Classroom (จากบนลงล่างตามภาพ) ───
@@ -1200,39 +1215,52 @@
     });
   }
 
+  
   // ─── View 2: Curriculum (Mahidol BME 2026-1) ─────────────
+  function getCurriculumCourses() {
+    if (state.curriculum && Array.isArray(state.curriculum) && state.curriculum.length > 0) {
+      return state.curriculum;
+    }
+    const saved = localStorage.getItem('sd-curriculum');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          state.curriculum = parsed;
+          return state.curriculum;
+        }
+      } catch (_) {}
+    }
+    state.curriculum = JSON.parse(JSON.stringify(DEFAULT_CURRICULUM));
+    return state.curriculum;
+  }
+
+  function saveCurriculum() {
+    try {
+      localStorage.setItem('sd-curriculum', JSON.stringify(state.curriculum));
+    } catch (_) {}
+    CloudSync.pushToCloud(state);
+  }
+
   function renderCurriculumView() {
     const container = document.getElementById('view-egbe-curriculum');
     if (!container) return;
 
-    const curriculumCourses = [
-      { code: 'SCPY161', name: 'General Physics I', credits: '3 (3-0-6)', type: 'บรรยาย', room: 'L2-002', schedule: 'จันทร์ 09:30 - 12:30', desc: 'กลศาสตร์ การเคลื่อนที่ งานและพลังงาน โมเมนตัม การหมุน และคลื่นกล' },
-      { code: 'EGBI122', name: 'Computer Programming', credits: '3 (2-2-5)', type: 'บรรยาย + ปฏิบัติการ', room: 'R335/1, R335/2', schedule: 'จันทร์ 13:30 - 17:30', desc: 'หลักการเขียนโปรแกรม โครงสร้างข้อมูล และการประยุกต์ใช้ในงานวิศวกรรมชีวแพทย์' },
-      { code: 'LAEN182', name: 'English for General Academic Purposes', credits: '2 (2-0-4)', type: 'บรรยาย', room: 'Room 320', schedule: 'อังคาร 08:30 - 10:30', desc: 'ภาษาอังกฤษเพื่อการสื่อสารเชิงวิชาการ ทักษะการอ่าน เขียน และการนำเสนอ' },
-      { code: 'SCBE102', name: 'General Biology Laboratory 1', credits: '1 (0-3-1)', type: 'ปฏิบัติการ', room: 'Lab SC', schedule: 'อังคาร 13:30 - 16:30', desc: 'ปฏิบัติการชีววิทยาทั่วไป กล้องจุลทรรศน์ โครงสร้างเซลล์และเนื้อเยื่อ' },
-      { code: 'EGBI100', name: 'BME in the Real World', credits: '1 (1-0-2)', type: 'บรรยาย', room: 'R238', schedule: 'อังคาร 17:40 - 18:40', desc: 'บทนำสู่วิศวกรรมชีวแพทย์ เครื่องมือแพทย์ และระบบสาธารณสุขในโลกจริง' },
-      { code: 'SCMA101', name: 'Mathematics I', credits: '3 (3-0-6)', type: 'บรรยาย', room: 'SC1-152', schedule: 'พุธ 09:00 - 11:00', desc: 'แคลคูลัส อนุพันธ์ อินทิกรัล และการประยุกต์ใช้ในทางวิศวกรรมศาสตร์' },
-      { code: 'SCSL190', name: 'Wonderful Life (Biology)', credits: '3 (3-0-6)', type: 'บรรยาย', room: 'SC3-303', schedule: 'พฤหัสบดี 09:30 - 12:30', desc: 'ชีววิทยาของสิ่งมีชีวิต วิวัฒนาการ และความหลากหลายทางชีวภาพ' },
-      { code: 'SCCH161', name: 'General Chemistry', credits: '3 (3-0-6)', type: 'บรรยาย', room: 'SC2-323', schedule: 'พฤหัสบดี 13:30 - 16:30', desc: 'เคมีทั่วไป โครงสร้างอะตอม พันธะเคมี จลนศาสตร์ และสมดุลเคมี' },
-      { code: 'SCPY111', name: 'Physics Laboratory I', credits: '1 (0-3-1)', type: 'ปฏิบัติการ', room: 'Lab SC', schedule: 'ศุกร์ 09:30 - 12:30', desc: 'การทดลองฟิสิกส์พื้นฐาน การวัด ค่าความคลาดเคลื่อน และการวิเคราะห์ผล' },
-      { code: 'SCCH169', name: 'Chemistry Laboratory', credits: '1 (0-3-1)', type: 'ปฏิบัติการ', room: 'L2-201', schedule: 'ศุกร์ 13:30 - 16:30', desc: 'ปฏิบัติการเคมี การไตเตรท การสังเคราะห์สาร และการทดสอบคุณสมบัติ' }
-    ];
-
+    const curriculumCourses = getCurriculumCourses();
     const isList = state.curriculumViewMode === 'list';
 
-    // Build Content based on view mode
     let contentHtml = '';
     if (isList) {
-      // List Mode (Table / Horizontal Row View)
+      // List Mode
       contentHtml = `
         <div class="curriculum-list-wrap">
           ${curriculumCourses.map(c => {
             const sc = SUBJECT_COLORS[c.code] || { color: 'var(--accent)', bg: 'var(--accent-bg)', emoji: '📘' };
             return `
-              <div class="curriculum-list-row">
+              <div class="curriculum-list-row course-card-clickable" data-code="${c.code}" style="cursor:pointer">
                 <div class="clr-badge-col">
                   <span class="tag-chip" style="background:${sc.bg};color:${sc.color}">
-                    ${sc.emoji} ${c.code}
+                    ${c.code}
                   </span>
                   <div style="font-size:11px;font-weight:600;color:var(--label-3);margin-top:4px">${c.credits}</div>
                 </div>
@@ -1241,8 +1269,8 @@
                   <p style="font-size:12px;color:var(--label-2);line-height:1.45">${escHtml(c.desc)}</p>
                 </div>
                 <div class="clr-meta-col">
-                  <div style="font-size:12px;font-weight:600;color:var(--label)">📍 ${escHtml(c.room)}</div>
-                  <div style="font-size:11.5px;color:var(--label-3);margin-top:2px">⏰ ${escHtml(c.schedule)}</div>
+                  <div style="font-size:12px;font-weight:600;color:var(--label)">📍 ${escHtml(c.room || '-')}</div>
+                  <div style="font-size:11.5px;color:var(--label-3);margin-top:2px">⏰ ${escHtml(c.schedule || '-')}</div>
                 </div>
               </div>
             `;
@@ -1250,24 +1278,24 @@
         </div>
       `;
     } else {
-      // Grid Mode (Card Grid View)
+      // Grid Mode
       contentHtml = `
         <div class="cards-grid">
           ${curriculumCourses.map(c => {
             const sc = SUBJECT_COLORS[c.code] || { color: 'var(--accent)', bg: 'var(--accent-bg)', emoji: '📘' };
             return `
-              <div class="card-item">
+              <div class="card-item course-card-clickable" data-code="${c.code}" style="cursor:pointer">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
                   <span class="tag-chip" style="background:${sc.bg};color:${sc.color}">
-                    ${sc.emoji} ${c.code}
+                    ${c.code}
                   </span>
                   <span style="font-size:11.5px;font-weight:600;color:var(--label-3)">${c.credits}</span>
                 </div>
                 <h3 style="font-size:15px;font-weight:700;margin-bottom:6px;color:var(--label)">${escHtml(c.name)}</h3>
                 <p style="font-size:12.5px;color:var(--label-2);line-height:1.5;margin-bottom:12px">${escHtml(c.desc)}</p>
                 <div style="font-size:11.5px;color:var(--label-3);border-top:1px solid var(--sep);padding-top:10px;display:flex;flex-direction:column;gap:3px">
-                  <div>📍 ห้อง: <strong>${escHtml(c.room)}</strong></div>
-                  <div>⏰ เวลา: <strong>${escHtml(c.schedule)}</strong></div>
+                  <div>ห้อง: <strong>${escHtml(c.room || '-')}</strong></div>
+                  <div>เวลา: <strong>${escHtml(c.schedule || '-')}</strong></div>
                 </div>
               </div>`;
           }).join('')}
@@ -1279,7 +1307,7 @@
       <div class="curriculum-header-row">
         <div>
           <h2 style="font-family:var(--font-serif);font-size:1.6rem;font-weight:700;margin-bottom:4px">หลักสูตรวิศวกรรมชีวแพทย์ (BME Mahidol 2026)</h2>
-          <p style="font-size:13.5px;color:var(--label-2)">โครงสร้างรายวิชาปีที่ 1 ภาคเรียนที่ 1 รวมทั้งสิ้น 21 หน่วยกิต</p>
+          <p style="font-size:13.5px;color:var(--label-2)">โครงสร้างรายวิชาปีที่ 1 ภาคเรียนที่ 1 รวมทั้งสิ้น 21 หน่วยกิต (คลิกที่การ์ดวิชาเพื่อดูรายละเอียด/แก้ไขห้องเรียน)</p>
         </div>
         <div class="view-mode-toggle" aria-label="รูปแบบการแสดงผล">
           <button class="view-mode-btn ${!isList ? 'active' : ''}" data-mode="grid" title="แสดงแบบการ์ด">
@@ -1304,32 +1332,361 @@
         }
       });
     });
+
+    // Attach course click listeners
+    container.querySelectorAll('.course-card-clickable').forEach(card => {
+      card.addEventListener('click', () => {
+        const code = card.dataset.code;
+        if (code) openCourseModal(code);
+      });
+    });
   }
 
+  // ─── Course Inspector & Details Modal ──────────────────────
+  let activeEditingCourseCode = null;
+
+  function openCourseModal(courseCode) {
+    const modal = document.getElementById('course-modal');
+    if (!modal) return;
+
+    const courses = getCurriculumCourses();
+    const course = courses.find(c => c.code.toLowerCase() === courseCode.toLowerCase());
+    if (!course) return;
+
+    activeEditingCourseCode = course.code;
+
+    const badgeEl = document.getElementById('course-modal-badge');
+    const titleEl = document.getElementById('course-modal-title');
+    const roomEl = document.getElementById('course-view-room');
+    const schedEl = document.getElementById('course-view-schedule');
+    const descEl = document.getElementById('course-view-desc');
+    const classroomBtn = document.getElementById('course-classroom-btn');
+    const driveBtn = document.getElementById('course-drive-btn');
+    const relatedDocsEl = document.getElementById('course-related-docs');
+
+    const viewBody = document.getElementById('course-view-body');
+    const editBody = document.getElementById('course-edit-body');
+    const viewActions = document.getElementById('course-view-actions');
+    const editActions = document.getElementById('course-edit-actions');
+
+    const sc = SUBJECT_COLORS[course.code] || { color: 'var(--accent)', bg: 'var(--accent-bg)' };
+
+    if (badgeEl) {
+      badgeEl.textContent = course.code;
+      badgeEl.style.background = sc.bg;
+      badgeEl.style.color = sc.color;
+    }
+    if (titleEl) titleEl.textContent = course.name;
+    if (roomEl) roomEl.textContent = course.room || '-';
+    if (schedEl) schedEl.textContent = course.schedule || '-';
+    if (descEl) descEl.textContent = course.desc || '-';
+
+    // Classroom & Drive URLs
+    const classroomUrl = course.classroomUrl || (state.studyLinks || []).find(l => l.type === 'classroom' && l.title && l.title.includes(course.code))?.url || '';
+    const driveUrl = course.driveUrl || (state.studyLinks || []).find(l => l.type === 'drive' && l.title && l.title.includes(course.code))?.url || '';
+
+    if (classroomBtn) {
+      if (classroomUrl) {
+        classroomBtn.href = classroomUrl;
+        classroomBtn.style.display = 'inline-flex';
+      } else {
+        classroomBtn.style.display = 'none';
+      }
+    }
+
+    if (driveBtn) {
+      if (driveUrl) {
+        driveBtn.href = driveUrl;
+        driveBtn.style.display = 'inline-flex';
+      } else {
+        driveBtn.style.display = 'none';
+      }
+    }
+
+    // Related study files list
+    if (relatedDocsEl) {
+      const code = course.code.toLowerCase();
+      const matched = (state.studyLinks || []).filter(l => (l.title && l.title.toLowerCase().includes(code)) || (l.desc && l.desc.toLowerCase().includes(code)));
+      if (matched.length === 0) {
+        relatedDocsEl.innerHTML = '<div style="font-size:12px;color:var(--label-3)">ยังไม่มีไฟล์หรือชีทที่ผูกกับวิชานี้</div>';
+      } else {
+        relatedDocsEl.innerHTML = matched.map(m => `
+          <div class="course-related-item" data-id="${m.id}" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg-3);border-radius:var(--r-s);border:1px solid var(--sep);cursor:pointer">
+            <div style="font-size:12.5px;font-weight:600;color:var(--label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(m.title)}</div>
+            <button class="btn btn-secondary" style="font-size:11px;padding:3px 8px">เปิดดู</button>
+          </div>
+        `).join('');
+
+        relatedDocsEl.querySelectorAll('.course-related-item').forEach(el => {
+          el.addEventListener('click', () => {
+            const id = el.dataset.id;
+            const item = state.studyLinks.find(l => l.id === id);
+            if (item) {
+              closeModal('course-modal');
+              openResourcePreview(item);
+            }
+          });
+        });
+      }
+    }
+
+    // Reset view vs edit state
+    function setEditMode(isEditing) {
+      if (viewBody) viewBody.style.display = isEditing ? 'none' : 'block';
+      if (viewActions) viewActions.style.display = isEditing ? 'none' : 'flex';
+      if (editBody) editBody.style.display = isEditing ? 'block' : 'none';
+      if (editActions) editActions.style.display = isEditing ? 'flex' : 'none';
+
+      if (isEditing) {
+        const roomInp = document.getElementById('course-edit-room-inp');
+        const schedInp = document.getElementById('course-edit-schedule-inp');
+        const crInp = document.getElementById('course-edit-classroom-inp');
+        const drInp = document.getElementById('course-edit-drive-inp');
+        const descInp = document.getElementById('course-edit-desc-inp');
+
+        if (roomInp) roomInp.value = course.room || '';
+        if (schedInp) schedInp.value = course.schedule || '';
+        if (crInp) crInp.value = course.classroomUrl || '';
+        if (drInp) drInp.value = course.driveUrl || '';
+        if (descInp) descInp.value = course.desc || '';
+      }
+    }
+
+    setEditMode(false);
+
+    document.getElementById('course-edit-toggle-btn').onclick = () => setEditMode(true);
+    document.getElementById('course-edit-cancel-btn').onclick = () => setEditMode(false);
+    document.getElementById('course-close-btn').onclick = () => closeModal('course-modal');
+    document.getElementById('course-modal-close').onclick = () => closeModal('course-modal');
+
+    // Save edited course
+    document.getElementById('course-edit-save-btn').onclick = () => {
+      const roomInp = document.getElementById('course-edit-room-inp');
+      const schedInp = document.getElementById('course-edit-schedule-inp');
+      const crInp = document.getElementById('course-edit-classroom-inp');
+      const drInp = document.getElementById('course-edit-drive-inp');
+      const descInp = document.getElementById('course-edit-desc-inp');
+
+      course.room = roomInp?.value.trim() || course.room;
+      course.schedule = schedInp?.value.trim() || course.schedule;
+      course.classroomUrl = crInp?.value.trim() || '';
+      course.driveUrl = drInp?.value.trim() || '';
+      course.desc = descInp?.value.trim() || course.desc;
+
+      saveCurriculum();
+      renderCurriculumView();
+      renderTimeline(state.currentDay);
+      showToast(`บันทึกข้อมูลวิชา ${course.code} เรียบร้อยแล้ว`, 'success');
+      closeModal('course-modal');
+    };
+
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+
+  
   // ─── View 3: Study Resources (Folders, Search, Multi-Page PDF.js, Drag & Drop) ─
   let studySearchQuery = '';
   let studyViewMode = localStorage.getItem('sd-study-mode') || 'grid';
+  let studyFolderLayout = localStorage.getItem('sd-folder-layout') || 'horizontal'; // 'horizontal' | 'vertical'
 
   function renderStudyView() {
     const container = document.getElementById('view-egbe-study');
     if (!container) return;
 
-    if (!state.studyFolders || !Array.isArray(state.studyFolders) || state.studyFolders.length === 0) {
-      state.studyFolders = [...DEFAULT_STUDY_FOLDERS];
-    }
-    const currentFolder = state.selectedFolderId || 'all';
-    const query = (studySearchQuery || '').toLowerCase().trim();
+    let currentFolder = localStorage.getItem('sd-study-active-folder') || 'all';
+    const folderExists = currentFolder === 'all' || state.studyFolders.some(f => f.id === currentFolder);
+    if (!folderExists) { currentFolder = 'all'; localStorage.setItem('sd-study-active-folder', 'all'); }
 
-    // Filter links
     const filteredLinks = state.studyLinks.filter(item => {
-      const matchFolder = (currentFolder === 'all' || item.folderId === currentFolder || (!item.folderId && currentFolder === 'f-notes'));
-      const matchQuery = (!query || item.title.toLowerCase().includes(query) || (item.sub && item.sub.toLowerCase().includes(query)) || (item.desc && item.desc.toLowerCase().includes(query)));
-      return matchFolder && matchQuery;
+      const matchFolder = currentFolder === 'all' || item.folderId === currentFolder || (!item.folderId && currentFolder === 'f-notes');
+      const q = studySearchQuery.toLowerCase().trim();
+      const matchSearch = !q || (item.title && item.title.toLowerCase().includes(q)) || (item.desc && item.desc.toLowerCase().includes(q)) || (item.sub && item.sub.toLowerCase().includes(q));
+      return matchFolder && matchSearch;
     });
 
     const totalCount = state.studyLinks.length;
-
     const isListMode = studyViewMode === 'list';
+    const isVerticalFolder = studyFolderLayout === 'vertical';
+
+    // Build Folder Section HTML based on layout
+    let folderSectionHtml = '';
+    if (isVerticalFolder) {
+      folderSectionHtml = `
+        <div class="study-folder-grid" id="study-folder-grid">
+          <div class="study-folder-card ${currentFolder === 'all' ? 'active' : ''}" data-folder="all">
+            <span class="study-folder-card-name">📁 ทั้งหมด</span>
+            <span class="study-folder-count">${totalCount}</span>
+          </div>
+          ${state.studyFolders.map(f => {
+            const fCount = state.studyLinks.filter(l => l.folderId === f.id || (!l.folderId && f.id === 'f-notes')).length;
+            const isDefault = DEFAULT_STUDY_FOLDERS.some(df => df.id === f.id);
+            return `
+              <div class="study-folder-card ${currentFolder === f.id ? 'active' : ''}" data-folder="${f.id}">
+                <span class="study-folder-card-name">${escHtml(f.name)}</span>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span class="study-folder-count">${fCount}</span>
+                  ${!isDefault ? `
+                    <button class="folder-del-btn" data-folder-id="${f.id}" title="ลบโฟลเดอร์" style="background:none;border:none;cursor:pointer;color:currentColor;opacity:0.6;font-size:11px;padding:0 2px">✕</button>
+                  ` : ''}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    } else {
+      folderSectionHtml = `
+        <div class="study-folder-bar-wrapper" style="position:relative;display:flex;align-items:center;margin-bottom:1.25rem">
+          <button class="folder-scroll-arrow folder-scroll-left" id="folder-scroll-left" aria-label="เลื่อนซ้าย" title="เลื่อนโฟลเดอร์ไปทางซ้าย">◀</button>
+          <div class="study-folder-bar" id="study-folder-bar" style="cursor:grab;overflow-x:auto;-webkit-overflow-scrolling:touch">
+            <button class="study-folder-pill ${currentFolder === 'all' ? 'active' : ''}" data-folder="all">
+              <span>📁 ทั้งหมด</span>
+              <span class="study-folder-count">${totalCount}</span>
+            </button>
+            ${state.studyFolders.map(f => {
+              const fCount = state.studyLinks.filter(l => l.folderId === f.id || (!l.folderId && f.id === 'f-notes')).length;
+              const isDefault = DEFAULT_STUDY_FOLDERS.some(df => df.id === f.id);
+              return `
+                <div class="study-folder-pill ${currentFolder === f.id ? 'active' : ''}" data-folder="${f.id}">
+                  <span>${escHtml(f.name)}</span>
+                  <span class="study-folder-count">${fCount}</span>
+                  ${!isDefault ? `
+                    <button class="folder-del-btn" data-folder-id="${f.id}" title="ลบโฟลเดอร์" style="background:none;border:none;cursor:pointer;color:currentColor;opacity:0.6;font-size:11px;padding:0 2px">✕</button>
+                  ` : ''}
+                </div>
+              `;
+            }).join('')}
+          </div>
+          <button class="folder-scroll-arrow folder-scroll-right" id="folder-scroll-right" aria-label="เลื่อนขวา" title="เลื่อนโฟลเดอร์ไปทางขวา">▶</button>
+        </div>
+      `;
+    }
+
+    container.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.25rem;flex-wrap:wrap;gap:1rem">
+        <div>
+          <h2 style="font-family:var(--font-serif);font-size:1.6rem;font-weight:700;margin-bottom:4px">Study Resources &amp; Documents</h2>
+          <p style="font-size:13px;color:var(--label-2)">คลังเอกสาร ชีทสรุป Google Classroom และคู่มือ BME พร้อมระบบโฟลเดอร์</p>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <!-- Folder layout toggle -->
+          <div class="view-mode-toggle" aria-label="มุมมองโฟลเดอร์">
+            <button class="view-mode-btn ${!isVerticalFolder ? 'active' : ''}" id="toggle-folder-h" title="แถบแนวนอน">แนวนอน</button>
+            <button class="view-mode-btn ${isVerticalFolder ? 'active' : ''}" id="toggle-folder-v" title="ตารางแนวตั้ง">ตารางแนวตั้ง</button>
+          </div>
+
+          <!-- Grid / List toggle -->
+          <div class="view-mode-toggle" aria-label="รูปแบบการแสดงผล">
+            <button class="view-mode-btn ${!isListMode ? 'active' : ''}" data-study-mode="grid" title="แสดงแบบการ์ด"><span>⊞</span> Grid</button>
+            <button class="view-mode-btn ${isListMode ? 'active' : ''}" data-study-mode="list" title="แสดงแบบรายการ"><span>☰</span> List</button>
+          </div>
+          <button class="btn btn-secondary" id="create-folder-btn" style="font-size:12.5px;padding:7px 14px;display:inline-flex;align-items:center;gap:6px">
+            สร้างโฟลเดอร์ใหม่
+          </button>
+          <button class="btn btn-primary" id="add-resource-btn" style="font-size:12.5px;padding:7px 16px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;">
+            + เพิ่มเอกสาร
+          </button>
+        </div>
+      </div>
+
+      <!-- Search & Status Bar -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
+        <div style="position:relative;flex:1;max-width:360px">
+          <input type="text" id="study-search-inp" class="form-input" placeholder="ค้นหาชีทเรียน, รหัสวิชา, หรือ Drive..." value="${escHtml(studySearchQuery)}" style="padding-left:14px;font-size:12.5px;border-radius:var(--r-pill)" />
+          ${studySearchQuery ? `<button id="study-clear-search" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--label-3);font-size:12px">✕</button>` : ''}
+        </div>
+        <div style="font-size:11.5px;color:var(--label-3);font-weight:600">
+          ${filteredLinks.length} เอกสาร
+        </div>
+      </div>
+
+      ${folderSectionHtml}
+
+      <!-- File Cards (Grid or List) -->
+      ${filteredLinks.length === 0 ? `
+        <div style="padding:3rem;text-align:center;color:var(--label-3);background:var(--bg-2);border-radius:var(--r-l);border:1px dashed var(--sep)">
+          <div style="font-weight:600;font-size:14px;color:var(--label-2)">ไม่มีเอกสารในโฟลเดอร์นี้</div>
+          <p style="font-size:12.5px;margin-top:4px">กดปุ่ม + เพิ่มเอกสาร เพื่อเพิ่มเอกสารใหม่</p>
+        </div>
+      ` : isListMode ? `
+        <div class="study-list-view" id="study-cards-grid">
+          ${filteredLinks.map(item => {
+            let badgeColor = 'var(--accent)'; let badgeBg = 'var(--accent-bg)'; let typeIcon = 'Link';
+            if (item.type === 'classroom') { badgeColor = '#2563eb'; badgeBg = 'rgba(59,130,246,0.12)'; typeIcon = 'Classroom'; }
+            else if (item.type === 'drive') { badgeColor = '#059669'; badgeBg = 'rgba(16,185,129,0.12)'; typeIcon = 'Drive'; }
+            else if (item.type === 'pdf') { badgeColor = '#dc2626'; badgeBg = 'rgba(239,68,68,0.12)'; typeIcon = 'PDF'; }
+            else if (item.type === 'image') { badgeColor = '#d97706'; badgeBg = 'rgba(217,119,6,0.12)'; typeIcon = 'Image'; }
+            else if (item.type === 'local') { badgeColor = '#7c3aed'; badgeBg = 'rgba(124,58,237,0.12)'; typeIcon = 'Upload'; }
+            const isDefault = DEFAULT_STUDY_LINKS.some(d => d.id === item.id);
+            const folderName = state.studyFolders.find(f => f.id === item.folderId)?.name || '';
+            return `
+              <div class="study-list-item study-card" data-id="${item.id}" style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:var(--r-m);background:var(--bg-2);border:1px solid var(--sep);cursor:pointer;transition:background 0.15s">
+                <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:var(--r-pill);background:${badgeBg};color:${badgeColor}">${typeIcon}</span>
+                <div style="flex:1;min-width:0">
+                  <div style="font-weight:700;font-size:13.5px;color:var(--label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(item.title)}</div>
+                  <div style="font-size:11.5px;color:var(--label-3);margin-top:2px">${escHtml(folderName ? 'โฟลเดอร์: ' + folderName : (item.sub || item.desc || ''))}</div>
+                </div>
+                <div style="display:flex;gap:6px" onclick="event.stopPropagation()">
+                  <button class="btn btn-secondary btn-move-doc" data-id="${item.id}" title="ย้ายโฟลเดอร์" style="font-size:11px;padding:4px 8px">ย้าย</button>
+                  ${!isDefault ? `
+                    <button class="btn btn-danger btn-del-doc" data-id="${item.id}" title="ลบเอกสาร" style="font-size:11px;padding:4px 8px">ลบ</button>
+                  ` : ''}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      ` : `
+        <div class="cards-grid" id="study-cards-grid">
+          ${filteredLinks.map(item => {
+            let badgeColor = 'var(--accent)'; let badgeBg = 'var(--accent-bg)'; let typeIcon = 'Link';
+            if (item.type === 'classroom') { badgeColor = '#2563eb'; badgeBg = 'rgba(59,130,246,0.12)'; typeIcon = 'Classroom'; }
+            else if (item.type === 'drive') { badgeColor = '#059669'; badgeBg = 'rgba(16,185,129,0.12)'; typeIcon = 'Drive'; }
+            else if (item.type === 'pdf') { badgeColor = '#dc2626'; badgeBg = 'rgba(239,68,68,0.12)'; typeIcon = 'PDF'; }
+            else if (item.type === 'image') { badgeColor = '#d97706'; badgeBg = 'rgba(217,119,6,0.12)'; typeIcon = 'Image'; }
+            else if (item.type === 'local') { badgeColor = '#7c3aed'; badgeBg = 'rgba(124,58,237,0.12)'; typeIcon = 'Upload'; }
+            const isDefault = DEFAULT_STUDY_LINKS.some(d => d.id === item.id);
+            const folderName = state.studyFolders.find(f => f.id === item.folderId)?.name || '';
+            return `
+              <div class="card-item study-card" data-id="${item.id}">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+                  <span class="tag-chip" style="color:${badgeColor};background:${badgeBg};font-weight:700">
+                    ${typeIcon}
+                  </span>
+                  <div style="display:flex;gap:4px">
+                    <button class="btn-move-doc" data-id="${item.id}" title="ย้ายโฟลเดอร์" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--label-3);padding:2px 4px">ย้าย</button>
+                    ${!isDefault ? `
+                      <button class="btn-del-doc" data-id="${item.id}" title="ลบเอกสาร" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--label-3);padding:2px 4px">✕</button>
+                    ` : ''}
+                  </div>
+                </div>
+                <h3 style="font-size:14.5px;font-weight:700;margin-bottom:4px;color:var(--label);line-height:1.35">${escHtml(item.title)}</h3>
+                ${item.sub ? `<div style="font-size:12px;color:var(--label-2);margin-bottom:8px">${escHtml(item.sub)}</div>` : ''}
+                ${item.desc ? `<p style="font-size:12px;color:var(--label-3);line-height:1.4;margin-bottom:12px">${escHtml(item.desc)}</p>` : ''}
+                <div style="margin-top:auto;display:flex;align-items:center;justify-content:space-between;padding-top:10px;border-top:1px solid var(--sep)">
+                  <span style="font-size:11px;color:var(--label-3)">${escHtml(folderName || 'General')}</span>
+                  <span style="font-size:11.5px;font-weight:600;color:var(--accent)">เปิดเอกสาร ↗</span>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `}
+    `;
+
+    // Attach Folder Layout Toggle
+    document.getElementById('toggle-folder-h')?.addEventListener('click', () => {
+      studyFolderLayout = 'horizontal';
+      localStorage.setItem('sd-folder-layout', 'horizontal');
+      renderStudyView();
+    });
+    document.getElementById('toggle-folder-v')?.addEventListener('click', () => {
+      studyFolderLayout = 'vertical';
+      localStorage.setItem('sd-folder-layout', 'vertical');
+      renderStudyView();
+    });
 
     container.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.25rem;flex-wrap:wrap;gap:1rem">
