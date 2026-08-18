@@ -1689,6 +1689,11 @@
     document.body.style.overflow = 'hidden';
   }
 
+    let currentUploadMode = 'file'; // 'file' or 'link'
+  let currentUploadedFileData = null;
+  let currentUploadedFileType = 'pdf';
+  let currentUploadedFileName = '';
+
   function openAddResourceModal() {
     const modal = document.getElementById('resource-modal');
     if (!modal) return;
@@ -1698,59 +1703,104 @@
     const urlInp = document.getElementById('res-url');
     const descInp = document.getElementById('res-desc');
     const typeSel = document.getElementById('res-type');
+    const fileInp = document.getElementById('res-file-input');
+    const pickBtn = document.getElementById('res-pick-file-btn');
+    const chosenBox = document.getElementById('res-file-chosen-box');
+    const chosenText = document.getElementById('res-file-chosen');
+    const removeBtn = document.getElementById('res-file-remove-btn');
+    const tabFile = document.getElementById('res-tab-file');
+    const tabLink = document.getElementById('res-tab-link');
+    const filePanel = document.getElementById('res-file-panel');
+    const linkPanel = document.getElementById('res-link-panel');
+    const saveBtn = document.getElementById('res-save-btn');
 
+    // Reset inputs
     if (titleInp) titleInp.value = '';
     if (urlInp) urlInp.value = '';
     if (descInp) descInp.value = '';
+    if (fileInp) fileInp.value = '';
+    if (chosenBox) chosenBox.style.display = 'none';
+    if (chosenText) chosenText.textContent = '';
+    currentUploadedFileData = null;
+    currentUploadedFileName = '';
+    currentUploadedFileType = 'pdf';
+    currentUploadMode = 'file';
 
-    // Inject upload UI dynamically into the modal body
-    const modalBody = modal.querySelector('.modal-body');
-    if (modalBody && !modalBody.querySelector('#res-file-upload-section')) {
-      const uploadSection = document.createElement('div');
-      uploadSection.id = 'res-file-upload-section';
-      uploadSection.style.cssText = 'border:2px dashed var(--sep);border-radius:var(--r-m);padding:14px 16px;margin-bottom:16px;background:var(--bg-3)';
-      uploadSection.innerHTML = `
-        <div style="font-size:12px;font-weight:700;color:var(--label-2);margin-bottom:8px">📎 อัพโหลดไฟล์จากอุปกรณ์</div>
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-          <button type="button" id="res-pick-file-btn" class="btn btn-secondary" style="font-size:12.5px;padding:7px 14px;display:inline-flex;align-items:center;gap:6px">
-            📂 เลือกไฟล์จากเครื่อง
-          </button>
-          <span id="res-file-chosen" style="font-size:12px;color:var(--label-3);font-style:italic">ยังไม่ได้เลือกไฟล์</span>
-        </div>
-        <div style="font-size:11px;color:var(--label-3);margin-top:6px">รองรับ PDF, รูปภาพ (PNG, JPG), สูงสุด 8MB · หรือกรอก URL ด้านล่างแทนก็ได้</div>
-        <input type="file" id="res-file-input" accept=".pdf,.png,.jpg,.jpeg,.gif,.webp" style="display:none" />
-      `;
-      modalBody.insertBefore(uploadSection, modalBody.firstChild);
+    // Update Tab UI
+    function setUploadMode(mode) {
+      currentUploadMode = mode;
+      if (mode === 'file') {
+        if (tabFile) { tabFile.style.background = 'var(--accent-bg)'; tabFile.style.color = 'var(--accent)'; tabFile.style.fontWeight = '700'; }
+        if (tabLink) { tabLink.style.background = 'transparent'; tabLink.style.color = 'var(--label-2)'; tabLink.style.fontWeight = '600'; }
+        if (filePanel) filePanel.style.display = 'block';
+        if (linkPanel) linkPanel.style.display = 'none';
+      } else {
+        if (tabLink) { tabLink.style.background = 'var(--accent-bg)'; tabLink.style.color = 'var(--accent)'; tabLink.style.fontWeight = '700'; }
+        if (tabFile) { tabFile.style.background = 'transparent'; tabFile.style.color = 'var(--label-2)'; tabFile.style.fontWeight = '600'; }
+        if (filePanel) filePanel.style.display = 'none';
+        if (linkPanel) linkPanel.style.display = 'block';
+      }
     }
 
-    // Track selected file data URL
-    let selectedFileDataUrl = null;
-    let selectedFileType = null;
+    if (tabFile) tabFile.onclick = () => setUploadMode('file');
+    if (tabLink) tabLink.onclick = () => setUploadMode('link');
+    setUploadMode('file');
 
-    const fileInput = modal.querySelector('#res-file-input');
-    const pickBtn = modal.querySelector('#res-pick-file-btn');
-    const fileChosen = modal.querySelector('#res-file-chosen');
+    // File selection
+    if (pickBtn && fileInp) {
+      pickBtn.onclick = () => fileInp.click();
+    }
 
-    if (pickBtn && fileInput) {
-      pickBtn.onclick = () => fileInput.click();
-      fileInput.onchange = () => {
-        const file = fileInput.files && fileInput.files[0];
+    if (fileInp) {
+      fileInp.onchange = () => {
+        const file = fileInp.files && fileInp.files[0];
         if (!file) return;
-        if (file.size > 8 * 1024 * 1024) {
-          showToast('⚠️ ไฟล์ใหญ่เกิน 8MB กรุณาใช้ URL แทน', 'warning');
-          fileInput.value = '';
+        if (file.size > 25 * 1024 * 1024) {
+          showToast('⚠️ ไฟล์มีขนาดเกิน 25MB กรุณาเลือกไฟล์ที่เล็กลง', 'warning');
+          fileInp.value = '';
           return;
         }
         const ext = file.name.split('.').pop().toLowerCase();
-        selectedFileType = ['png','jpg','jpeg','gif','webp'].includes(ext) ? 'image' : 'pdf';
-        if (!titleInp.value.trim()) titleInp.value = file.name.replace(/\.[^.]+$/, '');
-        if (typeSel) typeSel.value = selectedFileType;
-        if (fileChosen) fileChosen.textContent = `✅ ${file.name} (${(file.size/1024).toFixed(0)} KB)`;
-        if (urlInp) urlInp.value = '';
+        currentUploadedFileType = ['png','jpg','jpeg','gif','webp'].includes(ext) ? 'image' : 'pdf';
+        currentUploadedFileName = file.name;
+
+        if (titleInp && !titleInp.value.trim()) {
+          titleInp.value = file.name.replace(/\.[^.]+$/, '');
+        }
+
+        if (chosenBox && chosenText) {
+          chosenBox.style.display = 'flex';
+          chosenText.textContent = `✅ ${file.name} (${(file.size / 1024).toFixed(0)} KB)`;
+        }
 
         const reader = new FileReader();
-        reader.onload = (ev) => { selectedFileDataUrl = ev.target.result; };
+        reader.onload = (ev) => {
+          currentUploadedFileData = ev.target.result;
+        };
         reader.readAsDataURL(file);
+      };
+    }
+
+    // Drag & Drop on file panel
+    if (filePanel) {
+      filePanel.ondragover = (e) => { e.preventDefault(); filePanel.style.background = 'var(--bg-3)'; };
+      filePanel.ondragleave = () => { filePanel.style.background = 'var(--accent-bg)'; };
+      filePanel.ondrop = (e) => {
+        e.preventDefault();
+        filePanel.style.background = 'var(--accent-bg)';
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+          fileInp.files = e.dataTransfer.files;
+          fileInp.dispatchEvent(new Event('change'));
+        }
+      };
+    }
+
+    if (removeBtn) {
+      removeBtn.onclick = () => {
+        if (fileInp) fileInp.value = '';
+        currentUploadedFileData = null;
+        currentUploadedFileName = '';
+        if (chosenBox) chosenBox.style.display = 'none';
       };
     }
 
@@ -1760,41 +1810,97 @@
       `).join('');
     }
 
-    const saveBtn = document.getElementById('res-save-btn');
+    // Save Button Handler
     if (saveBtn) {
-      saveBtn.onclick = () => {
+      saveBtn.onclick = async () => {
         const title = titleInp?.value.trim();
         const folderId = folderSel?.value || (state.selectedFolderId !== 'all' ? state.selectedFolderId : 'f-notes');
         const desc = descInp?.value.trim();
 
-        // If file was uploaded, use dataURL; else use URL field
-        const useUpload = !!(selectedFileDataUrl);
-        const type = useUpload ? (selectedFileType === 'image' ? 'image' : 'pdf') : (typeSel?.value || 'pdf');
-        const url = useUpload ? selectedFileDataUrl : urlInp?.value.trim();
-        const isLocal = useUpload;
-
-        if (!title || !url) {
-          showToast('⚠️ กรุณากรอกชื่อ และเลือกไฟล์หรือใส่ URL', 'warning');
+        if (!title) {
+          showToast('⚠️ กรุณาระบุชื่อเอกสาร / ชีทเรียน', 'warning');
           return;
         }
 
-        state.studyLinks.push({
-          id: `link-${Date.now()}`,
-          folderId,
-          title,
-          type: isLocal ? 'local' : type,
-          url,
-          desc,
-          isLocal
-        });
-        saveStudyLinks();
-        // Reset file selection
-        selectedFileDataUrl = null;
-        if (fileInput) fileInput.value = '';
-        if (fileChosen) fileChosen.textContent = 'ยังไม่ได้เลือกไฟล์';
-        closeModal('resource-modal');
-        renderStudyView();
-        showToast('✅ เพิ่มไฟล์เรียบร้อย!', 'success');
+        saveBtn.disabled = true;
+        saveBtn.textContent = '⏳ กำลังบันทึก...';
+
+        try {
+          if (currentUploadMode === 'file') {
+            const file = fileInp?.files && fileInp.files[0];
+            if (!file && !currentUploadedFileData) {
+              showToast('⚠️ กรุณากดเลือกไฟล์จากเครื่องก่อนบันทึก', 'warning');
+              saveBtn.disabled = false;
+              saveBtn.textContent = '💾 บันทึกเอกสาร';
+              return;
+            }
+
+            // Ensure FileReader is finished
+            if (file && !currentUploadedFileData) {
+              currentUploadedFileData = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+              });
+            }
+
+            const newId = `link-${Date.now()}`;
+
+            // Store in IndexedDB for iOS/iPadOS localStorage safety
+            await LocalFileDB.setFile(newId, currentUploadedFileData);
+
+            state.studyLinks.push({
+              id: newId,
+              folderId,
+              title,
+              type: 'local',
+              url: (currentUploadedFileData && currentUploadedFileData.length > 500000) ? '' : currentUploadedFileData,
+              desc,
+              isLocal: true,
+              fileSize: file ? file.size : undefined,
+              createdAt: new Date().toISOString()
+            });
+
+            saveStudyLinks();
+            closeModal('resource-modal');
+            renderStudyView();
+            showToast('✅ อัพโหลดและบันทึกไฟล์เรียบร้อย!', 'success');
+          } else {
+            // Web Link Mode
+            const url = urlInp?.value.trim();
+            const type = typeSel?.value || 'link';
+
+            if (!url) {
+              showToast('⚠️ กรุณาระบุ URL ลิงค์ปลายทาง', 'warning');
+              saveBtn.disabled = false;
+              saveBtn.textContent = '💾 บันทึกเอกสาร';
+              return;
+            }
+
+            state.studyLinks.push({
+              id: `link-${Date.now()}`,
+              folderId,
+              title,
+              type,
+              url,
+              desc,
+              isLocal: false,
+              createdAt: new Date().toISOString()
+            });
+
+            saveStudyLinks();
+            closeModal('resource-modal');
+            renderStudyView();
+            showToast('✅ บันทึกลิงค์เรียบร้อย!', 'success');
+          }
+        } catch (err) {
+          console.error('Error saving resource:', err);
+          showToast('⚠️ เกิดข้อผิดพลาดในการบันทึก กรุณาลองใหม่อีกครั้ง', 'warning');
+        } finally {
+          saveBtn.disabled = false;
+          saveBtn.textContent = '💾 บันทึกเอกสาร';
+        }
       };
     }
 
@@ -2105,7 +2211,8 @@
   }
 
   // ─── In-App Resource Preview ──────────────────────────────
-  function openResourcePreview(item) {
+    // ─── In-App Resource Preview ────────────────────────────
+  async function openResourcePreview(item) {
     const modal = document.getElementById('preview-modal');
     if (!modal) return;
 
@@ -2123,17 +2230,25 @@
     const metaEl = document.getElementById('preview-meta-info');
     if (metaEl) metaEl.textContent = item.sub || item.desc || '';
 
+    // Retrieve file data URL from IndexedDB if not in memory
+    let fileUrl = item.url || '';
+    if (item.isLocal && (!fileUrl || fileUrl === '')) {
+      fileUrl = (await LocalFileDB.getFile(item.id)) || '';
+    }
+
     // External open button -> opens dedicated viewer.html with persistent Back to E-Calendar bar!
     const extBtn = document.getElementById('preview-open-ext-btn');
     if (extBtn) {
       extBtn.style.display = 'inline-flex';
-      if (item.url && item.url.startsWith('data:')) {
+      if (item.type === 'local' || (fileUrl && fileUrl.startsWith('data:'))) {
         extBtn.href = `viewer.html?id=${encodeURIComponent(item.id)}&title=${encodeURIComponent(item.title || 'เอกสาร')}&type=${encodeURIComponent(item.type || 'pdf')}`;
         extBtn.onclick = () => {
-          try { sessionStorage.setItem('viewer_data_' + item.id, item.url); } catch (_) {}
+          try {
+            if (fileUrl) sessionStorage.setItem('viewer_data_' + item.id, fileUrl);
+          } catch (_) {}
         };
       } else {
-        extBtn.href = `viewer.html?url=${encodeURIComponent(item.url || '')}&title=${encodeURIComponent(item.title || 'เอกสาร')}&type=${encodeURIComponent(item.type || 'pdf')}`;
+        extBtn.href = `viewer.html?url=${encodeURIComponent(fileUrl || item.url || '')}&title=${encodeURIComponent(item.title || 'เอกสาร')}&type=${encodeURIComponent(item.type || 'pdf')}`;
         extBtn.onclick = null;
       }
     }
@@ -2166,20 +2281,20 @@
     if (body) {
       body.innerHTML = '';
 
-      if ((item.type === 'pdf' || (item.type === 'local' && item.url && item.url.startsWith('data:application/pdf'))) && item.url) {
+      if ((item.type === 'pdf' || (item.type === 'local' && (fileUrl.startsWith('data:application/pdf') || (!fileUrl.startsWith('data:image/') && fileUrl.startsWith('data:'))))) && fileUrl) {
         // Multi-page PDF rendering via PDF.js (works on iPad, iPhone, PC)
-        renderPdfWithPdfJs(item.url, body, item.title);
-      } else if (item.type === 'local' && item.url && item.url.startsWith('data:image/')) {
+        renderPdfWithPdfJs(fileUrl, body, item.title);
+      } else if (item.type === 'local' && fileUrl && fileUrl.startsWith('data:image/')) {
         body.innerHTML = `
           <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;min-height:300px;max-height:calc(90vh - 130px);overflow:auto">
-            <img src="${item.url}" alt="${escHtml(item.title)}" style="max-width:100%;height:auto;max-height:75vh;object-fit:contain;border-radius:var(--r-m);box-shadow:var(--shadow-2)" />
+            <img src="${fileUrl}" alt="${escHtml(item.title)}" style="max-width:100%;height:auto;max-height:75vh;object-fit:contain;border-radius:var(--r-m);box-shadow:var(--shadow-2)" />
           </div>`;
-      } else if (item.type === 'image' && item.url) {
+      } else if (item.type === 'image' && fileUrl) {
         body.innerHTML = `
           <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;min-height:300px;max-height:calc(90vh - 130px);overflow:auto">
-            <img src="${escHtml(item.url)}" alt="${escHtml(item.title)}" style="max-width:100%;height:auto;max-height:75vh;object-fit:contain;border-radius:var(--r-m);box-shadow:var(--shadow-2)" />
+            <img src="${escHtml(fileUrl)}" alt="${escHtml(item.title)}" style="max-width:100%;height:auto;max-height:75vh;object-fit:contain;border-radius:var(--r-m);box-shadow:var(--shadow-2)" />
             <div style="margin-top:12px;display:flex;gap:8px">
-              <a href="${escHtml(item.url)}" target="_blank" class="btn btn-secondary" style="font-size:12px;padding:6px 14px;text-decoration:none">🔍 ดูภาพขนาดเต็ม</a>
+              <a href="${escHtml(fileUrl)}" target="_blank" class="btn btn-secondary" style="font-size:12px;padding:6px 14px;text-decoration:none">🔍 ดูภาพขนาดเต็ม</a>
             </div>
           </div>`;
       } else {
