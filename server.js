@@ -351,10 +351,8 @@ const server = http.createServer((req, res) => {
       const allLinks = Array.isArray(source.studyLinks) ? source.studyLinks : [];
       let selected = [];
 
-      if (resourceIds.length > 0) {
-        selected = allLinks.filter(l => resourceIds.includes(l.id));
-      } else if (folderIds.length > 0) {
-        selected = allLinks.filter(l => folderIds.includes(l.folderId));
+      if (resourceIds.length > 0 || folderIds.length > 0) {
+        selected = allLinks.filter(l => resourceIds.includes(l.id) || folderIds.includes(l.folderId));
       } else {
         selected = allLinks.filter(l => l.isShared === true);
       }
