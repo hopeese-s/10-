@@ -377,6 +377,7 @@
 
     if (state.currentTopView === 'dashboard') {
       renderDashboardCurrentView();
+    checkPublicShareRoute();
     } else if (state.currentTopView === 'study') {
       renderStudyView();
     } else if (state.currentTopView === 'curriculum') {
@@ -1582,6 +1583,9 @@
             <button class="view-mode-btn ${!isListMode ? 'active' : ''}" data-study-mode="grid" title="แสดงแบบการ์ด"><span>⊞</span> Grid</button>
             <button class="view-mode-btn ${isListMode ? 'active' : ''}" data-study-mode="list" title="แสดงแบบรายการ"><span>☰</span> List</button>
           </div>
+          <button class="btn btn-secondary" id="study-share-btn" style="font-size:12.5px;padding:7px 14px;display:inline-flex;align-items:center;gap:6px" title="แชร์คลังชีทเรียนให้เพื่อน">
+            แชร์คลังเอกสาร
+          </button>
           <button class="btn btn-secondary" id="create-folder-btn" style="font-size:12.5px;padding:7px 14px;display:inline-flex;align-items:center;gap:6px">
             สร้างโฟลเดอร์ใหม่
           </button>
@@ -2185,6 +2189,73 @@
 
     modal.classList.add('open');
     document.body.style.overflow = 'hidden';
+  }
+
+
+  
+  // ─── External Public Share Modal Controller ────────────────
+  let currentShareTarget = 'curriculum'; // 'curriculum' | 'study'
+
+  function openShareModal(defaultTarget = 'curriculum') {
+    const modal = document.getElementById('share-modal');
+    if (!modal) return;
+
+    currentShareTarget = defaultTarget;
+    const tabCurriculum = document.getElementById('share-tab-curriculum');
+    const tabStudy = document.getElementById('share-tab-study');
+    const urlInput = document.getElementById('share-url-input');
+    const scopeDesc = document.getElementById('share-scope-desc');
+    const copyBtn = document.getElementById('share-copy-btn');
+
+    function updateShareDisplay() {
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const baseUrl = isLocal ? window.location.origin : 'https://daily-study-dashboard-production.up.railway.app';
+      const shareUrl = `${baseUrl}/?share=${currentShareTarget}`;
+
+      if (urlInput) urlInput.value = shareUrl;
+
+      if (currentShareTarget === 'curriculum') {
+        if (tabCurriculum) { tabCurriculum.style.background = 'var(--accent-bg)'; tabCurriculum.style.color = 'var(--accent)'; }
+        if (tabStudy) { tabStudy.style.background = 'transparent'; tabStudy.style.color = 'var(--label-2)'; }
+        if (scopeDesc) scopeDesc.textContent = 'เพื่อนจะสามารถดูรายวิชา ห้องเรียน เวลาเรียน ลิงก์ Google Classroom และ Google Drive ได้';
+      } else {
+        if (tabStudy) { tabStudy.style.background = 'var(--accent-bg)'; tabStudy.style.color = 'var(--accent)'; }
+        if (tabCurriculum) { tabCurriculum.style.background = 'transparent'; tabCurriculum.style.color = 'var(--label-2)'; }
+        if (scopeDesc) scopeDesc.textContent = 'เพื่อนจะสามารถดูคลังชีทสรุป เอกสาร และโฟลเดอร์ที่เปิดเป็น Shared ไว้ได้';
+      }
+    }
+
+    if (tabCurriculum) tabCurriculum.onclick = () => { currentShareTarget = 'curriculum'; updateShareDisplay(); };
+    if (tabStudy) tabStudy.onclick = () => { currentShareTarget = 'study'; updateShareDisplay(); };
+
+    if (copyBtn) {
+      copyBtn.onclick = () => {
+        if (urlInput) {
+          navigator.clipboard.writeText(urlInput.value).then(() => {
+            showToast('คัดลอกลิงก์แชร์เรียบร้อยแล้ว', 'success');
+          });
+        }
+      };
+    }
+
+    document.getElementById('share-modal-close').onclick = () => closeModal('share-modal');
+    document.getElementById('share-close-btn').onclick = () => closeModal('share-modal');
+
+    updateShareDisplay();
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  // Check URL params on startup for public share view
+  function checkPublicShareRoute() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const shareParam = urlParams.get('share');
+    if (shareParam === 'curriculum' || shareParam === 'study') {
+      setTimeout(() => {
+        switchTopView(shareParam);
+        showToast(`กำลังเปิดดูในโหมดแชร์สาธารณะ: ${shareParam === 'curriculum' ? 'หน้ารายวิชา' : 'คลังชีทเรียน'}`, 'info');
+      }, 100);
+    }
   }
 
 

@@ -630,6 +630,48 @@
       </div>
     </div>
 
+
+    <!-- ─── Public External Share Modal ─── -->
+    <div class="modal-overlay" id="share-modal" role="dialog" aria-modal="true" aria-labelledby="share-modal-title">
+      <div class="modal-box" style="max-width:500px">
+        <div class="modal-header">
+          <span class="modal-title" id="share-modal-title">แชร์ข้อมูลภายนอก (Public Link)</span>
+          <button class="modal-close" id="share-modal-close" aria-label="ปิด">✕</button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size:12.5px;color:var(--label-2);line-height:1.5;margin-bottom:14px">
+            สร้างลิงก์สำหรับส่งต่อให้เพื่อน สามารถเปิดดูได้ทันทีโดยไม่ต้องเข้าสู่ระบบ และจะไม่แสดงตารางเวลาส่วนตัวของคุณ
+          </p>
+
+          <div class="form-group">
+            <label class="form-label">เลือกหน้าที่ต้องการแชร์</label>
+            <div style="display:flex;gap:8px">
+              <button type="button" id="share-tab-curriculum" class="btn btn-secondary active" style="flex:1;padding:8px;font-size:12px;font-weight:600;border-radius:var(--r-m);background:var(--accent-bg);color:var(--accent)">
+                หน้ารายวิชา BME
+              </button>
+              <button type="button" id="share-tab-study" class="btn btn-secondary" style="flex:1;padding:8px;font-size:12px;font-weight:600;border-radius:var(--r-m);background:transparent;color:var(--label-2)">
+                คลังชีทเรียน (Study)
+              </button>
+            </div>
+          </div>
+
+          <div style="background:var(--bg-3);padding:12px;border-radius:var(--r-m);border:1px solid var(--sep);margin-top:14px;margin-bottom:12px">
+            <div style="font-size:11.5px;font-weight:600;color:var(--label-2);margin-bottom:6px">ลิงก์สำหรับเปิดดู (Public Link):</div>
+            <div style="display:flex;gap:6px">
+              <input id="share-url-input" class="form-input" type="text" readonly style="font-size:11.5px;font-family:var(--font-mono);background:var(--bg-1)" />
+              <button class="btn btn-primary" id="share-copy-btn" style="flex:none;padding:6px 14px;font-size:12px">คัดลอกลิงก์</button>
+            </div>
+            <div id="share-scope-desc" style="font-size:11px;color:var(--label-3);margin-top:6px">
+              เพื่อนจะสามารถดูรายวิชา ห้องเรียน เวลาเรียน ลิงก์ Google Classroom และ Google Drive ได้
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="share-close-btn">ปิด</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ─── Toast ─── -->
     <div class="toast-container" id="toast-container" role="status" aria-live="polite"></div>
 

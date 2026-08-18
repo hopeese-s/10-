@@ -309,16 +309,17 @@ const server = http.createServer((req, res) => {
       store._users[username] = user;
       store._calKeys[calendarKey] = userId;
 
-      // Clone master template to new user space
+      // Clone official curriculum & shared resources to new student space (no personal routine/checklist)
       const masterTemplate = store['1'] || store['u_admin'] || {};
       store[userId] = {
         version: 1,
         updatedAt: new Date().toISOString(),
-        checklist: masterTemplate.checklist || {},
-        subjects: masterTemplate.subjects || {},
-        customBlocks: masterTemplate.customBlocks || {},
+        checklist: {},
+        subjects: {},
+        customBlocks: {},
+        curriculum: masterTemplate.curriculum || [],
         studyFolders: masterTemplate.studyFolders || [],
-        studyLinks: masterTemplate.studyLinks || []
+        studyLinks: (masterTemplate.studyLinks || []).filter(l => l.isShared !== false)
       };
 
       // Create session
