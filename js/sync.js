@@ -53,16 +53,7 @@ const CloudSync = (function () {
         localStorage.setItem('sd-auth-token', authToken);
         setSyncKey(currentUser.id);
         updateUIStatus();
-          async function getPublicHub() {
-    try {
-      const res = await fetch(`${PUB_API}/hub?t=${Date.now()}`);
-      if (res.ok) return await res.json();
-    } catch (_) {}
-    return null;
-  }
-
-  return {
-    getPublicHub, ok: true, user: currentUser };
+        return { ok: true, user: currentUser };
       } else {
         return { ok: false, error: data.error || 'สมัครสมาชิกไม่สำเร็จ' };
       }
@@ -132,6 +123,15 @@ const CloudSync = (function () {
     localStorage.removeItem('sd-auth-token');
     setSyncKey('1');
     updateUIStatus();
+  }
+
+  // ─── Public Hub API (For External Sharing) ───────────────────
+  async function getPublicHub() {
+    try {
+      const res = await fetch(`${PUB_API}/hub?t=${Date.now()}`);
+      if (res.ok) return await res.json();
+    } catch (_) {}
+    return null;
   }
 
   // ─── Public Getters & Setters ───────────────────────────────
@@ -345,7 +345,7 @@ const CloudSync = (function () {
     const authBtn = document.getElementById('auth-user-btn');
     const modalBadge = document.getElementById('modal-sync-status');
 
-    let displayUserText = currentUser ? (currentUser.role === 'admin' ? `👑 ${currentUser.displayName}` : `👤 ${currentUser.displayName}`) : '👤 เข้าสู่ระบบ';
+    let displayUserText = currentUser ? (currentUser.role === 'admin' ? `👑 ${currentUser.displayName}` : `👤 ${currentUser.displayName}`) : '👤 บัญชีผู้ใช้';
 
     if (authBtn) {
       authBtn.innerHTML = displayUserText;
@@ -373,6 +373,7 @@ const CloudSync = (function () {
       checklist:    data.checklist    || {},
       subjects:     data.subjects     || {},
       customBlocks: data.customBlocks || {},
+      curriculum:   data.curriculum   || [],
       studyFolders: data.studyFolders || [],
       studyLinks:   data.studyLinks   || []
     };
@@ -383,6 +384,7 @@ const CloudSync = (function () {
     login,
     checkAuth,
     logout,
+    getPublicHub,
     getCurrentUser,
     getSyncKey,
     setSyncKey,
