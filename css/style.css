@@ -2178,25 +2178,100 @@ body {
    Study Resources Folders & Drag-Drop Styles — Liquid Glass
    ============================================================ */
 
-/* Sticky translucent folder bar */
+/* Sticky translucent folder bar with desktop scroll arrows & drag */
+.study-folder-bar-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 1.25rem;
+  width: 100%;
+}
+
+.folder-scroll-arrow {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--sep);
+  background: var(--bg-1);
+  color: var(--label);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: var(--shadow-1);
+  transition: transform 0.15s, background 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+  z-index: 12;
+  user-select: none;
+}
+.folder-scroll-arrow:hover {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: scale(1.08);
+}
+.folder-scroll-arrow:active {
+  transform: scale(0.95);
+}
+
 .study-folder-bar {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 1.25rem;
   overflow-x: auto;
-  padding: 10px 4px 10px;
+  padding: 8px 4px 10px;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  position: sticky;
-  top: calc(var(--header-h) + 4px);
+  scrollbar-width: thin;
+  scrollbar-color: var(--sep) transparent;
+  position: relative;
   z-index: 10;
+  cursor: grab;
+  user-select: none;
+  width: 100%;
   /* Glass tray behind the pills */
   background: linear-gradient(to bottom, var(--bg-1) 65%, transparent);
-  mask-image: linear-gradient(to right, transparent 0%, black 2%, black 98%, transparent 100%);
-  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 2%, black 98%, transparent 100%);
 }
-.study-folder-bar::-webkit-scrollbar { display: none; }
+.study-folder-bar:active {
+  cursor: grabbing;
+}
+.study-folder-bar::-webkit-scrollbar {
+  height: 5px;
+  display: block;
+}
+.study-folder-bar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.study-folder-bar::-webkit-scrollbar-thumb {
+  background: var(--sep);
+  border-radius: var(--r-pill);
+}
+.study-folder-bar::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+/* Graph Viewport Desktop Scrollbars */
+.graph-viewport {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sep) var(--bg-2);
+}
+.graph-viewport::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+  display: block !important;
+}
+.graph-viewport::-webkit-scrollbar-track {
+  background: var(--bg-2);
+  border-radius: var(--r-pill);
+}
+.graph-viewport::-webkit-scrollbar-thumb {
+  background: var(--sep);
+  border-radius: var(--r-pill);
+}
+.graph-viewport::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
 
 /* Study List View mode */
 .study-list-view {

@@ -158,9 +158,12 @@
         badge.textContent = map[type] || '📄 DOC';
       }
 
-      // Check session storage for large/local base64 file payloads
+      // Check session storage and IndexedDB for large/local base64 file payloads
       if (!url && id) {
         url = sessionStorage.getItem('viewer_data_' + id) || '';
+        if (!url) {
+          url = (await LocalFileDB.getFile(id)) || '';
+        }
       }
 
       // Back Button Handler: focus parent tab or close, or redirect to home

@@ -1,6 +1,6 @@
 {
   "name": "daily-study-dashboard",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "description": "Daily Routine & Study Dashboard for BME Mahidol students",
   "main": "server.js",
   "scripts": {

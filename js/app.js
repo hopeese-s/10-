@@ -6,6 +6,67 @@
 (function () {
   'use strict';
 
+  // ─── IndexedDB Local File Storage (Robust across iPadOS, iOS, Android, Mac, Windows) ───
+  const LocalFileDB = {
+    dbPromise: null,
+    getDB() {
+      if (!this.dbPromise) {
+        this.dbPromise = new Promise((resolve) => {
+          if (typeof indexedDB === 'undefined') {
+            resolve(null);
+            return;
+          }
+          const req = indexedDB.open('ecalendar_files_db', 1);
+          req.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains('files')) {
+              db.createObjectStore('files');
+            }
+          };
+          req.onsuccess = (e) => resolve(e.target.result);
+          req.onerror = () => resolve(null);
+        });
+      }
+      return this.dbPromise;
+    },
+    async setFile(id, dataUrl) {
+      try {
+        const db = await this.getDB();
+        if (!db) return false;
+        return new Promise((resolve) => {
+          const tx = db.transaction('files', 'readwrite');
+          tx.objectStore('files').put(dataUrl, id);
+          tx.oncomplete = () => resolve(true);
+          tx.onerror = () => resolve(false);
+        });
+      } catch (_) { return false; }
+    },
+    async getFile(id) {
+      try {
+        const db = await this.getDB();
+        if (!db) return null;
+        return new Promise((resolve) => {
+          const tx = db.transaction('files', 'readonly');
+          const req = tx.objectStore('files').get(id);
+          req.onsuccess = () => resolve(req.result || null);
+          req.onerror = () => resolve(null);
+        });
+      } catch (_) { return null; }
+    },
+    async deleteFile(id) {
+      try {
+        const db = await this.getDB();
+        if (!db) return false;
+        return new Promise((resolve) => {
+          const tx = db.transaction('files', 'readwrite');
+          tx.objectStore('files').delete(id);
+          tx.oncomplete = () => resolve(true);
+          tx.onerror = () => resolve(false);
+        });
+      } catch (_) { return false; }
+    }
+  };
+
   // ─── State ───────────────────────────────────────────────
   const state = {
     // Navigation
