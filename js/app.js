@@ -288,8 +288,12 @@
     const todayIndex = new Date().getDay();
     state.currentDay = getDayKey(todayIndex) || 'monday';
 
-    // Cloud Sync initial smart sync
-    if (window.CloudSync && CloudSync.getSyncKey()) {
+    // Check share route FIRST — before any cloud sync (prevent personal data leak)
+    const isShareRoute = await checkPublicShareRoute();
+
+    // Cloud Sync initial smart sync — ONLY for logged-in/authenticated users, NOT share-link visitors
+    const isLoggedIn = window.CloudSync && CloudSync.getCurrentUser();
+    if (!isShareRoute && window.CloudSync && CloudSync.getSyncKey() && CloudSync.getSyncKey() !== '1') {
       const pullRes = await CloudSync.pullFromCloud();
       if (pullRes && pullRes.ok && pullRes.data) {
         syncSmartWithCloud(pullRes.data);
@@ -306,17 +310,14 @@
     renderDayTabs();
     switchTopView('home');
 
-    // Auto sync background polling & BroadcastChannel (Instant real-time update)
-    if (window.CloudSync) {
+    // Auto sync background polling — ONLY for authenticated users, NOT share-link visitors
+    if (!isShareRoute && window.CloudSync && isLoggedIn) {
       CloudSync.startAutoSync(cloudData => {
         if (cloudData) {
           syncSmartWithCloud(cloudData);
         }
       });
     }
-
-    // Public share route (?share=curriculum / ?share=study)
-    checkPublicShareRoute();
 
     // Window resize listener for responsive SVG graph edges
     window.addEventListener('resize', () => {
@@ -2277,17 +2278,18 @@
           state.studyLinks = safeLinks;
           state.selectedFolderId = 'f-shared';
           localStorage.setItem('sd-study-active-folder', 'f-shared');
-          setTimeout(() => {
+      setTimeout(() => {
             switchTopView('study');
             showToast(`เปิดลิงก์แชร์: ${bundle.label || 'เอกสารที่แชร์'}`, 'info');
           }, 100);
+          return true;
         } else {
           showToast('ลิงก์แชร์นี้ไม่พบหรือหมดอายุแล้ว', 'warning');
         }
       } catch (_) {
         showToast('ไม่สามารถโหลดลิงก์แชร์ได้', 'warning');
       }
-      return;
+      return true;
     }
 
     // Legacy public hub (curriculum-only, no personal data)
@@ -2302,11 +2304,12 @@
         switchTopView('curriculum');
         showToast('โหมดแชร์สาธารณะ: หน้ารายวิชา BME', 'info');
       }, 100);
-      return;
+      return true;
     }
 
-    // No valid share param
+    // Invalid/unknown share param — treat as share route to prevent any personal data sync
     showToast('ลิงก์แชร์ไม่ถูกต้อง', 'warning');
+    return true;
   }
 
 
