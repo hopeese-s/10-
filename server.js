@@ -16,7 +16,8 @@ const DB_BACKUP_FILE = path.join(__dirname, 'sync_store.backup.json');
 let store = {
   _users: {},     // { [username]: { id, username, displayName, passwordHash, salt, calendarKey, role, createdAt } }
   _sessions: {},  // { [token]: { userId, username, role, expiresAt } }
-  _calKeys: {}    // { [calendarKey]: userId }
+  _calKeys: {},   // { [calendarKey]: userId }
+  _shares: {}     // { [shareToken]: { title, resources, folders, createdAt } }
 };
 
 try {
@@ -26,6 +27,7 @@ try {
       _users: loaded._users || {},
       _sessions: loaded._sessions || {},
       _calKeys: loaded._calKeys || {},
+      _shares: loaded._shares || {},
       ...loaded
     };
     // Ensure index mapping for calKeys
@@ -62,6 +64,10 @@ function generateToken() {
 
 function generateCalendarKey() {
   return 'cal_' + crypto.randomBytes(12).toString('hex');
+}
+
+function generateShareToken() {
+  return 'sh_' + crypto.randomBytes(9).toString('hex');
 }
 
 // MIME Types for Static Serving
@@ -281,6 +287,17 @@ const server = http.createServer((req, res) => {
     return store._users[session.username] || null;
   }
 
+  // ─── Helper: Resolve owner sync key from auth session or header ───
+  function resolveOwnerId(body) {
+    const user = getAuthUser();
+    if (user) return user.id;
+    // For unauthenticated (public/legacy) we fall back to header key if present, else '1'
+    const headerKey = (req.headers['x-sync-key'] || '').trim();
+    if (headerKey) return headerKey;
+    if (body && body.syncKey) return body.syncKey;
+    return '1';
+  }
+
     // ─── API: Public Study & Curriculum Hub (GET /api/public/hub) ───
   if (pathname === '/api/public/hub' && req.method === 'GET') {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
@@ -294,17 +311,96 @@ const server = http.createServer((req, res) => {
     if (!masterData) masterData = {};
 
     const cur = (masterData.curriculum && masterData.curriculum.length > 0) ? masterData.curriculum : DEFAULT_BME_CURRICULUM;
-    const links = (masterData.studyLinks && masterData.studyLinks.length > 0) ? masterData.studyLinks.filter(l => l.isShared !== false) : DEFAULT_BME_STUDY_LINKS;
+    // Only explicitly shared resources leak to public hub (no personal/private files)
+    const links = (masterData.studyLinks && masterData.studyLinks.length > 0)
+      ? masterData.studyLinks.filter(l => l.isShared === true)
+      : DEFAULT_BME_STUDY_LINKS.filter(l => l.isShared === true);
+    // Only folders that contain at least one shared resource
+    const sharedFolderIds = new Set(links.map(l => l.folderId).filter(Boolean));
+    const folders = (masterData.studyFolders || []).filter(f => sharedFolderIds.has(f.id));
 
     const publicHub = {
       curriculum: cur,
-      studyFolders: masterData.studyFolders || [],
+      studyFolders: folders,
       studyLinks: links,
       updatedAt: masterData.updatedAt || new Date().toISOString()
     };
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(publicHub));
+    return;
+  }
+
+  // ─── API: Create Share Bundle (POST /api/share) ───
+  if (pathname === '/api/share' && req.method === 'POST') {
+    parseJsonBody((err, data) => {
+      if (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+        return;
+      }
+
+      const ownerId = resolveOwnerId(data);
+      const source = store[ownerId] || {};
+
+      // Selected resources (ids) + folders (folder ids)
+      const resourceIds = Array.isArray(data.resourceIds) ? data.resourceIds : [];
+      const folderIds = Array.isArray(data.folders) ? data.folders : [];
+      const label = (data.label || 'เอกสารที่แชร์').trim();
+
+      const allLinks = Array.isArray(source.studyLinks) ? source.studyLinks : [];
+      let selected = [];
+
+      if (resourceIds.length > 0) {
+        selected = allLinks.filter(l => resourceIds.includes(l.id));
+      } else if (folderIds.length > 0) {
+        selected = allLinks.filter(l => folderIds.includes(l.folderId));
+      } else {
+        selected = allLinks.filter(l => l.isShared === true);
+      }
+
+      // Strip anything that could be private, keep only shareable fields
+      const safeResources = selected.map(l => ({
+        id: l.id,
+        title: l.title,
+        sub: l.sub,
+        type: l.type,
+        url: l.url,
+        desc: l.desc,
+        folderId: l.folderId
+      }));
+
+      const token = generateShareToken();
+      store._shares[token] = {
+        label,
+        resources: safeResources,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      saveStore();
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, token }));
+    });
+    return;
+  }
+
+  // ─── API: Fetch Share Bundle (GET /api/share/:token) ───
+  if (pathname.startsWith('/api/share/') && req.method === 'GET') {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    const token = decodeURIComponent(pathname.replace('/api/share/', '')).trim();
+    if (!token || !store._shares[token]) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Share link not found or expired' }));
+      return;
+    }
+    const bundle = store._shares[token];
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      label: bundle.label,
+      resources: bundle.resources || [],
+      updatedAt: bundle.updatedAt || bundle.createdAt
+    }));
     return;
   }
 
