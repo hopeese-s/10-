@@ -12,6 +12,7 @@ const CloudSync = (function () {
   const AUTH_API = `${BASE_URL}/api/auth`;
   const CAL_API  = `${BASE_URL}/api/calendar`;
   const PUB_API  = `${BASE_URL}/api/public`;
+  const SHARE_API = `${BASE_URL}/api/share`;
 
   const PUSH_DEBOUNCE_MS = 20;     // 20ms ultra-fast push
   const POLL_INTERVAL_MS = 1500;   // Poll every 1.5 seconds for multi-device sync
@@ -129,6 +130,36 @@ const CloudSync = (function () {
   async function getPublicHub() {
     try {
       const res = await fetch(`${PUB_API}/hub?t=${Date.now()}`);
+      if (res.ok) return await res.json();
+    } catch (_) {}
+    return null;
+  }
+
+  // ─── Token-Based Share Bundles (select files/folders) ───────
+  async function createShareBundle(resourceIds, folders, label) {
+    try {
+      const res = await fetch(`${SHARE_API}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
+          'X-Sync-Key': syncKey || '1'
+        },
+        body: JSON.stringify({ resourceIds: resourceIds || [], folders: folders || [], label: label || '' })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        return { ok: true, token: data.token };
+      }
+      return { ok: false, error: (data && data.error) || 'สร้างลิงก์แชร์ไม่สำเร็จ' };
+    } catch (_) {
+      return { ok: false, error: 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้' };
+    }
+  }
+
+  async function fetchShareBundle(token) {
+    try {
+      const res = await fetch(`${SHARE_API}/${encodeURIComponent(token)}?t=${Date.now()}`, { cache: 'no-store' });
       if (res.ok) return await res.json();
     } catch (_) {}
     return null;
@@ -385,6 +416,8 @@ const CloudSync = (function () {
     checkAuth,
     logout,
     getPublicHub,
+    createShareBundle,
+    fetchShareBundle,
     getCurrentUser,
     getSyncKey,
     setSyncKey,

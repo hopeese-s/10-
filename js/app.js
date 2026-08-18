@@ -1695,7 +1695,7 @@
     });
 
     // Share button
-    document.getElementById('study-share-btn')?.addEventListener('click', () => openShareModal('study'));
+    document.getElementById('study-share-btn')?.addEventListener('click', () => openShareModal());
 
     // Horizontal folder scroll arrows
     const scrollBar = document.getElementById('study-folder-bar');
@@ -2111,44 +2111,134 @@
 
 
   
-  // ─── External Public Share Modal Controller ────────────────
-  let currentShareTarget = 'curriculum'; // 'curriculum' | 'study'
+  // ─── Share Bundles Modal (select files/folders → generate token link) ──
+  let _shareSelected = new Set(); // ids of selected resources + folders
 
-  function openShareModal(defaultTarget = 'curriculum') {
+  function openShareModal() {
     const modal = document.getElementById('share-modal');
     if (!modal) return;
 
-    currentShareTarget = defaultTarget;
-    const tabCurriculum = document.getElementById('share-tab-curriculum');
-    const tabStudy = document.getElementById('share-tab-study');
+    const listEl = document.getElementById('share-select-list');
+    const countEl = document.getElementById('share-selected-count');
+    const linkBox = document.getElementById('share-link-box');
     const urlInput = document.getElementById('share-url-input');
-    const scopeDesc = document.getElementById('share-scope-desc');
+    const generateBtn = document.getElementById('share-generate-btn');
     const copyBtn = document.getElementById('share-copy-btn');
 
-    function updateShareDisplay() {
-      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-      const baseUrl = isLocal ? window.location.origin : 'https://daily-study-dashboard-production.up.railway.app';
-      const shareUrl = `${baseUrl}/?share=${currentShareTarget}`;
+    _shareSelected = new Set();
 
-      if (urlInput) urlInput.value = shareUrl;
+    function renderList() {
+      if (!listEl) return;
+      const folders = state.studyFolders || [];
+      const links = state.studyLinks || [];
 
-      if (currentShareTarget === 'curriculum') {
-        if (tabCurriculum) { tabCurriculum.style.background = 'var(--accent-bg)'; tabCurriculum.style.color = 'var(--accent)'; }
-        if (tabStudy) { tabStudy.style.background = 'transparent'; tabStudy.style.color = 'var(--label-2)'; }
-        if (scopeDesc) scopeDesc.textContent = 'เพื่อนจะสามารถดูรายวิชา ห้องเรียน เวลาเรียน ลิงก์ Google Classroom และ Google Drive ได้';
-      } else {
-        if (tabStudy) { tabStudy.style.background = 'var(--accent-bg)'; tabStudy.style.color = 'var(--accent)'; }
-        if (tabCurriculum) { tabCurriculum.style.background = 'transparent'; tabCurriculum.style.color = 'var(--label-2)'; }
-        if (scopeDesc) scopeDesc.textContent = 'เพื่อนจะสามารถดูคลังชีทสรุป เอกสาร และโฟลเดอร์ที่เปิดเป็น Shared ไว้ได้';
+      const folderIds = new Set(links.map(l => l.folderId).filter(Boolean));
+
+      let html = '';
+
+      // Folders section
+      html += `<div style="font-size:11px;font-weight:700;color:var(--label-3);letter-spacing:.5px;margin:4px 2px 6px">โฟลเดอร์</div>`;
+      folders.forEach(f => {
+        const count = links.filter(l => l.folderId === f.id || (!l.folderId && f.id === 'f-notes')).length;
+        const checked = _shareSelected.has('folder:' + f.id);
+        html += `
+          <label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:var(--r-s);cursor:pointer;background:${checked ? 'var(--accent-bg)' : 'transparent'};border:1px solid ${checked ? 'var(--accent)' : 'transparent'}">
+            <input type="checkbox" data-share-folder="${f.id}" ${checked ? 'checked' : ''} style="width:15px;height:15px;cursor:pointer;flex-shrink:0" />
+            <span style="font-size:12.5px;font-weight:600;color:var(--label)">${escHtml(f.name)}</span>
+            <span style="margin-left:auto;font-size:11px;color:var(--label-3)">${count} ไฟล์</span>
+          </label>`;
+      });
+
+      // Files section
+      html += `<div style="font-size:11px;font-weight:700;color:var(--label-3);letter-spacing:.5px;margin:12px 2px 6px">ไฟล์</div>`;
+      if (links.length === 0) {
+        html += `<div style="font-size:12px;color:var(--label-3);padding:6px 2px">ยังไม่มีเอกสารในคลัง</div>`;
+      }
+      links.forEach(l => {
+        const checked = _shareSelected.has('res:' + l.id);
+        const typeIcon = { classroom: '🎓', drive: '📁', pdf: '📄', image: '🖼️', local: '💾', link: '🔗' }[l.type] || '🔗';
+        html += `
+          <label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:var(--r-s);cursor:pointer;background:${checked ? 'var(--accent-bg)' : 'transparent'};border:1px solid ${checked ? 'var(--accent)' : 'transparent'}">
+            <input type="checkbox" data-share-res="${l.id}" ${checked ? 'checked' : ''} style="width:15px;height:15px;cursor:pointer;flex-shrink:0" />
+            <span style="font-size:12.5px;color:var(--label)">${typeIcon} ${escHtml(l.title)}</span>
+          </label>`;
+      });
+
+      listEl.innerHTML = html;
+
+      // Wire checkbox handlers
+      listEl.querySelectorAll('input[data-share-folder]').forEach(cb => {
+        cb.addEventListener('change', () => {
+          const key = 'folder:' + cb.dataset.shareFolder;
+          if (cb.checked) _shareSelected.add(key); else _shareSelected.delete(key);
+          updateCount();
+        });
+      });
+      listEl.querySelectorAll('input[data-share-res]').forEach(cb => {
+        cb.addEventListener('change', () => {
+          const key = 'res:' + cb.dataset.shareRes;
+          if (cb.checked) _shareSelected.add(key); else _shareSelected.delete(key);
+          updateCount();
+        });
+      });
+    }
+
+    function updateCount() {
+      const selectedFolders = [..._shareSelected].filter(k => k.startsWith('folder:')).length;
+      const selectedRes = [..._shareSelected].filter(k => k.startsWith('res:')).length;
+      if (countEl) {
+        countEl.textContent = `เลือก ${selectedFolders} โฟลเดอร์ และ ${selectedRes} ไฟล์`;
       }
     }
 
-    if (tabCurriculum) tabCurriculum.onclick = () => { currentShareTarget = 'curriculum'; updateShareDisplay(); };
-    if (tabStudy) tabStudy.onclick = () => { currentShareTarget = 'study'; updateShareDisplay(); };
+    function resetLinkBox() {
+      if (linkBox) linkBox.style.display = 'none';
+      if (urlInput) urlInput.value = '';
+    }
 
+    renderList();
+    updateCount();
+    resetLinkBox();
+
+    // Generate link
+    if (generateBtn) {
+      generateBtn.onclick = async () => {
+        if (_shareSelected.size === 0) {
+          showToast('กรุณาเลือกไฟล์หรือโฟลเดอร์อย่างน้อย 1 รายการ', 'warning');
+          return;
+        }
+
+        const resourceIds = [];
+        const folderIds = [];
+        _shareSelected.forEach(key => {
+          if (key.startsWith('res:')) resourceIds.push(key.slice(4));
+          else if (key.startsWith('folder:')) folderIds.push(key.slice(7));
+        });
+
+        generateBtn.disabled = true;
+        generateBtn.textContent = '⏳ กำลังสร้างลิงก์...';
+
+        const res = await CloudSync.createShareBundle(resourceIds, folderIds);
+        if (res && res.ok && res.token) {
+          const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+          const baseUrl = isLocal ? window.location.origin : 'https://daily-study-dashboard-production.up.railway.app';
+          const shareUrl = `${baseUrl}/?share=${res.token}`;
+          if (urlInput) urlInput.value = shareUrl;
+          if (linkBox) linkBox.style.display = 'block';
+          showToast('สร้างลิงก์แชร์เรียบร้อย!', 'success');
+        } else {
+          showToast(res && res.error ? res.error : 'สร้างลิงก์ไม่สำเร็จ', 'warning');
+        }
+
+        generateBtn.disabled = false;
+        generateBtn.textContent = '✨ สร้างลิงก์แชร์';
+      };
+    }
+
+    // Copy link
     if (copyBtn) {
       copyBtn.onclick = () => {
-        if (urlInput) {
+        if (urlInput && urlInput.value) {
           navigator.clipboard.writeText(urlInput.value).then(() => {
             showToast('คัดลอกลิงก์แชร์เรียบร้อยแล้ว', 'success');
           });
@@ -2159,38 +2249,64 @@
     document.getElementById('share-modal-close').onclick = () => closeModal('share-modal');
     document.getElementById('share-close-btn').onclick = () => closeModal('share-modal');
 
-    updateShareDisplay();
     modal.classList.add('open');
     document.body.style.overflow = 'hidden';
   }
 
-  // Check URL params on startup for public share view
+  // Check URL params on startup for shared bundle token
   async function checkPublicShareRoute() {
     const urlParams = new URLSearchParams(window.location.search);
     const shareParam = urlParams.get('share');
-    if (shareParam === 'curriculum' || shareParam === 'study' || shareParam === 'hub') {
-      // Fetch fresh public hub data from server
+    if (!shareParam) return;
+
+    // Token-based share bundle (sh_xxxxxxxxxxxxxxxx)
+    if (/^sh_[a-f0-9]{18}$/i.test(shareParam)) {
+      try {
+        const bundle = await CloudSync.fetchShareBundle(shareParam);
+        if (bundle && bundle.resources) {
+          const safeLinks = (bundle.resources || []).map(r => ({
+            id: r.id,
+            title: r.title,
+            sub: r.sub || '',
+            type: r.type || 'link',
+            url: r.url || '',
+            desc: r.desc || '',
+            folderId: 'f-shared'
+          }));
+          state.studyFolders = [{ id: 'f-shared', name: `🔗 ${bundle.label || 'เอกสารที่แชร์'}` }];
+          state.studyLinks = safeLinks;
+          state.selectedFolderId = 'f-shared';
+          localStorage.setItem('sd-study-active-folder', 'f-shared');
+          setTimeout(() => {
+            switchTopView('study');
+            showToast(`เปิดลิงก์แชร์: ${bundle.label || 'เอกสารที่แชร์'}`, 'info');
+          }, 100);
+        } else {
+          showToast('ลิงก์แชร์นี้ไม่พบหรือหมดอายุแล้ว', 'warning');
+        }
+      } catch (_) {
+        showToast('ไม่สามารถโหลดลิงก์แชร์ได้', 'warning');
+      }
+      return;
+    }
+
+    // Legacy public hub (curriculum-only, no personal data)
+    if (shareParam === 'curriculum') {
       try {
         const hub = await CloudSync.getPublicHub();
-        if (hub) {
-          if (hub.curriculum && hub.curriculum.length > 0) {
-            state.curriculum = hub.curriculum;
-          }
-          if (hub.studyFolders && hub.studyFolders.length > 0) {
-            state.studyFolders = hub.studyFolders;
-          }
-          if (hub.studyLinks && hub.studyLinks.length > 0) {
-            state.studyLinks = hub.studyLinks;
-          }
+        if (hub && hub.curriculum && hub.curriculum.length > 0) {
+          state.curriculum = hub.curriculum;
         }
       } catch (_) {}
-
-      const targetView = shareParam === 'hub' ? 'study' : shareParam;
       setTimeout(() => {
-        switchTopView(targetView);
-        showToast(`โหมดแชร์สาธารณะ: ${shareParam === 'curriculum' ? 'หน้ารายวิชา & ลิงก์' : 'คลังเอกสาร & Classroom'}`, 'info');
+        switchTopView('curriculum');
+        showToast('โหมดแชร์สาธารณะ: หน้ารายวิชา BME', 'info');
       }, 100);
+      return;
     }
+
+    // No valid share param
+    showToast('ลิงก์แชร์ไม่ถูกต้อง', 'warning');
   }
 
 
