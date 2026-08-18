@@ -78,6 +78,30 @@ const MIME_TYPES = {
   '.ics':  'text/calendar; charset=utf-8',
 };
 
+
+// Default Official BME Curriculum Fallback
+const DEFAULT_BME_CURRICULUM = [
+  { code: 'SCPY161', name: 'General Physics I', credits: '3 (3-0-6)', type: 'บรรยาย', room: 'L2-002', schedule: 'จันทร์ 09:30 - 12:30', classroomUrl: 'https://classroom.google.com/u/6/c/ODcxMTQzMDA0NzAw', driveUrl: '', desc: 'กลศาสตร์ การเคลื่อนที่ งานและพลังงาน โมเมนตัม การหมุน และคลื่นกล' },
+  { code: 'EGBI122', name: 'Computer Programming', credits: '3 (2-2-5)', type: 'บรรยาย + ปฏิบัติการ', room: 'R335/1, R335/2', schedule: 'จันทร์ 13:30 - 17:30', classroomUrl: '', driveUrl: '', desc: 'หลักการเขียนโปรแกรม โครงสร้างข้อมูล และการประยุกต์ใช้ในงานวิศวกรรมชีวแพทย์' },
+  { code: 'LAEN182', name: 'English for General Academic Purposes', credits: '2 (2-0-4)', type: 'บรรยาย', room: 'Room 320', schedule: 'อังคาร 08:30 - 10:30', classroomUrl: '', driveUrl: '', desc: 'ภาษาอังกฤษเพื่อการสื่อสารเชิงวิชาการ ทักษะการอ่าน เขียน และการนำเสนอ' },
+  { code: 'SCBE102', name: 'General Biology Laboratory 1', credits: '1 (0-3-1)', type: 'ปฏิบัติการ', room: 'Lab SC', schedule: 'อังคาร 13:30 - 16:30', classroomUrl: '', driveUrl: '', desc: 'ปฏิบัติการชีววิทยาทั่วไป กล้องจุลทรรศน์ โครงสร้างเซลล์และเนื้อเยื่อ' },
+  { code: 'EGBI100', name: 'BME in the Real World', credits: '1 (1-0-2)', type: 'บรรยาย', room: 'R238', schedule: 'อังคาร 17:40 - 18:40', classroomUrl: 'https://classroom.google.com/u/6/c/ODcwMzEwOTI0OTg2', driveUrl: '', desc: 'บทนำสู่วิศวกรรมชีวแพทย์ เครื่องมือแพทย์ และระบบสาธารณสุขในโลกจริง' },
+  { code: 'SCMA101', name: 'Mathematics I', credits: '3 (3-0-6)', type: 'บรรยาย', room: 'SC1-152', schedule: 'พุธ 09:00 - 11:00', classroomUrl: 'https://classroom.google.com/u/6/c/ODcxNjY1MDM2MTY2', driveUrl: '', desc: 'แคลคูลัส อนุพันธ์ อินทิกรัล และการประยุกต์ใช้ในทางวิศวกรรมศาสตร์' },
+  { code: 'SCSL190', name: 'Wonderful Life (Biology)', credits: '3 (3-0-6)', type: 'บรรยาย', room: 'SC3-303', schedule: 'พฤหัสบดี 09:30 - 12:30', classroomUrl: 'https://classroom.google.com/u/6/c/Nzk4Mzk2MTI3MDI1', driveUrl: '', desc: 'ชีววิทยาของสิ่งมีชีวิต วิวัฒนาการ และความหลากหลายทางชีวภาพ' },
+  { code: 'SCCH161', name: 'General Chemistry', credits: '3 (3-0-6)', type: 'บรรยาย', room: 'SC2-323', schedule: 'พฤหัสบดี 13:30 - 16:30', classroomUrl: 'https://classroom.google.com/u/6/c/ODcwMjc5NzAyMjcy', driveUrl: '', desc: 'เคมีทั่วไป โครงสร้างอะตอม พันธะเคมี จลนศาสตร์ และสมดุลเคมี' },
+  { code: 'SCPY111', name: 'Physics Laboratory I', credits: '1 (0-3-1)', type: 'ปฏิบัติการ', room: 'Lab SC', schedule: 'ศุกร์ 09:30 - 12:30', classroomUrl: 'https://classroom.google.com/u/6/c/ODU1NzE4MDAyNzE5', driveUrl: '', desc: 'การทดลองฟิสิกส์พื้นฐาน การวัด ค่าความคลาดเคลื่อน และการวิเคราะห์ผล' },
+  { code: 'SCCH169', name: 'Chemistry Laboratory', credits: '1 (0-3-1)', type: 'ปฏิบัติการ', room: 'L2-201', schedule: 'ศุกร์ 13:30 - 16:30', classroomUrl: '', driveUrl: '', desc: 'ปฏิบัติการเคมี การไตเตรท การสังเคราะห์สาร และการทดสอบคุณสมบัติ' }
+];
+
+const DEFAULT_BME_STUDY_LINKS = [
+  { id: 'gc-1', title: 'SCCH161 General Chemistry', sub: 'EGBI/EGCG/EGII Year 1 - 1/2026', type: 'classroom', url: 'https://classroom.google.com/u/6/c/ODcwMjc5NzAyMjcy', desc: 'Google Classroom วิชาเคมีทั่วไป (SCCH161)', isShared: true },
+  { id: 'gc-2', title: 'SCPY111/114/115-(2026-1) Physics Laboratory I', sub: 'EGBI, EGCG, EGII...', type: 'classroom', url: 'https://classroom.google.com/u/6/c/ODU1NzE4MDAyNzE5', desc: 'Google Classroom ปฏิบัติการฟิสิกส์ 1 (SCPY111)', isShared: true },
+  { id: 'gc-3', title: 'SCMA101 Mathematics I', sub: 'SECTION 2', type: 'classroom', url: 'https://classroom.google.com/u/6/c/ODcxNjY1MDM2MTY2', desc: 'Google Classroom วิชาคณิตศาสตร์ 1 (SCMA101 Sec 2)', isShared: true },
+  { id: 'gc-4', title: 'SCSL 190 Wonderful Life (Biology)', sub: 'EGBI', type: 'classroom', url: 'https://classroom.google.com/u/6/c/Nzk4Mzk2MTI3MDI1', desc: 'Google Classroom วิชา Wonderful Life (SCSL190)', isShared: true },
+  { id: 'gc-5', title: '2026/27_EGBI 100 Biomedical Engineering in the Real World', sub: 'EGBI Year 1', type: 'classroom', url: 'https://classroom.google.com/u/6/c/ODcwMzEwOTI0OTg2', desc: 'Google Classroom วิชา BME in the Real World (EGBI100)', isShared: true },
+  { id: 'gc-6', title: 'SCPY 161 General Physics I', sub: 'EGBI Year 1 - 1/2026', type: 'classroom', url: 'https://classroom.google.com/u/6/c/ODcxMTQzMDA0NzAw', desc: 'Google Classroom วิชาฟิสิกส์ทั่วไป 1 (SCPY161)', isShared: true }
+];
+
 // Default Schedule & Study Blocks Data for iCalendar Feed Generation
 const DEFAULT_BME_ROUTINE_EVENTS = [
   // Monday
@@ -255,6 +279,33 @@ const server = http.createServer((req, res) => {
       return null;
     }
     return store._users[session.username] || null;
+  }
+
+    // ─── API: Public Study & Curriculum Hub (GET /api/public/hub) ───
+  if (pathname === '/api/public/hub' && req.method === 'GET') {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    
+    // Find master admin or key '1'
+    let masterData = store['1'] || store['u_admin'] || null;
+    if (!masterData) {
+      const adminUser = Object.values(store._users || {}).find(u => u && u.role === 'admin');
+      if (adminUser) masterData = store[adminUser.id];
+    }
+    if (!masterData) masterData = {};
+
+    const cur = (masterData.curriculum && masterData.curriculum.length > 0) ? masterData.curriculum : DEFAULT_BME_CURRICULUM;
+    const links = (masterData.studyLinks && masterData.studyLinks.length > 0) ? masterData.studyLinks.filter(l => l.isShared !== false) : DEFAULT_BME_STUDY_LINKS;
+
+    const publicHub = {
+      curriculum: cur,
+      studyFolders: masterData.studyFolders || [],
+      studyLinks: links,
+      updatedAt: masterData.updatedAt || new Date().toISOString()
+    };
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(publicHub));
+    return;
   }
 
   // ─── API: Backup Download (GET /api/backup) ───

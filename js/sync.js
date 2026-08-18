@@ -6,12 +6,12 @@
 const CloudSync = (function () {
   'use strict';
 
-  // Dynamic host determination (Railway production vs localhost)
-  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  const BASE_URL = isLocal ? window.location.origin : 'https://daily-study-dashboard-production.up.railway.app';
+  // Dynamic host determination: always use current origin
+  const BASE_URL = typeof window !== 'undefined' && window.location ? window.location.origin : 'https://daily-study-dashboard-production.up.railway.app';
   const SYNC_API = `${BASE_URL}/api/sync`;
   const AUTH_API = `${BASE_URL}/api/auth`;
   const CAL_API  = `${BASE_URL}/api/calendar`;
+  const PUB_API  = `${BASE_URL}/api/public`;
 
   const PUSH_DEBOUNCE_MS = 20;     // 20ms ultra-fast push
   const POLL_INTERVAL_MS = 1500;   // Poll every 1.5 seconds for multi-device sync
@@ -53,7 +53,16 @@ const CloudSync = (function () {
         localStorage.setItem('sd-auth-token', authToken);
         setSyncKey(currentUser.id);
         updateUIStatus();
-        return { ok: true, user: currentUser };
+          async function getPublicHub() {
+    try {
+      const res = await fetch(`${PUB_API}/hub?t=${Date.now()}`);
+      if (res.ok) return await res.json();
+    } catch (_) {}
+    return null;
+  }
+
+  return {
+    getPublicHub, ok: true, user: currentUser };
       } else {
         return { ok: false, error: data.error || 'สมัครสมาชิกไม่สำเร็จ' };
       }

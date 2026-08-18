@@ -1034,7 +1034,7 @@
     state.checklist[ck][k] = !state.checklist[ck][k];
     saveChecklist();
     renderTimeline(dayKey);
-    if (state.checklist[ck][k]) showToast('✅ ทำครบแล้ว! ดีมาก 🎉', 'success');
+    if (state.checklist[ck][k]) showToast('ทำครบแล้ว! ดีมาก 🎉', 'success');
   }
 
   // ─── Time Indicator (9th Verbatim) ───────────────────────
@@ -1986,7 +1986,7 @@
       saveBtn.onclick = () => {
         const name = nameInp?.value.trim();
         if (!name) {
-          showToast('⚠️ กรุณากรอกชื่อโฟลเดอร์', 'warning');
+          showToast('กรุณากรอกชื่อโฟลเดอร์', 'warning');
           return;
         }
         const newFolder = {
@@ -2000,7 +2000,7 @@
         modal.classList.remove('open');
         document.body.style.overflow = '';
         renderStudyView();
-        showToast('✅ สร้างโฟลเดอร์ใหม่สำเร็จ!', 'success');
+        showToast('สร้างโฟลเดอร์ใหม่สำเร็จ!', 'success');
       };
     }
 
@@ -2047,7 +2047,7 @@
     document.getElementById('cal-copy-url-btn').onclick = () => {
       if (urlInput) {
         navigator.clipboard.writeText(urlInput.value).then(() => {
-          showToast('📋 คัดลอก Calendar Feed URL แล้ว!', 'success');
+          showToast('คัดลอก Calendar Feed URL แล้ว!', 'success');
         });
       }
     };
@@ -2141,7 +2141,7 @@
           const displayName = nameInp?.value.trim();
 
           if (!username || !password) {
-            showToast('⚠️ กรุณากรอกชื่อผู้ใช้และรหัสผ่าน', 'warning');
+            showToast('กรุณากรอกชื่อผู้ใช้และรหัสผ่าน', 'warning');
             return;
           }
 
@@ -2247,13 +2247,30 @@
   }
 
   // Check URL params on startup for public share view
-  function checkPublicShareRoute() {
+  async function checkPublicShareRoute() {
     const urlParams = new URLSearchParams(window.location.search);
     const shareParam = urlParams.get('share');
-    if (shareParam === 'curriculum' || shareParam === 'study') {
+    if (shareParam === 'curriculum' || shareParam === 'study' || shareParam === 'hub') {
+      // Fetch fresh public hub data from server
+      try {
+        const hub = await CloudSync.getPublicHub();
+        if (hub) {
+          if (hub.curriculum && hub.curriculum.length > 0) {
+            state.curriculum = hub.curriculum;
+          }
+          if (hub.studyFolders && hub.studyFolders.length > 0) {
+            state.studyFolders = hub.studyFolders;
+          }
+          if (hub.studyLinks && hub.studyLinks.length > 0) {
+            state.studyLinks = hub.studyLinks;
+          }
+        }
+      } catch (_) {}
+
+      const targetView = shareParam === 'hub' ? 'study' : shareParam;
       setTimeout(() => {
-        switchTopView(shareParam);
-        showToast(`กำลังเปิดดูในโหมดแชร์สาธารณะ: ${shareParam === 'curriculum' ? 'หน้ารายวิชา' : 'คลังชีทเรียน'}`, 'info');
+        switchTopView(targetView);
+        showToast(`โหมดแชร์สาธารณะ: ${shareParam === 'curriculum' ? 'หน้ารายวิชา & ลิงก์' : 'คลังเอกสาร & Classroom'}`, 'info');
       }, 100);
     }
   }
@@ -2365,7 +2382,7 @@
         const file = fileInp.files && fileInp.files[0];
         if (!file) return;
         if (file.size > 25 * 1024 * 1024) {
-          showToast('⚠️ ไฟล์มีขนาดเกิน 25MB กรุณาเลือกไฟล์ที่เล็กลง', 'warning');
+          showToast('ไฟล์มีขนาดเกิน 25MB กรุณาเลือกไฟล์ที่เล็กลง', 'warning');
           fileInp.value = '';
           return;
         }
@@ -2427,7 +2444,7 @@
         const desc = descInp?.value.trim();
 
         if (!title) {
-          showToast('⚠️ กรุณาระบุชื่อเอกสาร / ชีทเรียน', 'warning');
+          showToast('กรุณาระบุชื่อเอกสาร / ชีทเรียน', 'warning');
           return;
         }
 
@@ -2438,7 +2455,7 @@
           if (currentUploadMode === 'file') {
             const file = fileInp?.files && fileInp.files[0];
             if (!file && !currentUploadedFileData) {
-              showToast('⚠️ กรุณากดเลือกไฟล์จากเครื่องก่อนบันทึก', 'warning');
+              showToast('กรุณากดเลือกไฟล์จากเครื่องก่อนบันทึก', 'warning');
               saveBtn.disabled = false;
               saveBtn.textContent = '💾 บันทึกเอกสาร';
               return;
@@ -2474,14 +2491,14 @@
             saveStudyLinks();
             closeModal('resource-modal');
             renderStudyView();
-            showToast('✅ อัพโหลดและบันทึกไฟล์เรียบร้อย!', 'success');
+            showToast('อัพโหลดและบันทึกไฟล์เรียบร้อย!', 'success');
           } else {
             // Web Link Mode
             const url = urlInp?.value.trim();
             const type = typeSel?.value || 'link';
 
             if (!url) {
-              showToast('⚠️ กรุณาระบุ URL ลิงค์ปลายทาง', 'warning');
+              showToast('กรุณาระบุ URL ลิงค์ปลายทาง', 'warning');
               saveBtn.disabled = false;
               saveBtn.textContent = '💾 บันทึกเอกสาร';
               return;
@@ -2501,11 +2518,11 @@
             saveStudyLinks();
             closeModal('resource-modal');
             renderStudyView();
-            showToast('✅ บันทึกลิงค์เรียบร้อย!', 'success');
+            showToast('บันทึกลิงค์เรียบร้อย!', 'success');
           }
         } catch (err) {
           console.error('Error saving resource:', err);
-          showToast('⚠️ เกิดข้อผิดพลาดในการบันทึก กรุณาลองใหม่อีกครั้ง', 'warning');
+          showToast('เกิดข้อผิดพลาดในการบันทึก กรุณาลองใหม่อีกครั้ง', 'warning');
         } finally {
           saveBtn.disabled = false;
           saveBtn.textContent = '💾 บันทึกเอกสาร';
@@ -2870,7 +2887,7 @@
       } else {
         copyBtn.style.display = 'inline-flex';
         copyBtn.onclick = () => {
-          navigator.clipboard.writeText(item.url || '').then(() => showToast('📋 คัดลอกลิงค์แล้ว', 'success'));
+          navigator.clipboard.writeText(item.url || '').then(() => showToast('คัดลอกลิงค์แล้ว', 'success'));
         };
       }
     }
@@ -3435,7 +3452,7 @@
     if (!state.customBlocks[dayKey]) state.customBlocks[dayKey] = [];
     const day = ROUTINES[dayKey];
     const isBase = day.blocks.some(b => b.id === blockId);
-    if (isBase) { showToast('⚠️ ไม่สามารถลบตารางหลักได้', 'warning'); return; }
+    if (isBase) { showToast('ไม่สามารถลบตารางหลักได้', 'warning'); return; }
     state.customBlocks[dayKey] = state.customBlocks[dayKey].filter(b => b.id !== blockId);
     saveCustomBlocks();
     closeModal('edit-modal');
@@ -3522,7 +3539,7 @@
     const tag      = modal.querySelector('#add-tag-selector .tag-option.selected')?.dataset.tag || 'break';
     const isStudy  = modal.querySelector('#add-is-study')?.checked || false;
 
-    if (!title || !start || !end) { showToast('⚠️ กรุณากรอกข้อมูลให้ครบ', 'warning'); return; }
+    if (!title || !start || !end) { showToast('กรุณากรอกข้อมูลให้ครบ', 'warning'); return; }
 
     const newBlock = {
       id: `custom-${dayKey}-${Date.now()}`,
@@ -3537,7 +3554,7 @@
     state.customBlocks[dayKey].push(newBlock);
     saveCustomBlocks();
     closeModal('add-modal');
-    showToast('✅ เพิ่มกิจกรรมแล้ว!', 'success');
+    showToast('เพิ่มกิจกรรมแล้ว!', 'success');
     renderTimeline(dayKey);
   }
 
@@ -3652,30 +3669,30 @@
       document.body.style.overflow = 'hidden';
 
       if (key) {
-        showToast('🔄 กำลังเชื่อมต่อและซิงค์ข้อมูลกับ Cloud...', 'info');
+        showToast('กำลังเชื่อมต่อและซิงค์ข้อมูลกับ Cloud...', 'info');
         const pullRes = await CloudSync.pullFromCloud();
         if (pullRes && pullRes.ok) {
           if (pullRes.notFound || !pullRes.data) {
             const pushRes = await CloudSync.pushToCloud(state);
-            if (pushRes.ok) showToast('✅ สร้างฐานข้อมูลบน Cloud เรียบร้อย', 'success');
-            else showToast('❌ ไม่สามารถสร้างฐานข้อมูลบน Cloud ได้', 'error');
+            if (pushRes.ok) showToast('สร้างฐานข้อมูลบน Cloud เรียบร้อย', 'success');
+            else showToast('ไม่สามารถสร้างฐานข้อมูลบน Cloud ได้', 'error');
           } else {
             const syncRes = syncSmartWithCloud(pullRes.data);
             if (syncRes === 'pulled' || syncRes === 'merged') {
               if (state.currentTopView === 'dashboard') renderDashboardCurrentView();
               else if (state.currentTopView === 'study') renderStudyView();
-              showToast('✅ ดึงข้อมูลล่าสุดจาก Cloud มาอัปเดตเครื่องนี้แล้ว!', 'success');
+              showToast('ดึงข้อมูลล่าสุดจาก Cloud มาอัปเดตเครื่องนี้แล้ว!', 'success');
             } else if (syncRes === 'pushed') {
-              showToast('✅ ข้อมูลในเครื่องนี้ล่าสุดกว่า! อัปเดตขึ้น Cloud เรียบร้อย', 'success');
+              showToast('ข้อมูลในเครื่องนี้ล่าสุดกว่า! อัปเดตขึ้น Cloud เรียบร้อย', 'success');
             } else {
-              showToast('✅ ข้อมูลตรงกันกับ Cloud เรียบร้อย', 'success');
+              showToast('ข้อมูลตรงกันกับ Cloud เรียบร้อย', 'success');
             }
           }
         } else {
           if (pullRes && pullRes.reason === 'busy') {
-            showToast('⚠️ ระบบกำลังซิงค์อยู่แล้ว โปรดรอสักครู่', 'warning');
+            showToast('ระบบกำลังซิงค์อยู่แล้ว โปรดรอสักครู่', 'warning');
           } else {
-            showToast('❌ ขาดการเชื่อมต่อกับ Cloud หรือ Server ไม่ตอบสนอง', 'error');
+            showToast('ขาดการเชื่อมต่อกับ Cloud หรือ Server ไม่ตอบสนอง', 'error');
           }
         }
       }
@@ -3691,11 +3708,11 @@
       const input = document.getElementById('sync-key-input');
       const key = input?.value.trim();
       if (!key) {
-        showToast('⚠️ กรุณากรอก Sync Key', 'warning');
+        showToast('กรุณากรอก Sync Key', 'warning');
         return;
       }
       CloudSync.setSyncKey(key);
-      showToast('🔄 กำลังเชื่อมต่อ Cloud...', 'info');
+      showToast('กำลังเชื่อมต่อ Cloud...', 'info');
 
       const pullRes = await CloudSync.pullFromCloud();
       if (pullRes.ok) {
@@ -3719,7 +3736,7 @@
           }
         }
       } else {
-        showToast('⚠️ เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ (บันทึกไว้ในเครื่องเรียบร้อย)', 'warning');
+        showToast('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ (บันทึกไว้ในเครื่องเรียบร้อย)', 'warning');
       }
       closeModal('sync-modal');
     });
@@ -3728,21 +3745,21 @@
     document.getElementById('sync-force-pull-btn')?.addEventListener('click', async () => {
       const key = CloudSync.getSyncKey();
       if (!key) {
-        showToast('⚠️ ยังไม่ได้ตั้งค่า Sync Key', 'warning');
+        showToast('ยังไม่ได้ตั้งค่า Sync Key', 'warning');
         return;
       }
-      showToast('📥 กำลังดึงข้อมูลจาก Cloud...', 'info');
+      showToast('กำลังดึงข้อมูลจาก Cloud...', 'info');
       const pullRes = await CloudSync.pullFromCloud();
       if (pullRes.ok && pullRes.data) {
         applyCloudData(pullRes.data);
         if (state.currentTopView === 'dashboard') renderDashboardCurrentView();
         else if (state.currentTopView === 'study') renderStudyView();
-        showToast('✅ ดึงข้อมูลล่าสุดจาก Cloud มาอัปเดตเครื่องนี้แล้ว!', 'success');
+        showToast('ดึงข้อมูลล่าสุดจาก Cloud มาอัปเดตเครื่องนี้แล้ว!', 'success');
         closeModal('sync-modal');
       } else if (pullRes.notFound) {
         showToast('ℹ️ ยังไม่มีข้อมูลบน Cloud สำหรับ Key นี้', 'info');
       } else {
-        showToast('⚠️ ไม่สามารถดึงข้อมูลได้ โปรดตรวจสอบการเชื่อมต่อ', 'warning');
+        showToast('ไม่สามารถดึงข้อมูลได้ โปรดตรวจสอบการเชื่อมต่อ', 'warning');
       }
     });
 
@@ -3750,16 +3767,16 @@
     document.getElementById('sync-force-push-btn')?.addEventListener('click', async () => {
       const key = CloudSync.getSyncKey();
       if (!key) {
-        showToast('⚠️ ยังไม่ได้ตั้งค่า Sync Key', 'warning');
+        showToast('ยังไม่ได้ตั้งค่า Sync Key', 'warning');
         return;
       }
-      showToast('📤 กำลังส่งข้อมูลขึ้น Cloud...', 'info');
+      showToast('กำลังส่งข้อมูลขึ้น Cloud...', 'info');
       const pushRes = await CloudSync.pushToCloud(state);
       if (pushRes.ok) {
-        showToast('✅ ส่งข้อมูลเครื่องนี้ขึ้น Cloud สำเร็จ!', 'success');
+        showToast('ส่งข้อมูลเครื่องนี้ขึ้น Cloud สำเร็จ!', 'success');
         closeModal('sync-modal');
       } else {
-        showToast('⚠️ ส่งข้อมูลขึ้น Cloud ไม่สำเร็จ โปรดลองใหม่', 'warning');
+        showToast('ส่งข้อมูลขึ้น Cloud ไม่สำเร็จ โปรดลองใหม่', 'warning');
       }
     });
 
