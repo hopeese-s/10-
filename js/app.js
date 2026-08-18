@@ -315,6 +315,9 @@
       });
     }
 
+    // Public share route (?share=curriculum / ?share=study)
+    checkPublicShareRoute();
+
     // Window resize listener for responsive SVG graph edges
     window.addEventListener('resize', () => {
       if (state.currentTopView === 'graph') {
@@ -377,7 +380,6 @@
 
     if (state.currentTopView === 'dashboard') {
       renderDashboardCurrentView();
-    checkPublicShareRoute();
     } else if (state.currentTopView === 'study') {
       renderStudyView();
     } else if (state.currentTopView === 'curriculum') {
@@ -1692,130 +1694,45 @@
       renderStudyView();
     });
 
-    container.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.25rem;flex-wrap:wrap;gap:1rem">
-        <div>
-          <h2 style="font-family:var(--font-serif);font-size:1.6rem;font-weight:700;margin-bottom:4px">Study Resources &amp; Documents</h2>
-          <p style="font-size:13px;color:var(--label-2)">คลังเอกสาร ชีทสรุป Google Classroom และคู่มือ BME พร้อมระบบโฟลเดอร์</p>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <!-- Grid / List toggle -->
-          <div class="view-mode-toggle" aria-label="รูปแบบการแสดงผล">
-            <button class="view-mode-btn ${!isListMode ? 'active' : ''}" data-study-mode="grid" title="แสดงแบบการ์ด"><span>⊞</span> Grid</button>
-            <button class="view-mode-btn ${isListMode ? 'active' : ''}" data-study-mode="list" title="แสดงแบบรายการ"><span>☰</span> List</button>
-          </div>
-          <button class="btn btn-secondary" id="create-folder-btn" style="font-size:12.5px;padding:7px 14px;display:inline-flex;align-items:center;gap:6px">
-            📁 สร้างโฟลเดอร์
-          </button>
-          <button class="btn btn-primary" id="add-resource-btn" style="font-size:12.5px;padding:7px 16px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;">
-            ➕ เพิ่มไฟล์ / ลิงค์
-          </button>
-        </div>
-      </div>
+    // Share button
+    document.getElementById('study-share-btn')?.addEventListener('click', () => openShareModal('study'));
 
-      <!-- Search & Status Bar -->
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
-        <div style="position:relative;flex:1;max-width:360px">
-          <input type="text" id="study-search-inp" class="form-input" placeholder="🔍 ค้นหาชีทเรียน, รหัสวิชา, หรือ Drive..." value="${escHtml(studySearchQuery)}" style="padding-left:32px;font-size:12.5px;border-radius:var(--r-pill)" />
-          <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--label-3);pointer-events:none">🔍</span>
-          ${studySearchQuery ? `<button id="study-clear-search" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--label-3);font-size:12px">✕</button>` : ''}
-        </div>
-        <div style="font-size:11.5px;color:var(--label-3);font-weight:600">
-          ${filteredLinks.length} ไฟล์ · กด 📂 เพื่อย้ายโฟลเดอร์
-        </div>
-      </div>
+    // Horizontal folder scroll arrows
+    const scrollBar = document.getElementById('study-folder-bar');
+    document.getElementById('folder-scroll-left')?.addEventListener('click', () => {
+      if (scrollBar) scrollBar.scrollBy({ left: -250, behavior: 'smooth' });
+    });
+    document.getElementById('folder-scroll-right')?.addEventListener('click', () => {
+      if (scrollBar) scrollBar.scrollBy({ left: 250, behavior: 'smooth' });
+    });
 
-      <!-- Interactive Folder Navigation Bar (Drop Zones) -->
-      <div class="study-folder-bar" id="study-folder-bar">
-        <button class="study-folder-pill ${currentFolder === 'all' ? 'active' : ''}" data-folder="all">
-          <span>📁 ทั้งหมด</span>
-          <span class="study-folder-count">${totalCount}</span>
-        </button>
-        ${state.studyFolders.map(f => {
-          const fCount = state.studyLinks.filter(l => l.folderId === f.id || (!l.folderId && f.id === 'f-notes')).length;
-          const isDefault = DEFAULT_STUDY_FOLDERS.some(df => df.id === f.id);
-          return `
-            <div class="study-folder-pill ${currentFolder === f.id ? 'active' : ''}" data-folder="${f.id}">
-              <span>${escHtml(f.name)}</span>
-              <span class="study-folder-count">${fCount}</span>
-              ${!isDefault ? `
-                <button class="folder-del-btn" data-folder-id="${f.id}" title="ลบโฟลเดอร์" style="background:none;border:none;cursor:pointer;color:currentColor;opacity:0.6;font-size:11px;padding:0 2px">✕</button>
-              ` : ''}
-            </div>
-          `;
-        }).join('')}
-      </div>
+    // Mouse wheel horizontal scroll on folder bar
+    if (scrollBar) {
+      scrollBar.addEventListener('wheel', (e) => {
+        if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return; // let native horizontal scroll work
+        e.preventDefault();
+        scrollBar.scrollBy({ left: e.deltaY > 0 ? 120 : -120, behavior: 'smooth' });
+      }, { passive: false });
+    }
 
-      <!-- File Cards (Grid or List) -->
-      ${filteredLinks.length === 0 ? `
-        <div style="padding:3rem;text-align:center;color:var(--label-3);background:var(--bg-2);border-radius:var(--r-l);border:1px dashed var(--sep)">
-          <div style="font-size:36px;margin-bottom:8px">📂</div>
-          <div style="font-weight:600;font-size:14px;color:var(--label-2)">ไม่มีเอกสารในโฟลเดอร์นี้</div>
-          <p style="font-size:12.5px;margin-top:4px">กดปุ่ม ➕ เพิ่มไฟล์ / ลิงค์ เพื่อเพิ่มเอกสารใหม่</p>
-        </div>
-      ` : isListMode ? `
-        <div class="study-list-view" id="study-cards-grid">
-          ${filteredLinks.map(item => {
-            let badgeColor = 'var(--accent)'; let badgeBg = 'var(--accent-bg)'; let typeIcon = '🔗';
-            if (item.type === 'classroom') { badgeColor = '#2563eb'; badgeBg = 'rgba(59,130,246,0.12)'; typeIcon = '🎓'; }
-            else if (item.type === 'drive') { badgeColor = '#059669'; badgeBg = 'rgba(16,185,129,0.12)'; typeIcon = '📁'; }
-            else if (item.type === 'pdf') { badgeColor = '#dc2626'; badgeBg = 'rgba(239,68,68,0.12)'; typeIcon = '📄'; }
-            else if (item.type === 'image') { badgeColor = '#d97706'; badgeBg = 'rgba(217,119,6,0.12)'; typeIcon = '🖼️'; }
-            else if (item.type === 'local') { badgeColor = '#7c3aed'; badgeBg = 'rgba(124,58,237,0.12)'; typeIcon = '💾'; }
-            const isDefault = DEFAULT_STUDY_LINKS.some(d => d.id === item.id);
-            const folderName = state.studyFolders.find(f => f.id === item.folderId)?.name || '';
-            return `
-              <div class="study-list-item study-card" data-id="${item.id}" style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:var(--r-m);background:var(--bg-2);border:1px solid var(--sep);cursor:pointer;transition:background 0.15s">
-                <span style="font-size:20px;flex:none;width:28px;text-align:center">${typeIcon}</span>
-                <div style="flex:1;min-width:0">
-                  <div style="font-weight:700;font-size:13.5px;color:var(--label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(item.title)}</div>
-                  <div style="font-size:11px;color:var(--label-3);margin-top:1px">${escHtml(folderName)} ${item.desc ? '· ' + escHtml(item.desc.substring(0,40)) : ''}</div>
-                </div>
-                <div style="display:flex;align-items:center;gap:6px;flex-none">
-                  <button class="btn btn-secondary preview-trigger-btn" data-id="${item.id}" style="font-size:11px;padding:4px 10px;border-radius:var(--r-pill)">👁️ ดูตัวอย่าง</button>
-                  <button class="study-action-btn move-link-btn" data-id="${item.id}" title="ย้ายโฟลเดอร์">📂</button>
-                  ${!isDefault ? `<button class="study-action-btn delete-link-btn" data-id="${item.id}" title="ลบ">✕</button>` : ''}
-                </div>
-              </div>
-            `;
-          }).join('')}
-        </div>
-      ` : `
-        <div class="cards-grid" id="study-cards-grid">
-          ${filteredLinks.map(item => {
-            let badgeColor = 'var(--accent)'; let badgeBg = 'var(--accent-bg)'; let typeIcon = '🔗';
-            if (item.type === 'classroom') { badgeColor = '#2563eb'; badgeBg = 'rgba(59,130,246,0.12)'; typeIcon = '🎓'; }
-            else if (item.type === 'drive') { badgeColor = '#059669'; badgeBg = 'rgba(16,185,129,0.12)'; typeIcon = '📁'; }
-            else if (item.type === 'pdf') { badgeColor = '#dc2626'; badgeBg = 'rgba(239,68,68,0.12)'; typeIcon = '📄'; }
-            else if (item.type === 'image') { badgeColor = '#d97706'; badgeBg = 'rgba(217,119,6,0.12)'; typeIcon = '🖼️'; }
-            else if (item.type === 'local') { badgeColor = '#7c3aed'; badgeBg = 'rgba(124,58,237,0.12)'; typeIcon = '💾'; }
-            const isDefault = DEFAULT_STUDY_LINKS.some(d => d.id === item.id);
-            return `
-              <div class="card-item study-card" data-id="${item.id}" draggable="true" style="display:flex;flex-direction:column;justify-content:space-between;cursor:pointer">
-                <div>
-                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-                    <span class="tag-chip" style="background:${badgeBg};color:${badgeColor};font-weight:700">${typeIcon} ${escHtml((item.type === 'local' ? 'UPLOAD' : item.type || 'LINK').toUpperCase())}</span>
-                    <div class="study-card-actions">
-                      <button class="study-action-btn move-link-btn" data-id="${item.id}" title="ย้ายโฟลเดอร์">📂</button>
-                      ${!isDefault ? `<button class="study-action-btn delete-link-btn" data-id="${item.id}" title="ลบ">✕</button>` : ''}
-                    </div>
-                  </div>
-                  <h3 style="font-size:15px;font-weight:700;margin-bottom:4px;color:var(--label);line-height:1.35">${escHtml(item.title)}</h3>
-                  ${item.sub ? `<div style="font-size:11.5px;color:var(--label-3);font-weight:600;margin-bottom:6px">${escHtml(item.sub)}</div>` : ''}
-                  <p style="font-size:12.5px;color:var(--label-2);line-height:1.5">${escHtml(item.desc || '')}</p>
-                </div>
-                <div style="margin-top:14px;border-top:1px solid var(--sep);padding-top:10px;display:flex;align-items:center;justify-content:space-between">
-                  <button class="btn btn-secondary preview-trigger-btn" data-id="${item.id}" style="font-size:11.5px;padding:5px 12px;border-radius:var(--r-pill);flex:none">👁️ ดูตัวอย่าง</button>
-                  <button class="btn btn-ghost direct-open-trigger-btn" data-id="${item.id}" style="font-size:11.5px;color:var(--accent);font-weight:600;background:none;border:none;cursor:pointer;padding:4px 8px;display:inline-flex;align-items:center;gap:4px">
-                    เปิดตรงนี้ ↗
-                  </button>
-                </div>
-              </div>
-            `;
-          }).join('')}
-        </div>
-      `}
-    `;
+    // Drag-to-scroll on folder bar
+    if (scrollBar) {
+      let isDown = false, startX = 0, scrollLeft = 0;
+      scrollBar.addEventListener('mousedown', (e) => {
+        isDown = true; scrollBar.style.cursor = 'grabbing';
+        startX = e.pageX - scrollBar.offsetLeft;
+        scrollLeft = scrollBar.scrollLeft;
+      });
+      scrollBar.addEventListener('mouseleave', () => { isDown = false; scrollBar.style.cursor = 'grab'; });
+      scrollBar.addEventListener('mouseup', () => { isDown = false; scrollBar.style.cursor = 'grab'; });
+      scrollBar.addEventListener('mousemove', (e) => {
+        if (!isDown) return;
+        e.preventDefault();
+        const x = e.pageX - scrollBar.offsetLeft;
+        const walk = (x - startX) * 1.5;
+        scrollBar.scrollLeft = scrollLeft - walk;
+      });
+    }
 
     // Grid/List toggle
     container.querySelectorAll('[data-study-mode]').forEach(btn => {
@@ -1826,14 +1743,15 @@
       });
     });
 
-    // Folder selection
-    container.querySelectorAll('.study-folder-pill').forEach(pill => {
+    // Folder selection (horizontal pills + vertical cards)
+    container.querySelectorAll('.study-folder-pill, .study-folder-card').forEach(pill => {
       pill.addEventListener('click', (e) => {
         if (e.target.closest('.folder-del-btn')) return;
         const fId = pill.dataset.folder;
         if (fId) {
           state.selectedFolderId = fId;
           localStorage.setItem('sd-selected-folder', fId);
+          localStorage.setItem('sd-study-active-folder', fId);
           renderStudyView();
         }
       });
@@ -3633,6 +3551,10 @@
         if (subview) switchDashboardView(subview);
       });
     });
+
+    // Calendar & Auth header buttons
+    document.getElementById('calendar-sync-btn')?.addEventListener('click', () => openCalendarModal());
+    document.getElementById('auth-user-btn')?.addEventListener('click', () => openAuthModal());
 
     // Theme toggles
     document.getElementById('theme-toggle')?.addEventListener('click', toggleTheme);
