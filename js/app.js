@@ -2221,9 +2221,8 @@
 
         const res = await CloudSync.createShareBundle(resourceIds, folderIds);
         if (res && res.ok && res.token) {
-          const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-          const baseUrl = isLocal ? window.location.origin : 'https://daily-study-dashboard-production.up.railway.app';
-          const shareUrl = `${baseUrl}/?share=${res.token}`;
+          // Always use the current origin so the link points to the server that holds the token
+          const shareUrl = `${window.location.origin}/?share=${res.token}`;
           if (urlInput) urlInput.value = shareUrl;
           if (linkBox) linkBox.style.display = 'block';
           showToast('สร้างลิงก์แชร์เรียบร้อย!', 'success');
