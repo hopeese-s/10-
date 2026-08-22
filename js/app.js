@@ -1764,7 +1764,7 @@
         if (e.target.closest('.study-action-btn') || e.target.closest('.resource-open-link')) return;
         const id = card.dataset.id;
         const item = state.studyLinks.find(l => l.id === id);
-        if (item) openResourcePreview(item);
+        if (item) { alert('พรีวิวถูกเรียกสำหรับ: ' + item.title); openResourcePreview(item); }
       });
     });
 
@@ -1806,7 +1806,7 @@
         e.stopPropagation();
         const id = btn.dataset.id;
         const item = state.studyLinks.find(l => l.id === id);
-        if (item) openResourcePreview(item);
+        if (item) { alert('พรีวิวถูกเรียกสำหรับ: ' + item.title); openResourcePreview(item); }
       });
     });
 
@@ -2991,6 +2991,7 @@
           </div>`;
       } else {
         // Google Drive / Classroom / generic link — show rich card + open button
+        alert('กำลังเปิดหน้าต่าง Preview Card สำหรับ Classroom/Drive');
         const typeEmoji = { drive: '📁', classroom: '🎓', link: '🔗' };
         const emoji = typeEmoji[item.type] || '🔗';
         
