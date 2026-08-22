@@ -186,9 +186,13 @@ const CloudSync = (function () {
   function getSyncKey()      { return syncKey; }
   function getLastSyncTime() { return lastSyncTime; }
 
-  function getCalendarFeedUrl(routines = false) {
+  function getCalendarFeedUrl(routines = false, study = true, classes = true) {
     const key = currentUser ? currentUser.calendarKey : (syncKey === '1' ? 'default' : syncKey);
-    const suffix = routines ? '?routines=1' : '';
+    let qs = [];
+    if (routines) qs.push('routines=1');
+    if (!study) qs.push('study=0');
+    if (!classes) qs.push('class=0');
+    const suffix = qs.length > 0 ? '?' + qs.join('&') : '';
     const httpsUrl = `${CAL_API}/${key}/feed.ics${suffix}`;
     const webcalUrl = httpsUrl.replace(/^https?:\/\//, 'webcal://');
     return { httpsUrl, webcalUrl, key };

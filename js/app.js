@@ -1938,6 +1938,8 @@
     const modal = document.getElementById('calendar-modal');
     if (!modal) return;
 
+    const optStudy = document.getElementById('cal-opt-study');
+    const optClass = document.getElementById('cal-opt-class');
     const optRoutines = document.getElementById('cal-opt-routines');
     const urlInput = document.getElementById('cal-feed-url-input');
     const appleBtn = document.getElementById('cal-apple-btn');

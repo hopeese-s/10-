@@ -186,7 +186,7 @@ function formatIcsDateTime(dateStr, timeStr) {
 }
 
 // Generate RFC 5545 .ics Feed with real-time curriculum data
-function generateIcsCalendar(userId, includeRoutines = false) {
+function generateIcsCalendar(userId, includeRoutines = false, includeStudy = true, includeClass = true) {
   const baseDates = {
     MO: '2026-08-17',
     TU: '2026-08-18',
@@ -226,6 +226,7 @@ function generateIcsCalendar(userId, includeRoutines = false) {
   // Build events from curriculum (real-time)
   const events = [];
   
+  if (includeClass) {
   // Add curriculum classes with real room/schedule data
   curriculum.forEach((course, idx) => {
     if (!course.schedule || !course.day) return;
@@ -260,6 +261,7 @@ function generateIcsCalendar(userId, includeRoutines = false) {
     events.push({ ...ev });
   });
 
+  if (includeStudy) {
   // Add custom blocks from user's study data
   Object.entries(customBlocks).forEach(([day, blocks]) => {
     const dayMap = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
@@ -773,7 +775,9 @@ const server = http.createServer((req, res) => {
 
     let targetUserId = store._calKeys[calKey] || calKey;
 
-    const icsContent = generateIcsCalendar(targetUserId, url.searchParams.get('routines') === '1');
+    const includeStudy = url.searchParams.get('study') !== '0';
+    const includeClass = url.searchParams.get('class') !== '0';
+    const icsContent = generateIcsCalendar(targetUserId, url.searchParams.get('routines') === '1', includeStudy, includeClass);
 
     res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
     res.setHeader('Content-Disposition', 'inline; filename="bme-study-schedule.ics"');
