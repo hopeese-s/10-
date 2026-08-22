@@ -1512,36 +1512,9 @@
 
     const totalCount = state.studyLinks.length;
     const isListMode = studyViewMode === 'list';
-    const isVerticalFolder = studyFolderLayout === 'vertical';
 
     // Build Folder Section HTML based on layout
-    let folderSectionHtml = '';
-    if (isVerticalFolder) {
-      folderSectionHtml = `
-        <div class="study-folder-grid" id="study-folder-grid">
-          <div class="study-folder-card ${currentFolder === 'all' ? 'active' : ''}" data-folder="all">
-            <span class="study-folder-card-name">📁 ทั้งหมด</span>
-            <span class="study-folder-count">${totalCount}</span>
-          </div>
-          ${state.studyFolders.map(f => {
-            const fCount = state.studyLinks.filter(l => l.folderId === f.id || (!l.folderId && f.id === 'f-notes')).length;
-            const isDefault = DEFAULT_STUDY_FOLDERS.some(df => df.id === f.id);
-            return `
-              <div class="study-folder-card ${currentFolder === f.id ? 'active' : ''}" data-folder="${f.id}">
-                <span class="study-folder-card-name">${escHtml(f.name)}</span>
-                <div style="display:flex;align-items:center;gap:6px">
-                  <span class="study-folder-count">${fCount}</span>
-                  ${!isDefault ? `
-                    <button class="folder-del-btn" data-folder-id="${f.id}" title="ลบโฟลเดอร์" style="background:none;border:none;cursor:pointer;color:currentColor;opacity:0.6;font-size:11px;padding:0 2px">✕</button>
-                  ` : ''}
-                </div>
-              </div>
-            `;
-          }).join('')}
-        </div>
-      `;
-    } else {
-      folderSectionHtml = `
+    let folderSectionHtml = `
         <div class="study-folder-bar-wrapper" style="position:relative;display:flex;align-items:center;margin-bottom:1.25rem">
           <button class="folder-scroll-arrow folder-scroll-left" id="folder-scroll-left" aria-label="เลื่อนซ้าย" title="เลื่อนโฟลเดอร์ไปทางซ้าย">◀</button>
           <div class="study-folder-bar" id="study-folder-bar" style="cursor:grab;overflow-x:auto;-webkit-overflow-scrolling:touch">
@@ -1566,7 +1539,6 @@
           <button class="folder-scroll-arrow folder-scroll-right" id="folder-scroll-right" aria-label="เลื่อนขวา" title="เลื่อนโฟลเดอร์ไปทางขวา">▶</button>
         </div>
       `;
-    }
 
     container.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.25rem;flex-wrap:wrap;gap:1rem">
@@ -1575,12 +1547,6 @@
           <p style="font-size:13px;color:var(--label-2)">คลังเอกสาร ชีทสรุป Google Classroom และคู่มือ BME พร้อมระบบโฟลเดอร์</p>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <!-- Folder layout toggle -->
-          <div class="view-mode-toggle" aria-label="มุมมองโฟลเดอร์">
-            <button class="view-mode-btn ${!isVerticalFolder ? 'active' : ''}" id="toggle-folder-h" title="แถบแนวนอน">แนวนอน</button>
-            <button class="view-mode-btn ${isVerticalFolder ? 'active' : ''}" id="toggle-folder-v" title="ตารางแนวตั้ง">ตารางแนวตั้ง</button>
-          </div>
-
           <!-- Grid / List toggle -->
           <div class="view-mode-toggle" aria-label="รูปแบบการแสดงผล">
             <button class="view-mode-btn ${!isListMode ? 'active' : ''}" data-study-mode="grid" title="แสดงแบบการ์ด"><span>⊞</span> Grid</button>
@@ -1684,11 +1650,7 @@
     `;
 
     // Attach Folder Layout Toggle
-    document.getElementById('toggle-folder-h')?.addEventListener('click', () => {
-      studyFolderLayout = 'horizontal';
-      localStorage.setItem('sd-folder-layout', 'horizontal');
-      renderStudyView();
-    });
+    
     document.getElementById('toggle-folder-v')?.addEventListener('click', () => {
       studyFolderLayout = 'vertical';
       localStorage.setItem('sd-folder-layout', 'vertical');
@@ -1812,6 +1774,29 @@
         e.stopPropagation();
         const id = btn.dataset.id;
         openMoveFileModal(id);
+      });
+    });
+
+    // Move document
+    container.querySelectorAll('.btn-move-doc').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.id;
+        openMoveFileModal(id);
+      });
+    });
+
+    // Delete document
+    container.querySelectorAll('.btn-del-doc').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.id;
+        if (confirm('คุณต้องการลบเอกสารนี้หรือไม่?')) {
+          state.studyLinks = state.studyLinks.filter(l => l.id !== id);
+          saveStudyLinks();
+          renderStudyView();
+          showToast('ลบเอกสารเรียบร้อย', 'info');
+        }
       });
     });
 
