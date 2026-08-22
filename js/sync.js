@@ -22,6 +22,7 @@ const CloudSync = (function () {
   let syncKey      = localStorage.getItem('sd-sync-key') || '1';
   let syncStatus   = 'local';
   let lastSyncTime = parseInt(localStorage.getItem('sd-last-sync-time') || '0', 10);
+  let rememberMe   = localStorage.getItem('sd-remember-me') === 'true';
 
   let isPushing       = false;
   let isPulling       = false;
@@ -99,6 +100,7 @@ const CloudSync = (function () {
         updateUIStatus();
         return currentUser;
       } else {
+        // Token expired — clear it
         authToken = '';
         currentUser = null;
         localStorage.removeItem('sd-auth-token');
@@ -106,8 +108,22 @@ const CloudSync = (function () {
         return null;
       }
     } catch (_) {
+      // Network error — if rememberMe is on, keep the token and try again later
+      if (rememberMe && authToken) {
+        // Keep the token, will retry on next check
+        return null;
+      }
       return null;
     }
+  }
+
+  function setRememberMe(val) {
+    rememberMe = !!val;
+    localStorage.setItem('sd-remember-me', rememberMe ? 'true' : 'false');
+  }
+
+  function getRememberMe() {
+    return rememberMe;
   }
 
   async function logout() {
@@ -426,7 +442,9 @@ const CloudSync = (function () {
     pushToCloud,
     pullFromCloud,
     startAutoSync,
-    updateUIStatus
+    updateUIStatus,
+    setRememberMe,
+    getRememberMe
   };
 })();
 

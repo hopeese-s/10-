@@ -11,6 +11,13 @@ const crypto = require('crypto');
 const PORT = process.env.PORT || 3000;
 const DB_FILE = path.join(__dirname, 'sync_store.json');
 const DB_BACKUP_FILE = path.join(__dirname, 'sync_store.backup.json');
+const UPLOAD_DIR = path.join(__dirname, 'uploads');
+const MAX_BODY_SIZE = 25 * 1024 * 1024; // 25MB limit
+
+// Ensure uploads directory exists
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
 
 // In-memory store + file persistence
 let store = {
@@ -41,16 +48,23 @@ try {
   console.error('Error loading DB file:', e);
 }
 
+// Async save to avoid blocking
+let saveQueue = Promise.resolve();
 function saveStore() {
-  try {
-    if (fs.existsSync(DB_FILE)) {
-      try { fs.copyFileSync(DB_FILE, DB_BACKUP_FILE); } catch (_) {}
-    }
-    fs.writeFileSync(DB_FILE, JSON.stringify(store, null, 2));
-  } catch (e) {
-    console.error('Error saving DB file:', e);
-    try { fs.writeFileSync(DB_BACKUP_FILE, JSON.stringify(store, null, 2)); } catch (_) {}
-  }
+  saveQueue = saveQueue.then(() => {
+    return new Promise((resolve) => {
+      try {
+        if (fs.existsSync(DB_FILE)) {
+          try { fs.copyFileSync(DB_FILE, DB_BACKUP_FILE); } catch (_) {}
+        }
+        fs.writeFileSync(DB_FILE, JSON.stringify(store, null, 2));
+      } catch (e) {
+        console.error('Error saving DB file:', e);
+        try { fs.writeFileSync(DB_BACKUP_FILE, JSON.stringify(store, null, 2)); } catch (_) {}
+      }
+      resolve();
+    });
+  });
 }
 
 // Password helpers
@@ -70,6 +84,26 @@ function generateShareToken() {
   return 'sh_' + crypto.randomBytes(9).toString('hex');
 }
 
+// Sanitize display name to prevent XSS
+function sanitizeDisplayName(name) {
+  return String(name || '')
+    .replace(/[<>]/g, '')
+    .replace(/&/g, '&')
+    .replace(/"/g, '"')
+    .replace(/'/g, '&#39;')
+    .slice(0, 50);
+}
+
+// Validate URL to prevent javascript: XSS
+function isValidUrl(url) {
+  try {
+    const u = new URL(url);
+    return ['http:', 'https:'].includes(u.protocol);
+  } catch (_) {
+    return false;
+  }
+}
+
 // MIME Types for Static Serving
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -78,12 +112,14 @@ const MIME_TYPES = {
   '.json': 'application/json; charset=utf-8',
   '.png':  'image/png',
   '.jpg':  'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif':  'image/gif',
+  '.webp': 'image/webp',
   '.svg':  'image/svg+xml',
   '.ico':  'image/x-icon',
   '.pdf':  'application/pdf',
   '.ics':  'text/calendar; charset=utf-8',
 };
-
 
 // Default Official BME Curriculum Fallback
 const DEFAULT_BME_CURRICULUM = [
@@ -144,15 +180,13 @@ const DEFAULT_BME_ROUTINE_EVENTS = [
 
 // Helper: Format date for iCalendar RFC 5545
 function formatIcsDateTime(dateStr, timeStr) {
-  // dateStr: '2026-08-17', timeStr: '09:30' -> '20260817T093000'
   const cleanDate = dateStr.replace(/-/g, '');
   const cleanTime = timeStr.replace(/:/g, '') + '00';
   return cleanDate + 'T' + cleanTime;
 }
 
-// Generate RFC 5545 .ics Feed
+// Generate RFC 5545 .ics Feed with real-time curriculum data
 function generateIcsCalendar(userId, includeRoutines = false) {
-  // Base anchor week: Monday 2026-08-17 (Semester 1/2026 Mahidol)
   const baseDates = {
     MO: '2026-08-17',
     TU: '2026-08-18',
@@ -165,6 +199,7 @@ function generateIcsCalendar(userId, includeRoutines = false) {
 
   const userCustom = store[userId] || {};
   const customBlocks = userCustom.customBlocks || {};
+  const curriculum = userCustom.curriculum || DEFAULT_BME_CURRICULUM;
 
   let ics = [];
   ics.push('BEGIN:VCALENDAR');
@@ -176,7 +211,6 @@ function generateIcsCalendar(userId, includeRoutines = false) {
   ics.push('X-WR-TIMEZONE:Asia/Bangkok');
   ics.push('X-WR-CALDESC:BME Mahidol 2026 Study Blocks and Class Schedule');
 
-  // VTIMEZONE Asia/Bangkok (+0700)
   ics.push('BEGIN:VTIMEZONE');
   ics.push('TZID:Asia/Bangkok');
   ics.push('BEGIN:STANDARD');
@@ -189,8 +223,74 @@ function generateIcsCalendar(userId, includeRoutines = false) {
 
   const nowStamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
 
-  // Build events list
-  const events = [...DEFAULT_BME_ROUTINE_EVENTS];
+  // Build events from curriculum (real-time)
+  const events = [];
+  
+  // Add curriculum classes with real room/schedule data
+  curriculum.forEach((course, idx) => {
+    if (!course.schedule || !course.day) return;
+    const dayMap = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
+    const dayCode = dayMap[course.day] || course.day;
+    if (!dayCode || !baseDates[dayCode]) return;
+    
+    const [startTime, endTime] = (course.schedule.match(/(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/) || [null, course.start || '09:00', course.end || '10:00']).slice(1);
+    
+    events.push({
+      day: dayCode,
+      start: startTime || course.start || '09:00',
+      end: endTime || course.end || '10:00',
+      title: `${course.code} ${course.name}`,
+      sub: course.room ? `ห้อง ${course.room}` : '',
+      type: 'class',
+      isClass: true
+    });
+  });
+
+  // Add default routine events (deduplicated against curriculum classes)
+  const curriculumClassCodes = new Set(curriculum.map(c => c.code));
+  DEFAULT_BME_ROUTINE_EVENTS.forEach(ev => {
+    // Skip routine class events if the same class is already in the curriculum
+    if (ev.isClass) {
+      const matchingCourse = curriculum.find(c => {
+        const dayMap = { MO: 'monday', TU: 'tuesday', WE: 'wednesday', TH: 'thursday', FR: 'friday', SA: 'saturday', SU: 'sunday' };
+        return dayMap[ev.day] === c.day && c.start === ev.start;
+      });
+      if (matchingCourse) return; // Skip duplicate class event
+    }
+    events.push({ ...ev });
+  });
+
+  // Add custom blocks from user's study data
+  Object.entries(customBlocks).forEach(([day, blocks]) => {
+    const dayMap = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
+    const dayCode = dayMap[day];
+    if (!dayCode || !Array.isArray(blocks)) return;
+    blocks.forEach((block, idx) => {
+      if (!block.start || !block.end) return;
+      events.push({
+        day: dayCode,
+        start: block.start,
+        end: block.end,
+        title: block.title || 'Custom Block',
+        sub: block.notes || '',
+        type: 'study',
+        isStudyBlock: true
+      });
+    });
+  });
+
+  // Deduplicate events by title+day+start
+  const seen = new Set();
+  const deduped = [];
+  events.forEach(ev => {
+    const key = `${ev.day}|${ev.start}|${ev.title}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      deduped.push(ev);
+    }
+  });
+  events.length = 0;
+  events.push(...deduped);
 
   events.forEach((ev, idx) => {
     const baseDate = baseDates[ev.day];
@@ -220,14 +320,12 @@ function generateIcsCalendar(userId, includeRoutines = false) {
     ics.push(`DESCRIPTION:${desc}`);
     ics.push('STATUS:CONFIRMED');
 
-    // 15-minute advance reminder alarm
     ics.push('BEGIN:VALARM');
     ics.push('ACTION:DISPLAY');
     ics.push(`DESCRIPTION:เตือนความจำ: อีก 15 นาทีจะถึง ${summary}`);
     ics.push('TRIGGER:-PT15M');
     ics.push('END:VALARM');
 
-    // Extra 0-minute alarm on study block start
     if (isStudy) {
       ics.push('BEGIN:VALARM');
       ics.push('ACTION:DISPLAY');
@@ -259,11 +357,23 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = url.pathname;
 
-  // ─── Helper: Parse JSON Body ───
+  // ─── Helper: Parse JSON Body with size limit ───
   function parseJsonBody(callback) {
     let body = '';
-    req.on('data', chunk => { body += chunk; });
+    let size = 0;
+    let aborted = false;
+    req.on('data', chunk => {
+      size += chunk.length;
+      if (size > MAX_BODY_SIZE) {
+        aborted = true;
+        req.destroy();
+        callback(new Error('Body too large'), null);
+        return;
+      }
+      body += chunk;
+    });
     req.on('end', () => {
+      if (aborted) return;
       try {
         const parsed = JSON.parse(body || '{}');
         callback(null, parsed);
@@ -291,18 +401,85 @@ const server = http.createServer((req, res) => {
   function resolveOwnerId(body) {
     const user = getAuthUser();
     if (user) return user.id;
-    // For unauthenticated (public/legacy) we fall back to header key if present, else '1'
     const headerKey = (req.headers['x-sync-key'] || '').trim();
     if (headerKey) return headerKey;
     if (body && body.syncKey) return body.syncKey;
     return '1';
   }
 
-    // ─── API: Public Study & Curriculum Hub (GET /api/public/hub) ───
+  // ─── API: File Upload (POST /api/upload) ───
+  if (pathname === '/api/upload' && req.method === 'POST') {
+    const ownerId = resolveOwnerId({});
+    const fileId = crypto.randomBytes(8).toString('hex');
+    const ext = path.extname(url.searchParams.get('name') || '').toLowerCase() || '.bin';
+    const safeExt = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext) ? ext : '.bin';
+    const filename = `${fileId}${safeExt}`;
+    const filePath = path.join(UPLOAD_DIR, filename);
+    const writeStream = fs.createWriteStream(filePath);
+    let size = 0;
+    let aborted = false;
+    req.on('data', chunk => {
+      size += chunk.length;
+      if (size > MAX_BODY_SIZE) {
+        aborted = true;
+        req.destroy();
+        writeStream.destroy();
+        fs.unlink(filePath, () => {});
+        res.writeHead(413, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'File too large' }));
+        return;
+      }
+      writeStream.write(chunk);
+    });
+    req.on('end', () => {
+      if (aborted) return;
+      writeStream.end();
+      const fileUrl = `/uploads/${filename}`;
+      // Store file metadata in user's data
+      if (!store[ownerId]) store[ownerId] = {};
+      if (!store[ownerId].files) store[ownerId].files = {};
+      store[ownerId].files[fileId] = {
+        id: fileId,
+        name: url.searchParams.get('name') || 'file',
+        url: fileUrl,
+        size,
+        uploadedAt: new Date().toISOString()
+      };
+      saveStore();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, file: store[ownerId].files[fileId] }));
+    });
+    return;
+  }
+
+  // ─── API: Serve Uploaded Files (GET /uploads/:filename) ───
+  if (pathname.startsWith('/uploads/')) {
+    const filename = path.basename(pathname);
+    const filePath = path.join(UPLOAD_DIR, filename);
+    if (!filePath.startsWith(UPLOAD_DIR)) {
+      res.writeHead(403);
+      res.end('Forbidden');
+      return;
+    }
+    fs.stat(filePath, (err, stats) => {
+      if (err || !stats.isFile()) {
+        res.writeHead(404);
+        res.end('Not Found');
+        return;
+      }
+      const ext = path.extname(filePath).toLowerCase();
+      const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      res.writeHead(200, { 'Content-Type': contentType });
+      fs.createReadStream(filePath).pipe(res);
+    });
+    return;
+  }
+
+  // ─── API: Public Study & Curriculum Hub (GET /api/public/hub) ───
   if (pathname === '/api/public/hub' && req.method === 'GET') {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     
-    // Find master admin or key '1'
     let masterData = store['1'] || store['u_admin'] || null;
     if (!masterData) {
       const adminUser = Object.values(store._users || {}).find(u => u && u.role === 'admin');
@@ -311,11 +488,9 @@ const server = http.createServer((req, res) => {
     if (!masterData) masterData = {};
 
     const cur = (masterData.curriculum && masterData.curriculum.length > 0) ? masterData.curriculum : DEFAULT_BME_CURRICULUM;
-    // Only explicitly shared resources leak to public hub (no personal/private files)
     const links = (masterData.studyLinks && masterData.studyLinks.length > 0)
       ? masterData.studyLinks.filter(l => l.isShared === true)
       : DEFAULT_BME_STUDY_LINKS.filter(l => l.isShared === true);
-    // Only folders that contain at least one shared resource
     const sharedFolderIds = new Set(links.map(l => l.folderId).filter(Boolean));
     const folders = (masterData.studyFolders || []).filter(f => sharedFolderIds.has(f.id));
 
@@ -343,7 +518,6 @@ const server = http.createServer((req, res) => {
       const ownerId = resolveOwnerId(data);
       const source = store[ownerId] || {};
 
-      // Selected resources (ids) + folders (folder ids)
       const resourceIds = Array.isArray(data.resourceIds) ? data.resourceIds : [];
       const folderIds = Array.isArray(data.folders) ? data.folders : [];
       const label = (data.label || 'เอกสารที่แชร์').trim();
@@ -357,16 +531,25 @@ const server = http.createServer((req, res) => {
         selected = allLinks.filter(l => l.isShared === true);
       }
 
-      // Strip anything that could be private, keep only shareable fields
-      const safeResources = selected.map(l => ({
-        id: l.id,
-        title: l.title,
-        sub: l.sub,
-        type: l.type,
-        url: l.url,
-        desc: l.desc,
-        folderId: l.folderId
-      }));
+      // Include file data for uploaded files
+      const safeResources = selected.map(l => {
+        const safe = {
+          id: l.id,
+          title: l.title,
+          sub: l.sub,
+          type: l.type,
+          url: l.url,
+          desc: l.desc,
+          folderId: l.folderId
+        };
+        // If this is an uploaded file, include the file data
+        if (l.fileId && source.files && source.files[l.fileId]) {
+          safe.fileId = l.fileId;
+          safe.fileUrl = source.files[l.fileId].url;
+          safe.fileName = source.files[l.fileId].name;
+        }
+        return safe;
+      });
 
       const token = generateShareToken();
       store._shares[token] = {
@@ -443,7 +626,7 @@ const server = http.createServer((req, res) => {
       const user = {
         id: userId,
         username,
-        displayName: (data.displayName || username).trim(),
+        displayName: sanitizeDisplayName(data.displayName || username),
         passwordHash,
         salt,
         role,
@@ -454,7 +637,6 @@ const server = http.createServer((req, res) => {
       store._users[username] = user;
       store._calKeys[calendarKey] = userId;
 
-      // Clone official curriculum & shared resources to new student space (no personal routine/checklist)
       const masterTemplate = store['1'] || store['u_admin'] || {};
       store[userId] = {
         version: 1,
@@ -464,12 +646,13 @@ const server = http.createServer((req, res) => {
         customBlocks: {},
         curriculum: masterTemplate.curriculum || [],
         studyFolders: masterTemplate.studyFolders || [],
-        studyLinks: (masterTemplate.studyLinks || []).filter(l => l.isShared !== false)
+        studyLinks: (masterTemplate.studyLinks || []).filter(l => l.isShared !== false),
+        files: {}
       };
 
-      // Create session
+      // Create session with 30-day expiry
       const token = generateToken();
-      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
+      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
       store._sessions[token] = { userId, username, role, expiresAt };
 
       saveStore();
@@ -515,12 +698,12 @@ const server = http.createServer((req, res) => {
         return;
       }
 
-      // Ensure calendarKey exists
       if (!user.calendarKey) {
         user.calendarKey = generateCalendarKey();
         store._calKeys[user.calendarKey] = user.id;
       }
 
+      // Create session with 30-day expiry (persistent login)
       const token = generateToken();
       const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
       store._sessions[token] = { userId: user.id, username, role: user.role, expiresAt };
@@ -588,10 +771,8 @@ const server = http.createServer((req, res) => {
     const parts = cleanPath.split('/');
     const calKey = parts[0].replace('.ics', '').trim();
 
-    // Map calendarKey to userId
     let targetUserId = store._calKeys[calKey] || calKey;
 
-    // Check if user exists or fallback to master default
     const icsContent = generateIcsCalendar(targetUserId, url.searchParams.get('routines') === '1');
 
     res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
@@ -614,6 +795,13 @@ const server = http.createServer((req, res) => {
       return;
     }
 
+    // Prevent prototype pollution - block dangerous keys
+    if (key.startsWith('_') || key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Forbidden key' }));
+      return;
+    }
+
     if (req.method === 'GET') {
       const data = store[key] || null;
       res.writeHead(data ? 200 : 404, { 'Content-Type': 'application/json' });
@@ -629,8 +817,19 @@ const server = http.createServer((req, res) => {
           return;
         }
 
+        // Prevent prototype pollution - only allow plain object data
+        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid data format' }));
+          return;
+        }
+
+        // Merge instead of overwrite to preserve files
+        const existing = store[key] || {};
         store[key] = {
+          ...existing,
           ...parsed,
+          files: { ...(existing.files || {}), ...(parsed.files || {}) },
           updatedAt: new Date().toISOString()
         };
         saveStore();
@@ -650,21 +849,32 @@ const server = http.createServer((req, res) => {
   }
   let filePath = path.join(__dirname, decodedPathname === '/' ? 'index.html' : decodedPathname);
 
-  // Prevent directory traversal
-  if (!filePath.startsWith(__dirname)) {
+  // Prevent directory traversal with proper path resolution
+  const resolvedPath = path.resolve(filePath);
+  const resolvedRoot = path.resolve(__dirname);
+  if (!resolvedPath.startsWith(resolvedRoot + path.sep) && resolvedPath !== resolvedRoot) {
     res.writeHead(403);
     res.end('Forbidden');
     return;
   }
 
-  fs.stat(filePath, (err, stats) => {
+  // Block sensitive files
+  const sensitiveFiles = ['sync_store.json', 'sync_store.backup.json', 'package.json', 'package-lock.json', 'server.js', 'railway.toml', '.git'];
+  const basename = path.basename(resolvedPath);
+  if (sensitiveFiles.includes(basename) || resolvedPath.includes('.git')) {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return;
+  }
+
+  fs.stat(resolvedPath, (err, stats) => {
     if (err || !stats.isFile()) {
       res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end('<h1>404 Not Found</h1>');
       return;
     }
 
-    const ext = path.extname(filePath).toLowerCase();
+    const ext = path.extname(resolvedPath).toLowerCase();
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -672,7 +882,7 @@ const server = http.createServer((req, res) => {
     res.setHeader('Expires', '0');
 
     res.writeHead(200, { 'Content-Type': contentType });
-    fs.createReadStream(filePath).pipe(res);
+    fs.createReadStream(resolvedPath).pipe(res);
   });
 });
 
