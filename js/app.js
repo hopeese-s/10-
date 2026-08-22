@@ -2219,7 +2219,11 @@
         generateBtn.disabled = true;
         generateBtn.textContent = '⏳ กำลังสร้างลิงก์...';
 
-        const res = await CloudSync.createShareBundle(resourceIds, folderIds);
+        // FORCE PUSH to ensure server has the latest files before sharing
+          if (window.CloudSync) {
+            try { await CloudSync.pushToCloud(state); } catch(e) {}
+          }
+          const res = await CloudSync.createShareBundle(resourceIds, folderIds);
         if (res && res.ok && res.token) {
           // Always use the current origin so the link points to the server that holds the token
           const shareUrl = `${window.location.origin}/?share=${res.token}`;
