@@ -1602,9 +1602,9 @@
                   <div style="font-size:11.5px;color:var(--label-3);margin-top:2px">${escHtml(folderName ? 'โฟลเดอร์: ' + folderName : (item.sub || item.desc || ''))}</div>
                 </div>
                 <div style="display:flex;gap:6px" onclick="event.stopPropagation()">
-                  <button class="btn btn-secondary btn-move-doc" data-id="${item.id}" title="ย้ายโฟลเดอร์" style="font-size:11px;padding:4px 8px">ย้าย</button>
+                  <button class="btn btn-secondary btn-move-doc study-action-btn" data-id="${item.id}" title="ย้ายโฟลเดอร์" style="font-size:11px;padding:4px 8px">ย้าย</button>
                   ${!isDefault ? `
-                    <button class="btn btn-danger btn-del-doc" data-id="${item.id}" title="ลบเอกสาร" style="font-size:11px;padding:4px 8px">ลบ</button>
+                    <button class="btn btn-danger btn-del-doc study-action-btn" data-id="${item.id}" title="ลบเอกสาร" style="font-size:11px;padding:4px 8px">ลบ</button>
                   ` : ''}
                 </div>
               </div>
@@ -1629,9 +1629,9 @@
                     ${typeIcon}
                   </span>
                   <div style="display:flex;gap:4px">
-                    <button class="btn-move-doc" data-id="${item.id}" title="ย้ายโฟลเดอร์" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--label-3);padding:2px 4px">ย้าย</button>
+                    <button class="btn-move-doc study-action-btn" data-id="${item.id}" title="ย้ายโฟลเดอร์" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--label-3);padding:2px 4px">ย้าย</button>
                     ${!isDefault ? `
-                      <button class="btn-del-doc" data-id="${item.id}" title="ลบเอกสาร" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--label-3);padding:2px 4px">✕</button>
+                      <button class="btn-del-doc study-action-btn" data-id="${item.id}" title="ลบเอกสาร" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--label-3);padding:2px 4px">✕</button>
                     ` : ''}
                   </div>
                 </div>
