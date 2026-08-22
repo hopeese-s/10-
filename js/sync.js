@@ -210,6 +210,7 @@ const CloudSync = (function () {
   }
 
   // ─── Push (Queued & Real-Time) ──────────────────────────────
+  let pushResolvers = [];
   function pushToCloud(data) {
     const cleanData = _sanitize(data);
 
@@ -228,9 +229,12 @@ const CloudSync = (function () {
     clearTimeout(pushDebounceId);
 
     return new Promise(resolve => {
+      pushResolvers.push(resolve);
       pushDebounceId = setTimeout(async () => {
         const res = await _executePush();
-        resolve(res);
+        const currentResolvers = pushResolvers;
+        pushResolvers = [];
+        currentResolvers.forEach(r => r(res));
       }, PUSH_DEBOUNCE_MS);
     });
   }
