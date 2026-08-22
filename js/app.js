@@ -2989,7 +2989,7 @@
       if ((item.type === 'pdf' || (item.type === 'local' && (fileUrl.startsWith('data:application/pdf') || (!fileUrl.startsWith('data:image/') && fileUrl.startsWith('data:'))))) && fileUrl) {
         // Multi-page PDF rendering via PDF.js (works on iPad, iPhone, PC)
         renderPdfWithPdfJs(fileUrl, body, item.title);
-      } else if (item.type === 'local' && fileUrl && fileUrl.startsWith('data:image/')) {
+      } else if (item.type === 'local' && fileUrl && (fileUrl.startsWith('data:image/') || fileUrl.match(/\.(png|jpe?g|gif|webp)$/i))) {
         body.innerHTML = `
           <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;min-height:300px;max-height:calc(90vh - 130px);overflow:auto">
             <img src="${fileUrl}" alt="${escHtml(item.title)}" style="max-width:100%;height:auto;max-height:75vh;object-fit:contain;border-radius:var(--r-m);box-shadow:var(--shadow-2)" />
