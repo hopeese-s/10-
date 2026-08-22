@@ -2993,28 +2993,7 @@
         // Google Drive / Classroom / generic link — show rich card + open button
         const typeEmoji = { drive: '📁', classroom: '🎓', link: '🔗' };
         const emoji = typeEmoji[item.type] || '🔗';
-        // FIX: For external URLs, open directly in new tab instead of showing preview card
-        // This prevents the infinite redirect loop when clicking shared links
-        const isExternalUrl = item.url && (item.url.startsWith('http://') || item.url.startsWith('https://'));
-        if (isExternalUrl) {
-          // Open external URL directly in a new tab
-          window.open(item.url, '_blank', 'noopener,noreferrer');
-          // Also show a brief info card in the modal
-          body.innerHTML = `
-            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;gap:20px;min-height:280px;text-align:center">
-              <div style="font-size:52px">${emoji}</div>
-              <div>
-                <div style="font-size:17px;font-weight:700;color:var(--label);margin-bottom:6px">${escHtml(item.title)}</div>
-                ${item.sub ? `<div style="font-size:13px;color:var(--label-3);margin-bottom:4px">${escHtml(item.sub)}</div>` : ''}
-                ${item.desc ? `<div style="font-size:13px;color:var(--label-2)">${escHtml(item.desc)}</div>` : ''}
-              </div>
-              <div style="font-size:13px;color:var(--accent);font-weight:600">✅ เปิดลิงค์ในแท็บใหม่เรียบร้อยแล้ว</div>
-              <a href="${escHtml(item.url)}" target="_blank" rel="noopener noreferrer"
-                 style="display:inline-flex;align-items:center;gap:8px;padding:12px 28px;background:var(--accent);color:#fff;border-radius:var(--r-pill);font-weight:700;font-size:14px;text-decoration:none;box-shadow:0 4px 14px rgba(196,90,27,0.3);transition:transform 0.15s"
-                 onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"
-              >🚀 เปิด ${item.type === 'classroom' ? 'Google Classroom' : item.type === 'drive' ? 'Google Drive' : 'ลิงค์'} อีกครั้ง</a>
-            </div>`;
-        } else {
+        
           body.innerHTML = `
             <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;gap:20px;min-height:280px;text-align:center">
               <div style="font-size:52px">${emoji}</div>
