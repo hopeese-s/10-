@@ -4138,6 +4138,8 @@
           showToast('🔔 เปิดการแจ้งเตือนเตือนคาบเรียนล่วงหน้า 15 นาทีสำเร็จ!', 'success');
           // Send instant test notification
           await PushClient.testNotification();
+        } else if (res.isIOSPrompt) {
+          alert('📱 คำแนะนำสำหรับ iPhone / iPad:\n\n1. กดปุ่มแชร์ (Share) ที่แถบด้านล่างของ Safari\n2. เลือก "เพิ่มไปยังหน้าจอโฮม" (Add to Home Screen)\n3. เปิดแอป E-Calendar จากหน้าจอโฮม แล้วกดปุ่ม 🔔 อีกครั้งเพื่อเปิดการแจ้งเตือนครับ');
         } else {
           showToast(`❌ ${res.error || 'เปิดการแจ้งเตือนไม่สำเร็จ'}`, 'error');
         }

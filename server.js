@@ -165,6 +165,9 @@ function saveStore() {
           try { fs.copyFileSync(DB_FILE, DB_BACKUP_FILE); } catch (_) {}
         }
         fs.writeFileSync(DB_FILE, JSON.stringify(store, null, 2));
+        if (typeof dbAdapter !== 'undefined' && dbAdapter.saveSystemAuth) {
+          dbAdapter.saveSystemAuth();
+        }
       } catch (e) {
         console.error('Error saving DB file:', e);
         try { fs.writeFileSync(DB_BACKUP_FILE, JSON.stringify(store, null, 2)); } catch (_) {}
@@ -258,8 +261,63 @@ const dbAdapter = {
       } catch (_) {}
     }
     return (store._pushSubscriptions && store._pushSubscriptions[userId]) || [];
+  },
+
+  async loadSystemAuth() {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('user_sync_data')
+          .select('data')
+          .eq('user_id', '__system_auth__')
+          .single();
+        if (!error && data && data.data) {
+          store._users = { ...store._users, ...(data.data._users || {}) };
+          store._sessions = { ...store._sessions, ...(data.data._sessions || {}) };
+          store._calKeys = { ...store._calKeys, ...(data.data._calKeys || {}) };
+          store._shares = { ...store._shares, ...(data.data._shares || {}) };
+          store._pushSubscriptions = { ...store._pushSubscriptions, ...(data.data._pushSubscriptions || {}) };
+          if (data.data._vapid && data.data._vapid.publicKey) {
+            vapidKeys = data.data._vapid;
+            store._vapid = data.data._vapid;
+          }
+          console.log('✅ Loaded persistent User Accounts, Sessions, and System Config from Supabase');
+        }
+      } catch (err) {
+        console.warn('⚠️ Supabase loadSystemAuth notice:', err.message);
+      }
+    }
+  },
+
+  async saveSystemAuth() {
+    if (supabase) {
+      try {
+        await supabase
+          .from('user_sync_data')
+          .upsert({
+            user_id: '__system_auth__',
+            data: {
+              _users: store._users || {},
+              _sessions: store._sessions || {},
+              _calKeys: store._calKeys || {},
+              _shares: store._shares || {},
+              _pushSubscriptions: store._pushSubscriptions || {},
+              _vapid: store._vapid || vapidKeys
+            },
+            version: 1,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'user_id' });
+      } catch (err) {
+        console.warn('⚠️ Supabase saveSystemAuth error:', err.message);
+      }
+    }
   }
 };
+
+// Initialize system auth from Supabase on launch
+if (supabase) {
+  dbAdapter.loadSystemAuth();
+}
 
 // Password helpers
 function hashPassword(password, salt) {
