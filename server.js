@@ -1464,20 +1464,26 @@ function buildDailyBriefingFlex(dayName, dateStr, classesList, pendingTasks, rou
   };
 }
 
-function buildClassReminderFlex(course, timeUntilStr = 'อีก 15 นาที') {
+function buildClassReminderFlex(course, timeUntilStr = 'อีก 15 นาที', themeColor = null) {
+  const is30Min = timeUntilStr.includes('30');
+  const headerBg = themeColor || (is30Min ? '#D97706' : '#DC2626');
+  const badgeText = is30Min ? '🔔 PRE-CLASS REMINDER (30 MIN)' : '⚡ URGENT: CLASS STARTING (15 MIN)';
+  const headerTitle = is30Min ? `⏰ เตรียมตัว! อีก ${timeUntilStr} จะเริ่มเรียน` : `🚀 คาบเรียนจะเริ่มในอีก ${timeUntilStr}!`;
+  const codeColor = is30Min ? '#D97706' : '#DC2626';
+
   return {
     type: 'flex',
-    altText: `⏰ แจ้งเตือนคาบเรียน: ${course.code} ${course.name} กำลังจะเริ่มใน ${timeUntilStr}!`,
+    altText: `⏰ แจ้งเตือนคาบเรียน: ${course.code} ${course.name} (${timeUntilStr})`,
     contents: {
       type: 'bubble',
       header: {
         type: 'box',
         layout: 'vertical',
-        backgroundColor: '#DC2626',
+        backgroundColor: headerBg,
         paddingAll: '14px',
         contents: [
-          { type: 'text', text: '⚡ CLASS REMINDER', color: '#ffffff', size: 'xxs', weight: 'bold' },
-          { type: 'text', text: `⏰ กำลังจะเริ่มเรียนใน ${timeUntilStr}!`, color: '#ffffff', size: 'md', weight: 'bold' }
+          { type: 'text', text: badgeText, color: '#ffffff', size: 'xxs', weight: 'bold' },
+          { type: 'text', text: headerTitle, color: '#ffffff', size: 'md', weight: 'bold', margin: 'xs', wrap: true }
         ]
       },
       body: {
@@ -1490,7 +1496,7 @@ function buildClassReminderFlex(course, timeUntilStr = 'อีก 15 นาท�
             text: `${course.code}`,
             size: 'xs',
             weight: 'bold',
-            color: '#DC2626'
+            color: codeColor
           },
           {
             type: 'text',
@@ -1529,14 +1535,26 @@ function buildClassReminderFlex(course, timeUntilStr = 'อีก 15 นาท�
       },
       footer: {
         type: 'box',
-        layout: 'vertical',
+        layout: 'horizontal',
+        spacing: 'sm',
         contents: [
           {
             type: 'button',
             action: {
               type: 'uri',
-              label: '📖 ดูเอกสารการเรียน & Dashboard',
+              label: '📖 เข้า Classroom',
               uri: course.classroomUrl || APP_BASE_URL
+            },
+            style: 'primary',
+            color: headerBg,
+            height: 'sm'
+          },
+          {
+            type: 'button',
+            action: {
+              type: 'message',
+              label: '⚡ คาบต่อไป',
+              text: 'คาบต่อไป'
             },
             style: 'secondary',
             height: 'sm'
@@ -2546,7 +2564,7 @@ function buildHelpMenuFlex() {
               { type: 'text', text: '🔎 "วิชา ฟิสิกส์" หรือ "SCPY161" — ดูห้อง/เวลา/ชีท', size: 'xs', color: '#1F2937', wrap: true },
               { type: 'text', text: '🏢 "ห้อง L2-002" — ค้นหาวิชาตามห้อง', size: 'xs', color: '#1F2937', wrap: true },
               { type: 'text', text: '📚 "คลาสรูม" — รวมลิงก์ Google Classroom', size: 'xs', color: '#1F2937', wrap: true },
-              { type: 'text', text: '⏰ แจ้งเตือนก่อนเรียน 15 นาทีอัตโนมัติ', size: 'xs', color: '#2563EB', weight: 'bold', wrap: true }
+              { type: 'text', text: '⏰ แจ้งเตือน 2 รอบอัตโนมัติ (30 นาที & 15 นาที)', size: 'xs', color: '#2563EB', weight: 'bold', wrap: true }
             ]
           },
           footer: {
@@ -2669,7 +2687,7 @@ function buildHelpMenuFlex() {
   };
 }
 
-// ─── Automated 15-Minute Pre-Class Reminder Scheduler (Every 60s) ───
+// ─── Automated Dual-Stage (30-Min & 15-Min) Pre-Class Reminder Scheduler (Every 60s) ───
 const sentReminderKeys = new Set();
 
 setInterval(async () => {
@@ -2677,13 +2695,9 @@ setInterval(async () => {
     const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
     const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
     const currentDay = days[now.getDay()];
-
-    // Time 15 minutes in the future
-    const targetTime = new Date(now.getTime() + 15 * 60 * 1000);
-    const targetHHMM = String(targetTime.getHours()).padStart(2, '0') + ':' + String(targetTime.getMinutes()).padStart(2, '0');
     const todayDateStr = now.toISOString().slice(0, 10);
 
-    if (sentReminderKeys.size > 300) sentReminderKeys.clear();
+    if (sentReminderKeys.size > 500) sentReminderKeys.clear();
 
     const activeUserIds = new Set([
       '1',
@@ -2691,45 +2705,56 @@ setInterval(async () => {
       ...Object.values(store._lineUsers || {})
     ]);
 
-    for (const userId of activeUserIds) {
-      const userData = (await dbAdapter.getUserData(userId)) || {};
-      const curriculum = userData.curriculum || DEFAULT_BME_CURRICULUM;
+    // 2-Stage Milestones: 30 minutes before and 15 minutes before
+    const milestones = [
+      { minutes: 30, label: 'อีก 30 นาที', color: '#D97706', suffix: '_30m' },
+      { minutes: 15, label: 'อีก 15 นาที', color: '#DC2626', suffix: '_15m' }
+    ];
 
-      for (const course of curriculum) {
-        if (course.day === currentDay && course.start === targetHHMM) {
-          const reminderKey = `${todayDateStr}_${userId}_${course.code}_${course.start}`;
-          if (sentReminderKeys.has(reminderKey)) continue;
-          sentReminderKeys.add(reminderKey);
+    for (const milestone of milestones) {
+      const targetTime = new Date(now.getTime() + milestone.minutes * 60 * 1000);
+      const targetHHMM = String(targetTime.getHours()).padStart(2, '0') + ':' + String(targetTime.getMinutes()).padStart(2, '0');
 
-          console.log(`⏰ [Auto-Reminder] 15-min pre-class reminder triggered for ${course.code} to user [${userId}]`);
+      for (const userId of activeUserIds) {
+        const userData = (await dbAdapter.getUserData(userId)) || {};
+        const curriculum = userData.curriculum || DEFAULT_BME_CURRICULUM;
 
-          // 1. Send Web Push
-          const subs = await dbAdapter.getPushSubscriptions(userId);
-          if (subs && subs.length > 0 && webpush && vapidKeys.publicKey) {
-            const pushPayload = JSON.stringify({
-              title: `⏰ อีก 15 นาทีเริ่มเรียน: ${course.code}`,
-              body: `${course.name} (${course.start} - ${course.end} น.) ห้อง ${course.room || '-'}`,
-              icon: '/icons/icon-192.png',
-              badge: '/icons/icon-192.png',
-              data: { url: '/' }
-            });
-            subs.forEach(s => {
-              webpush.sendNotification(s, pushPayload, {
-                TTL: 60,
-                urgency: 'high',
-                vapidDetails: {
-                  subject: process.env.VAPID_SUBJECT || 'mailto:support@hopeese.com',
-                  publicKey: vapidKeys.publicKey,
-                  privateKey: vapidKeys.privateKey
-                }
-              }).catch(() => {});
-            });
-          }
+        for (const course of curriculum) {
+          if (course.day === currentDay && course.start === targetHHMM) {
+            const reminderKey = `${todayDateStr}_${userId}_${course.code}_${course.start}${milestone.suffix}`;
+            if (sentReminderKeys.has(reminderKey)) continue;
+            sentReminderKeys.add(reminderKey);
 
-          // 2. Send LINE Push
-          const lineUserId = store._userLine && store._userLine[userId];
-          if (lineUserId && hasLine) {
-            await sendLinePush(lineUserId, [buildClassReminderFlex(course, 'อีก 15 นาที')]);
+            console.log(`⏰ [Auto-Reminder] ${milestone.minutes}-min pre-class alert triggered for ${course.code} to user [${userId}]`);
+
+            // 1. Send Web Push
+            const subs = await dbAdapter.getPushSubscriptions(userId);
+            if (subs && subs.length > 0 && webpush && vapidKeys.publicKey) {
+              const pushPayload = JSON.stringify({
+                title: `⏰ ${milestone.label}เริ่มเรียน: ${course.code}`,
+                body: `${course.name} (${course.start} - ${course.end} น.) ห้อง ${course.room || '-'}`,
+                icon: '/icons/icon-192.png',
+                badge: '/icons/icon-192.png',
+                data: { url: '/' }
+              });
+              subs.forEach(s => {
+                webpush.sendNotification(s, pushPayload, {
+                  TTL: 60,
+                  urgency: 'high',
+                  vapidDetails: {
+                    subject: process.env.VAPID_SUBJECT || 'mailto:support@hopeese.com',
+                    publicKey: vapidKeys.publicKey,
+                    privateKey: vapidKeys.privateKey
+                  }
+                }).catch(() => {});
+              });
+            }
+
+            // 2. Send LINE Push
+            const lineUserId = store._userLine && store._userLine[userId];
+            if (lineUserId && hasLine) {
+              await sendLinePush(lineUserId, [buildClassReminderFlex(course, milestone.label, milestone.color)]);
+            }
           }
         }
       }
@@ -3881,15 +3906,17 @@ const server = http.createServer(async (req, res) => {
 
       // ─── 24. Command: ทดสอบ / test ───
       if (/^(ทดสอบ|test)/i.test(text)) {
+        const dummyCourse = {
+          code: 'SCPY161',
+          name: 'General Physics I (ทดสอบแจ้งเตือน)',
+          start: '09:30',
+          end: '12:30',
+          room: 'L2-002',
+          classroomUrl: 'https://classroom.google.com/u/6/c/ODcxMTQzMDA0NzAw'
+        };
         await sendLineReply(replyToken, [
-          buildClassReminderFlex({
-            code: 'SCPY161',
-            name: 'General Physics I (ทดสอบแจ้งเตือน)',
-            start: '09:30',
-            end: '12:30',
-            room: 'L2-002',
-            classroomUrl: 'https://classroom.google.com/u/6/c/ODcxMTQzMDA0NzAw'
-          }, 'อีก 15 นาที')
+          buildClassReminderFlex(dummyCourse, 'อีก 30 นาที', '#D97706'),
+          buildClassReminderFlex(dummyCourse, 'อีก 15 นาที', '#DC2626')
         ]);
         return;
       }
