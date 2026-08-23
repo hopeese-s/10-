@@ -1628,7 +1628,7 @@
                   <span class="tag-chip" style="color:${badgeColor};background:${badgeBg};font-weight:700">
                     ${typeIcon}
                   </span>
-                  <div style="display:flex;gap:4px">
+                  <div style="display:flex;gap:4px" onclick="event.stopPropagation()">
                     <button class="btn-move-doc study-action-btn" data-id="${item.id}" title="ย้ายโฟลเดอร์" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--label-3);padding:2px 4px">ย้าย</button>
                     ${!isDefault ? `
                       <button class="btn-del-doc study-action-btn" data-id="${item.id}" title="ลบเอกสาร" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--label-3);padding:2px 4px">✕</button>
@@ -1764,7 +1764,7 @@
         if (e.target.closest('.study-action-btn') || e.target.closest('.resource-open-link')) return;
         const id = card.dataset.id;
         const item = state.studyLinks.find(l => l.id === id);
-        if (item) { alert('พรีวิวถูกเรียกสำหรับ: ' + item.title); openResourcePreview(item); }
+        if (item) openResourcePreview(item);
       });
     });
 
@@ -1806,7 +1806,7 @@
         e.stopPropagation();
         const id = btn.dataset.id;
         const item = state.studyLinks.find(l => l.id === id);
-        if (item) { alert('พรีวิวถูกเรียกสำหรับ: ' + item.title); openResourcePreview(item); }
+        if (item) openResourcePreview(item);
       });
     });
 
@@ -2991,7 +2991,6 @@
           </div>`;
       } else {
         // Google Drive / Classroom / generic link — show rich card + open button
-        alert('กำลังเปิดหน้าต่าง Preview Card สำหรับ Classroom/Drive');
         const typeEmoji = { drive: '📁', classroom: '🎓', link: '🔗' };
         const emoji = typeEmoji[item.type] || '🔗';
         
@@ -3009,7 +3008,6 @@
                  onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"
               >🚀 เปิด ${item.type === 'classroom' ? 'Google Classroom' : item.type === 'drive' ? 'Google Drive' : 'ลิงค์'}</a>
             </div>`;
-        }
       }
     }
 
