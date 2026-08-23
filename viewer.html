@@ -12,7 +12,6 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
   <style>
     body, html {
@@ -230,25 +229,28 @@
       }
 
       // PDF.js Viewer Engine
-      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      const script = document.createElement('script');
+      script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+      script.onload = () => {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-      let pdfDoc = null;
-      let numPages = 0;
-      let currentPage = 1;
-      let currentScale = 1.1;
-      let viewMode = 'scroll'; // default scroll
-      let isRendering = false;
+        let pdfDoc = null;
+        let numPages = 0;
+        let currentPage = 1;
+        let currentScale = 1.1;
+        let viewMode = 'scroll'; // default scroll
+        let isRendering = false;
 
-      const zoomVal = document.getElementById('viewer-zoom-val');
-      const pageInfo = document.getElementById('viewer-page-info');
-      const navGroup = document.getElementById('viewer-nav-btns');
-      const modeScrollBtn = document.getElementById('viewer-mode-scroll');
-      const modePageBtn = document.getElementById('viewer-mode-page');
-      const prevBtn = document.getElementById('viewer-prev');
-      const nextBtn = document.getElementById('viewer-next');
+        const zoomVal = document.getElementById('viewer-zoom-val');
+        const pageInfo = document.getElementById('viewer-page-info');
+        const navGroup = document.getElementById('viewer-nav-btns');
+        const modeScrollBtn = document.getElementById('viewer-mode-scroll');
+        const modePageBtn = document.getElementById('viewer-mode-page');
+        const prevBtn = document.getElementById('viewer-prev');
+        const nextBtn = document.getElementById('viewer-next');
 
-      pdfjsLib.getDocument(url).promise.then(async (pdf) => {
-        pdfDoc = pdf;
+        pdfjsLib.getDocument(url).promise.then(async (pdf) => {
+          pdfDoc = pdf;
         numPages = pdf.numPages;
         loadingEl.style.display = 'none';
 
@@ -432,6 +434,9 @@
           backBtn.click();
         }
       });
+      
+      }; // end script.onload
+      document.head.appendChild(script);
 
     })();
   </script>
