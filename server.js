@@ -884,6 +884,577 @@ function buildScheduleFlex(dayTitle, dateStr, classesList, routineList) {
   };
 }
 
+function findCourseMatch(query, curriculum) {
+  if (!query) return null;
+  const q = query.toLowerCase().trim().replace(/^(วิชา|ห้อง|room)\s*/i, '');
+  const courses = curriculum || DEFAULT_BME_CURRICULUM;
+
+  let found = courses.find(c => c.code.toLowerCase() === q);
+  if (found) return found;
+
+  found = courses.find(c => c.code.toLowerCase().includes(q) || q.includes(c.code.toLowerCase()));
+  if (found) return found;
+
+  const keywordMap = {
+    'ฟิสิกส์': 'SCPY161',
+    'ฟิสิก': 'SCPY161',
+    'phy': 'SCPY161',
+    'physics': 'SCPY161',
+    'genphy': 'SCPY161',
+    'คอม': 'EGBI122',
+    'โปรแกรม': 'EGBI122',
+    'comppro': 'EGBI122',
+    'อังกฤษ': 'LAEN182',
+    'eng': 'LAEN182',
+    'english': 'LAEN182',
+    'แล็ปชีวะ': 'SCBE102',
+    'ชีวะแล็ป': 'SCBE102',
+    'biolab': 'SCBE102',
+    'bme': 'EGBI100',
+    'real world': 'EGBI100',
+    'bmereal': 'EGBI100',
+    'แคล': 'SCMA101',
+    'คณิต': 'SCMA101',
+    'math': 'SCMA101',
+    'calculus': 'SCMA101',
+    'ชีวะ': 'SCSL190',
+    'wonderful': 'SCSL190',
+    'bio': 'SCSL190',
+    'เคมี': 'SCCH161',
+    'chem': 'SCCH161',
+    'genchem': 'SCCH161',
+    'แล็ปฟิสิกส์': 'SCPY111',
+    'phylab': 'SCPY111',
+    'แล็ปเคมี': 'SCCH169',
+    'chemlab': 'SCCH169'
+  };
+
+  for (const [kw, code] of Object.entries(keywordMap)) {
+    if (q.includes(kw)) {
+      const match = courses.find(c => c.code === code);
+      if (match) return match;
+    }
+  }
+
+  found = courses.find(c => c.room && c.room.toLowerCase().includes(q));
+  if (found) return found;
+
+  found = courses.find(c => c.name.toLowerCase().includes(q));
+  return found || null;
+}
+
+function buildCourseProfileFlex(course) {
+  const dayNamesTH = {
+    monday: 'วันจันทร์', tuesday: 'วันอังคาร', wednesday: 'วันพุธ',
+    thursday: 'วันพฤหัสบดี', friday: 'วันศุกร์', saturday: 'วันเสาร์', sunday: 'วันอาทิตย์'
+  };
+
+  const footerButtons = [];
+  if (course.classroomUrl) {
+    footerButtons.push({
+      type: 'button',
+      action: {
+        type: 'uri',
+        label: '📖 เข้า Google Classroom',
+        uri: course.classroomUrl
+      },
+      style: 'primary',
+      color: '#10B981',
+      height: 'sm'
+    });
+  }
+
+  footerButtons.push({
+    type: 'button',
+    action: {
+      type: 'uri',
+      label: '🌐 เปิดดูชีท & เอกสาร',
+      uri: 'https://daily-study-dashboard-production.up.railway.app'
+    },
+    style: 'secondary',
+    height: 'sm'
+  });
+
+  return {
+    type: 'flex',
+    altText: `📚 ข้อมูลรายวิชา: ${course.code} ${course.name}`,
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#C45A1B',
+        paddingAll: '16px',
+        contents: [
+          { type: 'text', text: 'COURSE INFORMATION', color: '#ffffff', size: 'xxs', weight: 'bold', opacity: 0.85 },
+          { type: 'text', text: `${course.code}`, color: '#ffffff', size: 'xl', weight: 'bold' },
+          { type: 'text', text: `${course.name}`, color: '#ffffff', size: 'sm', wrap: true, opacity: 0.95 }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '16px',
+        spacing: 'sm',
+        contents: [
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: '📅 วันเรียน:', size: 'xs', color: '#6B7280', flex: 1 },
+              { type: 'text', text: `${dayNamesTH[course.day] || course.day || '-'}`, size: 'xs', weight: 'bold', color: '#1F2937', flex: 3 }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: '⏰ เวลา:', size: 'xs', color: '#6B7280', flex: 1 },
+              { type: 'text', text: `${course.start} - ${course.end} น.`, size: 'xs', weight: 'bold', color: '#1F2937', flex: 3 }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: '📍 ห้องเรียน:', size: 'xs', color: '#6B7280', flex: 1 },
+              { type: 'text', text: course.room ? `ห้อง ${course.room}` : 'ออนไลน์ / ดูรายละเอียด', size: 'xs', weight: 'bold', color: '#C45A1B', flex: 3 }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: '🎓 หน่วยกิต:', size: 'xs', color: '#6B7280', flex: 1 },
+              { type: 'text', text: `${course.credits || '3 หน่วยกิต'} (${course.type || 'บรรยาย'})`, size: 'xs', color: '#1F2937', flex: 3 }
+            ]
+          },
+          ...(course.desc ? [
+            { type: 'separator', margin: 'md' },
+            {
+              type: 'text',
+              text: '📝 คำอธิบายรายวิชา:',
+              size: 'xs',
+              weight: 'bold',
+              color: '#374151',
+              margin: 'sm'
+            },
+            {
+              type: 'text',
+              text: course.desc,
+              size: 'xxs',
+              color: '#6B7280',
+              wrap: true
+            }
+          ] : [])
+        ]
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        spacing: 'sm',
+        contents: footerButtons
+      }
+    }
+  };
+}
+
+function buildWeeklyScheduleFlex(curriculum) {
+  const days = [
+    { key: 'monday', title: 'วันจันทร์', color: '#F59E0B' },
+    { key: 'tuesday', title: 'วันอังคาร', color: '#EC4899' },
+    { key: 'wednesday', title: 'วันพุธ', color: '#10B981' },
+    { key: 'thursday', title: 'วันพฤหัสบดี', color: '#F97316' },
+    { key: 'friday', title: 'วันศุกร์', color: '#3B82F6' }
+  ];
+
+  const bubbles = days.map(d => {
+    const dayClasses = (curriculum || DEFAULT_BME_CURRICULUM)
+      .filter(c => c.day === d.key)
+      .sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
+
+    const classItems = [];
+    if (dayClasses.length === 0) {
+      classItems.push({
+        type: 'text',
+        text: '🌴 ไม่มีคาบเรียน (วันหยุด/อ่านหนังสือ)',
+        size: 'xs',
+        color: '#9CA3AF',
+        margin: 'md'
+      });
+    } else {
+      dayClasses.forEach(c => {
+        classItems.push({
+          type: 'box',
+          layout: 'vertical',
+          backgroundColor: '#F9FAFB',
+          cornerRadius: 'md',
+          paddingAll: '8px',
+          margin: 'sm',
+          contents: [
+            {
+              type: 'box',
+              layout: 'horizontal',
+              contents: [
+                { type: 'text', text: `${c.start} - ${c.end}`, size: 'xxs', color: '#6B7280', flex: 0 },
+                { type: 'text', text: c.room ? `ห้อง ${c.room}` : '', size: 'xxs', color: d.color, align: 'end' }
+              ]
+            },
+            {
+              type: 'text',
+              text: `${c.code} ${c.name}`,
+              weight: 'bold',
+              size: 'xs',
+              color: '#111827',
+              wrap: true
+            }
+          ]
+        });
+      });
+    }
+
+    return {
+      type: 'bubble',
+      size: 'kilo',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: d.color,
+        paddingAll: '12px',
+        contents: [
+          { type: 'text', text: `📅 ${d.title}`, color: '#ffffff', weight: 'bold', size: 'md' },
+          { type: 'text', text: `${dayClasses.length} คาบเรียน`, color: '#ffffff', size: 'xxs', opacity: 0.9 }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '12px',
+        contents: classItems
+      }
+    };
+  });
+
+  return {
+    type: 'flex',
+    altText: '🗓️ ตารางเรียนประจำสัปดาห์ (จันทร์ - ศุกร์)',
+    contents: {
+      type: 'carousel',
+      contents: bubbles
+    }
+  };
+}
+
+function buildClassroomDirectoryFlex(curriculum, studyLinks) {
+  const courses = curriculum || DEFAULT_BME_CURRICULUM;
+  const links = (studyLinks && studyLinks.length > 0) ? studyLinks : DEFAULT_BME_STUDY_LINKS;
+
+  const cards = courses.map(c => {
+    const matchedLink = links.find(l => l.title && l.title.includes(c.code)) || { url: c.classroomUrl || '' };
+    const url = c.classroomUrl || matchedLink.url || 'https://classroom.google.com';
+
+    return {
+      type: 'box',
+      layout: 'vertical',
+      backgroundColor: '#F8FAFC',
+      cornerRadius: 'md',
+      paddingAll: '10px',
+      margin: 'sm',
+      contents: [
+        {
+          type: 'box',
+          layout: 'horizontal',
+          contents: [
+            { type: 'text', text: `${c.code}`, weight: 'bold', size: 'sm', color: '#1E293B' },
+            { type: 'text', text: c.room ? `ห้อง ${c.room}` : '', size: 'xs', color: '#64748B', align: 'end' }
+          ]
+        },
+        {
+          type: 'text',
+          text: `${c.name}`,
+          size: 'xs',
+          color: '#475569',
+          wrap: true,
+          margin: 'xs'
+        },
+        {
+          type: 'button',
+          action: {
+            type: 'uri',
+            label: '📖 เข้า Google Classroom',
+            uri: url
+          },
+          style: 'primary',
+          color: '#059669',
+          height: 'sm',
+          margin: 'sm'
+        }
+      ]
+    };
+  });
+
+  return {
+    type: 'flex',
+    altText: '📚 รวมลิงก์ Google Classroom รายวิชา',
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#059669',
+        paddingAll: '16px',
+        contents: [
+          { type: 'text', text: 'E-CALENDAR STUDY HUB', color: '#ffffff', size: 'xxs', weight: 'bold', opacity: 0.85 },
+          { type: 'text', text: '📚 รวมลิงก์ Google Classroom', color: '#ffffff', size: 'md', weight: 'bold' },
+          { type: 'text', text: 'คลิกเพื่อเข้าห้องเรียนและส่งงานได้ทันที', color: '#ffffff', size: 'xs', opacity: 0.9, margin: 'xs' }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '12px',
+        contents: cards
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [
+          {
+            type: 'button',
+            action: {
+              type: 'uri',
+              label: '🌐 คลังความรู้ & ไฟล์ชีททั้งหมด',
+              uri: 'https://daily-study-dashboard-production.up.railway.app'
+            },
+            style: 'secondary',
+            height: 'sm'
+          }
+        ]
+      }
+    }
+  };
+}
+
+function buildTaskAddedFlex(task, totalPending) {
+  return {
+    type: 'flex',
+    altText: `✅ เพิ่มงานเรียบร้อย: ${task.title}`,
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#10B981',
+        paddingAll: '14px',
+        contents: [
+          { type: 'text', text: 'TO-DO LIST SYNCED', color: '#ffffff', size: 'xxs', weight: 'bold', opacity: 0.9 },
+          { type: 'text', text: '✅ เพิ่มงานสำเร็จ!', color: '#ffffff', size: 'md', weight: 'bold' }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '14px',
+        contents: [
+          { type: 'text', text: `${task.title}`, weight: 'bold', size: 'sm', color: '#111827', wrap: true },
+          ...(task.dueDate ? [
+            { type: 'text', text: `⏰ กำหนดส่ง: ${task.dueDate}`, size: 'xs', color: '#EF4444', margin: 'xs', weight: 'bold' }
+          ] : []),
+          { type: 'text', text: `(เหลืองานค้างทั้งหมด ${totalPending} รายการ)`, size: 'xs', color: '#6B7280', margin: 'sm' }
+        ]
+      },
+      footer: {
+        type: 'box',
+        layout: 'horizontal',
+        spacing: 'sm',
+        contents: [
+          {
+            type: 'button',
+            action: { type: 'message', label: '📝 ดูงานทั้งหมด', text: 'งานค้าง' },
+            style: 'primary',
+            color: '#C45A1B',
+            height: 'sm'
+          },
+          {
+            type: 'button',
+            action: { type: 'message', label: `✅ ติ๊กเสร็จ (${task.id || 1})`, text: `เสร็จ ${task.id || 1}` },
+            style: 'secondary',
+            height: 'sm'
+          }
+        ]
+      }
+    }
+  };
+}
+
+function buildDDayCountdownFlex() {
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
+  
+  const events = [
+    { title: 'สอบกลางภาค (Midterm Exam)', date: '2026-09-28', desc: 'เตรียมตัวทบทวน 7 สัปดาห์แรก' },
+    { title: 'สอบปลายภาค (Final Exam)', date: '2026-11-23', desc: 'สอบวัดผลปลายภาค ภาคการศึกษาที่ 1' }
+  ];
+
+  const items = events.map(ev => {
+    const target = new Date(ev.date);
+    const diffTime = target.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    const isPast = diffDays < 0;
+    const dayText = isPast ? 'สอบเสร็จแล้ว' : (diffDays === 0 ? '🔥 วันนี้คือวันสอบ!' : `เหลืออีก ${diffDays} วัน`);
+
+    return {
+      type: 'box',
+      layout: 'vertical',
+      backgroundColor: '#FEF2F2',
+      cornerRadius: 'md',
+      paddingAll: '12px',
+      margin: 'sm',
+      contents: [
+        {
+          type: 'box',
+          layout: 'horizontal',
+          contents: [
+            { type: 'text', text: ev.title, weight: 'bold', size: 'xs', color: '#991B1B', flex: 3, wrap: true },
+            { type: 'text', text: dayText, weight: 'bold', size: 'xs', color: '#DC2626', flex: 2, align: 'end' }
+          ]
+        },
+        {
+          type: 'text',
+          text: `📅 กำหนดการ: ${ev.date} — ${ev.desc}`,
+          size: 'xxs',
+          color: '#7F1D1D',
+          margin: 'xs',
+          wrap: true
+        }
+      ]
+    };
+  });
+
+  return {
+    type: 'flex',
+    altText: '⏳ D-Day Countdown: นับถอยหลังวันสอบ',
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#DC2626',
+        paddingAll: '16px',
+        contents: [
+          { type: 'text', text: 'EXAM COUNTDOWN', color: '#ffffff', size: 'xxs', weight: 'bold', opacity: 0.85 },
+          { type: 'text', text: '⏳ นับถอยหลังวันสอบ (D-Day)', color: '#ffffff', size: 'md', weight: 'bold' }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '14px',
+        contents: items
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [
+          {
+            type: 'button',
+            action: {
+              type: 'message',
+              label: '📚 ดูตารางทบทวนประจำวัน',
+              text: 'ตารางวันนี้'
+            },
+            style: 'primary',
+            color: '#DC2626',
+            height: 'sm'
+          }
+        ]
+      }
+    }
+  };
+}
+
+function buildDailyBriefingFlex(dayName, dateStr, classesList, pendingTasks, routineList) {
+  return {
+    type: 'flex',
+    altText: `🌅 สรุปข้อมูลประจำวัน (${dayName} ${dateStr})`,
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#EA580C',
+        paddingAll: '16px',
+        contents: [
+          { type: 'text', text: 'DAILY BRIEFING', color: '#ffffff', size: 'xxs', weight: 'bold', opacity: 0.9 },
+          { type: 'text', text: `🌅 สรุปข้อมูล ${dayName}`, color: '#ffffff', size: 'lg', weight: 'bold' },
+          { type: 'text', text: dateStr, color: '#ffffff', size: 'xs', opacity: 0.9 }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '16px',
+        spacing: 'sm',
+        contents: [
+          {
+            type: 'box',
+            layout: 'horizontal',
+            backgroundColor: '#FFF7ED',
+            cornerRadius: 'md',
+            paddingAll: '10px',
+            contents: [
+              { type: 'text', text: '🎓 วิชาเรียนวันนี้:', size: 'xs', color: '#9A3412', flex: 3 },
+              { type: 'text', text: `${classesList.length} วิชา`, size: 'xs', weight: 'bold', color: '#EA580C', flex: 2, align: 'end' }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            backgroundColor: '#FEF2F2',
+            cornerRadius: 'md',
+            paddingAll: '10px',
+            contents: [
+              { type: 'text', text: '📝 การบ้านที่ค้างอยู่:', size: 'xs', color: '#991B1B', flex: 3 },
+              { type: 'text', text: `${pendingTasks.length} งาน`, size: 'xs', weight: 'bold', color: '#DC2626', flex: 2, align: 'end' }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            backgroundColor: '#EFF6FF',
+            cornerRadius: 'md',
+            paddingAll: '10px',
+            contents: [
+              { type: 'text', text: '📚 บล็อกอ่านหนังสือ:', size: 'xs', color: '#1E40AF', flex: 3 },
+              { type: 'text', text: `${routineList.length} บล็อก`, size: 'xs', weight: 'bold', color: '#2563EB', flex: 2, align: 'end' }
+            ]
+          }
+        ]
+      },
+      footer: {
+        type: 'box',
+        layout: 'horizontal',
+        spacing: 'sm',
+        contents: [
+          {
+            type: 'button',
+            action: { type: 'message', label: '📅 ดูตารางวันนี้', text: 'ตารางวันนี้' },
+            style: 'primary',
+            color: '#EA580C',
+            height: 'sm'
+          },
+          {
+            type: 'button',
+            action: { type: 'message', label: '📝 จัดการงาน', text: 'งานค้าง' },
+            style: 'secondary',
+            height: 'sm'
+          }
+        ]
+      }
+    }
+  };
+}
+
 function buildClassReminderFlex(course, timeUntilStr = 'อีก 15 นาที') {
   return {
     type: 'flex',
@@ -1796,10 +2367,14 @@ const server = http.createServer(async (req, res) => {
     if (event.type === 'follow') {
       const welcomeText = 
         `👋 สวัสดีครับ! ยินดีต้อนรับสู่ E-Calendar Bot 📚\n\n` +
-        `เพื่อเริ่มรับการแจ้งเตือนตารางเรียนและการบ้าน กรุณาผูกบัญชีโดยพิมพ์คำสั่ง:\n` +
-        `👉 /link <Username ของคุณ>\n\n` +
-        `เช่น: /link witchaya\n` +
-        `(ดูชื่อบัญชีได้ที่หน้าเว็บ E-Calendar ครับ)`;
+        `🤖 บอทนี้จะช่วยคุณ:\n` +
+        `• แจ้งเตือนคาบเรียนล่วงหน้า 15 นาที\n` +
+        `• ดูตารางเรียนรายวัน / รายสัปดาห์\n` +
+        `• สั่งจดการบ้านและเช็คงานค้าง\n` +
+        `• ค้นหาห้องเรียน และเปิด Google Classroom\n\n` +
+        `👉 เริ่มต้นใช้งานโดยพิมพ์:\n` +
+        `/link <Username ของคุณ>\n` +
+        `เช่น: /link witchaya`;
       await sendLineReply(replyToken, welcomeText);
       return;
     }
@@ -1807,7 +2382,7 @@ const server = http.createServer(async (req, res) => {
     if (event.type === 'message' && event.message && event.message.type === 'text') {
       const text = event.message.text.trim();
 
-      // 1. Command: /link <key> or ผูกบัญชี <key>
+      // ─── 1. Command: /link <key> or ผูกบัญชี <key> ───
       const linkMatch = text.match(/^\/?(link|ผูก|ผูกบัญชี)\s*([a-zA-Z0-9_-]+)/i);
       if (linkMatch || (!text.includes(' ') && (store._users[text.toLowerCase()] || store._calKeys[text]))) {
         const targetKey = (linkMatch ? linkMatch[2] : text).toLowerCase();
@@ -1843,8 +2418,118 @@ const server = http.createServer(async (req, res) => {
       const linkedUserId = (store._lineUsers && store._lineUsers[lineUserId]) || '1';
       const targetUser = Object.values(store._users || {}).find(u => u.id === linkedUserId) || { id: linkedUserId, displayName: 'นักศึกษา' };
 
-      // 2. Command: ตารางวันนี้ / วันนี้ / today
-      if (/^(ตารางวันนี้|วันนี้|today|schedule)/i.test(text)) {
+      // ─── 2. Command: +งาน / +การบ้าน / จด <ชื่องาน> <กำหนดส่ง> ───
+      const addTaskMatch = text.match(/^(\+|เพิ่มงาน|เพิ่มการบ้าน|จด|การบ้านใหม่|task)\s*(.+)/i);
+      if (addTaskMatch) {
+        const rawTaskText = addTaskMatch[2].trim();
+        if (rawTaskText) {
+          const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+          if (!userData.tasks) userData.tasks = [];
+
+          // Parse optional due date if contains date keywords
+          let title = rawTaskText;
+          let dueDate = '';
+          const dateMatch = rawTaskText.match(/(กำหนดส่ง|ส่ง|ภายใน|ก่อน)\s*[:\-]?\s*(.+)$/i);
+          if (dateMatch) {
+            title = rawTaskText.slice(0, dateMatch.index).trim();
+            dueDate = dateMatch[2].trim();
+          }
+
+          const newTask = {
+            id: Date.now().toString(),
+            title: title || rawTaskText,
+            dueDate: dueDate || '',
+            done: false,
+            createdAt: new Date().toISOString()
+          };
+
+          userData.tasks.push(newTask);
+          await dbAdapter.saveUserData(linkedUserId, userData);
+
+          const pendingCount = userData.tasks.filter(t => !t.done).length;
+          await sendLineReply(replyToken, [buildTaskAddedFlex(newTask, pendingCount)]);
+          return;
+        }
+      }
+
+      // ─── 3. Command: เสร็จ / ทำเสร็จ / done <ลำดับ> ───
+      const doneMatch = text.match(/^(เสร็จ|ทำเสร็จ|done|check|ลบงาน)\s*(\d+)/i);
+      if (doneMatch) {
+        const targetIndex = parseInt(doneMatch[2], 10) - 1;
+        const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+        const tasks = userData.tasks || userData.todos || [];
+        const pending = tasks.filter(t => !t.done);
+
+        if (targetIndex >= 0 && targetIndex < pending.length) {
+          const finishedTask = pending[targetIndex];
+          finishedTask.done = true;
+          finishedTask.completedAt = new Date().toISOString();
+          await dbAdapter.saveUserData(linkedUserId, userData);
+
+          const remainingCount = tasks.filter(t => !t.done).length;
+          await sendLineReply(replyToken, `🎉 เยี่ยมมากครับ! ทำงาน "${finishedTask.title}" เสร็จแล้ว ✨\n(เหลืองานค้างอีก ${remainingCount} รายการ)`);
+        } else {
+          await sendLineReply(replyToken, `❌ ไม่พบลำดับงานที่ ${doneMatch[2]} กรุณาพิมพ์ "งานค้าง" เพื่อดูรายการและลำดับงานครับ`);
+        }
+        return;
+      }
+
+      // ─── 4. Command: ตารางสัปดาห์ / สัปดาห์นี้ / week ───
+      if (/^(ตารางสัปดาห์|สัปดาห์นี้|ทั้งสัปดาห์|ตารางทั้งหมด|week|all schedule)/i.test(text)) {
+        const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+        const curriculum = userData.curriculum || DEFAULT_BME_CURRICULUM;
+        await sendLineReply(replyToken, [buildWeeklyScheduleFlex(curriculum)]);
+        return;
+      }
+
+      // ─── 5. Command: คลาสรูม / classroom / ชีท / ลิงก์เรียน ───
+      if (/^(คลาสรูม|classroom|ลิงก์เรียน|ลิงก์ห้องเรียน|ชีท|ชีทเรียน|google classroom)/i.test(text)) {
+        const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+        const curriculum = userData.curriculum || DEFAULT_BME_CURRICULUM;
+        const links = userData.studyLinks || DEFAULT_BME_STUDY_LINKS;
+        await sendLineReply(replyToken, [buildClassroomDirectoryFlex(curriculum, links)]);
+        return;
+      }
+
+      // ─── 6. Command: D-Day / สอบ / วันสอบ / นับถอยหลัง ───
+      if (/^(สอบ|วันสอบ|dday|นับถอยหลัง|exam|ตารางสอบ)/i.test(text)) {
+        await sendLineReply(replyToken, [buildDDayCountdownFlex()]);
+        return;
+      }
+
+      // ─── 7. Command: สรุปเช้า / เช้านี้ / สรุปวัน / briefing ───
+      if (/^(สรุปเช้า|เช้านี้|สรุปวัน|morning|briefing|สรุปวันนี้)/i.test(text)) {
+        const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
+        const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        const dayNamesTH = {
+          sunday: 'วันอาทิตย์', monday: 'วันจันทร์', tuesday: 'วันอังคาร',
+          wednesday: 'วันพุธ', thursday: 'วันพฤหัสบดี', friday: 'วันศุกร์', saturday: 'วันเสาร์'
+        };
+        const dayCode = days[now.getDay()];
+        const dayName = dayNamesTH[dayCode];
+        const dateStr = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
+
+        const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+        const curriculum = userData.curriculum || DEFAULT_BME_CURRICULUM;
+        const todayClasses = curriculum.filter(c => c.day === dayCode).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
+        const dayMapCode = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
+        const todayRoutines = DEFAULT_BME_ROUTINE_EVENTS.filter(r => r.day === dayMapCode[dayCode]);
+        const tasks = userData.tasks || userData.todos || [];
+        const pendingTasks = tasks.filter(t => !t.done);
+
+        await sendLineReply(replyToken, [buildDailyBriefingFlex(dayName, dateStr, todayClasses, pendingTasks, todayRoutines)]);
+        return;
+      }
+
+      // ─── 8. Command: Course Finder (ค้นหารายละเอียดวิชา / ห้องเรียน) ───
+      const courseMatch = findCourseMatch(text, (await dbAdapter.getUserData(linkedUserId))?.curriculum);
+      if (courseMatch && (text.startsWith('วิชา') || text.startsWith('ห้อง') || text.length <= 10 || /^(sc|eg|la)/i.test(text))) {
+        await sendLineReply(replyToken, [buildCourseProfileFlex(courseMatch)]);
+        return;
+      }
+
+      // ─── 9. Command: ตารางวันนี้ / วันนี้ / today ───
+      if (/^(ตารางวันนี้|วันนี้|today|schedule|เรียนไร|มีเรียนมั้ย)/i.test(text)) {
         const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
         const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
         const dayNamesTH = {
@@ -1865,8 +2550,8 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // 3. Command: ตารางพรุ่งนี้ / พรุ่งนี้ / tomorrow
-      if (/^(ตารางพรุ่งนี้|พรุ่งนี้|tomorrow)/i.test(text)) {
+      // ─── 10. Command: ตารางพรุ่งนี้ / พรุ่งนี้ / tomorrow ───
+      if (/^(ตารางพรุ่งนี้|พรุ่งนี้|tomorrow|พรุ่งนี้เรียนไร)/i.test(text)) {
         const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
         now.setDate(now.getDate() + 1);
         const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
@@ -1888,25 +2573,26 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // 4. Command: งานค้าง / การบ้าน / todo / deadline
-      if (/^(งานค้าง|การบ้าน|todo|deadline|งาน)/i.test(text)) {
+      // ─── 11. Command: งานค้าง / การบ้าน / todo / deadline ───
+      if (/^(งานค้าง|การบ้าน|todo|deadline|งาน|ส่งงานไรบ้าง)/i.test(text)) {
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
         const tasks = userData.tasks || userData.todos || [];
         const pending = tasks.filter(t => !t.done && !t.completed);
 
         if (pending.length === 0) {
-          await sendLineReply(replyToken, '🎉 ยอดเยี่ยมมาก! คุณไม่มีงานค้างหรือการบ้านที่ยังไม่เสร็จในระบบครับ ✨');
+          await sendLineReply(replyToken, '🎉 ยอดเยี่ยมมาก! คุณไม่มีงานค้างหรือการบ้านที่ยังไม่เสร็จในระบบครับ ✨\n(สามารถพิมพ์ "+งาน <ชื่องาน>" เพื่อสั่งจดการบ้านเพิ่มได้ตลอดเวลา)');
         } else {
           let msg = `📝 รายการงานค้างของคุณ (${pending.length} รายการ):\n`;
           pending.slice(0, 8).forEach((t, i) => {
-            msg += `\n${i + 1}. ${t.title || t.text || 'งาน'}${t.date || t.dueDate ? ` (กำหนดส่ง: ${t.date || t.dueDate})` : ''}`;
+            msg += `\n${i + 1}. ${t.title || t.text || 'งาน'}${t.dueDate ? ` (กำหนดส่ง: ${t.dueDate})` : ''}`;
           });
+          msg += `\n\n💡 ทิป: พิมพ์ "เสร็จ 1" เพื่อติ๊กงานลำดับที่ 1 ว่าเสร็จแล้ว`;
           await sendLineReply(replyToken, msg);
         }
         return;
       }
 
-      // 5. Command: ทดสอบ / test
+      // ─── 12. Command: ทดสอบ / test ───
       if (/^(ทดสอบ|test)/i.test(text)) {
         await sendLineReply(replyToken, [
           buildClassReminderFlex({
@@ -1921,7 +2607,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // 6. Command: ยกเลิกการผูก / unlink
+      // ─── 13. Command: ยกเลิกการผูก / unlink ───
       if (/^(ยกเลิกการผูก|unlink|logout)/i.test(text)) {
         if (store._lineUsers && store._lineUsers[lineUserId]) {
           const oldUid = store._lineUsers[lineUserId];
@@ -1936,19 +2622,24 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // Fallback: Help Menu
+      // ─── Fallback: Smart Interactive Menu ───
       const isLinked = Boolean(store._lineUsers && store._lineUsers[lineUserId]);
       const helpMsg = {
         type: 'text',
         text: isLinked 
-          ? `🤖 เมนูคำสั่ง E-Calendar Bot:\n• "ตารางวันนี้" — ดูวิชาเรียนวันนี้\n• "ตารางพรุ่งนี้" — ดูวิชาเรียนพรุ่งนี้\n• "งานค้าง" — ดูการบ้าน / To-Do\n• "ทดสอบ" — ทดสอบระบบแจ้งเตือน\n• "ยกเลิกการผูก" — ปลดการผูกบัญชี`
+          ? `🤖 เมนูและคำสั่ง E-Calendar Bot:\n\n` +
+            `📅 ตารางเรียน:\n• "ตารางวันนี้" / "ตารางพรุ่งนี้"\n• "ตารางสัปดาห์" (สรุปจันทร์-ศุกร์)\n• "วิชา ฟิสิกส์" หรือ "SCPY161" (ค้นหารายละเอียดวิชา)\n\n` +
+            `📝 การบ้าน & งานค้าง:\n• "+งาน <ชื่องาน> ส่ง <วันที่>" (สั่งจดงาน)\n• "งานค้าง" (ดูรายการงาน)\n• "เสร็จ 1" (ติ๊กงานลำดับที่ 1 ว่าเสร็จ)\n\n` +
+            `⏳ อื่นๆ:\n• "คลาสรูม" (รวมลิงก์ Google Classroom)\n• "สอบ" (นับถอยหลังวันสอบ D-Day)\n• "สรุปเช้า" (สรุปภาพรวมวันนี้)`
           : `👋 สวัสดีครับ! บัญชี LINE นี้ยังไม่ได้ผูกกับ E-Calendar\n\nกรุณาพิมพ์:\n👉 /link <Username ของคุณ>\nเช่น: /link witchaya`,
         quickReply: {
           items: isLinked ? [
             { type: 'action', action: { type: 'message', label: '📅 ตารางวันนี้', text: 'ตารางวันนี้' } },
-            { type: 'action', action: { type: 'message', label: '⏰ ตารางพรุ่งนี้', text: 'ตารางพรุ่งนี้' } },
+            { type: 'action', action: { type: 'message', label: '🗓️ ตารางสัปดาห์', text: 'ตารางสัปดาห์' } },
             { type: 'action', action: { type: 'message', label: '📝 งานค้าง', text: 'งานค้าง' } },
-            { type: 'action', action: { type: 'message', label: '⚡ ทดสอบ', text: 'ทดสอบ' } }
+            { type: 'action', action: { type: 'message', label: '📚 คลาสรูม', text: 'คลาสรูม' } },
+            { type: 'action', action: { type: 'message', label: '⏳ นับถอยหลังสอบ', text: 'สอบ' } },
+            { type: 'action', action: { type: 'message', label: '🌅 สรุปเช้า', text: 'สรุปเช้า' } }
           ] : [
             { type: 'action', action: { type: 'message', label: '❓ วิธีใช้', text: 'วิธีใช้' } }
           ]
