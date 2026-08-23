@@ -2713,6 +2713,104 @@
       };
     }
 
+    // ─── LINE Bot UI Logic ───
+    const lineBadge = document.getElementById('line-status-badge');
+    const lineDesc = document.getElementById('line-status-desc');
+    const lineCmd = document.getElementById('line-link-command');
+    const lineCopyBtn = document.getElementById('line-copy-cmd-btn');
+    const lineTestBtn = document.getElementById('line-test-btn');
+    const lineTestResult = document.getElementById('line-test-result');
+
+    const usernameForLink = currentUser ? currentUser.username : (window.CloudSync ? CloudSync.getSyncKey() : '1');
+    const linkCommandText = `/link ${usernameForLink}`;
+    if (lineCmd) lineCmd.textContent = linkCommandText;
+
+    if (lineCopyBtn) {
+      lineCopyBtn.onclick = () => {
+        navigator.clipboard.writeText(linkCommandText).then(() => {
+          showToast(`📋 คัดลอกคำสั่ง "${linkCommandText}" แล้ว! ส่งในแชท LINE ได้เลย`, 'success');
+        }).catch(() => {
+          showToast(`คัดลอก: ${linkCommandText}`, 'info');
+        });
+      };
+    }
+
+    try {
+      const authToken = localStorage.getItem('sd-auth-token') || '';
+      const syncKey = (window.CloudSync && CloudSync.getSyncKey()) || '1';
+      const lineRes = await fetch('/api/line/status', {
+        headers: {
+          ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
+          'X-Sync-Key': syncKey
+        }
+      });
+      const lineData = await lineRes.json();
+
+      if (!lineData.configured) {
+        if (lineBadge) {
+          lineBadge.textContent = '⚠️ ยังไม่ตั้งค่า Token';
+          lineBadge.style.background = 'rgba(239,68,68,0.15)';
+          lineBadge.style.color = '#ef4444';
+        }
+        if (lineDesc) {
+          lineDesc.textContent = 'กรุณาใส่ LINE_CHANNEL_ACCESS_TOKEN และ LINE_CHANNEL_SECRET ใน Railway Variables เพื่อเปิดใช้งาน';
+        }
+      } else if (lineData.linked) {
+        if (lineBadge) {
+          lineBadge.textContent = '🟢 ผูกบัญชีแล้ว';
+          lineBadge.style.background = 'rgba(6,199,85,0.15)';
+          lineBadge.style.color = '#06c755';
+        }
+        if (lineDesc) {
+          lineDesc.textContent = '✅ ผูกกับ LINE เรียบร้อย! ระบบจะส่งการแจ้งเตือนคาบเรียนล่วงหน้า 15 นาทีเข้า LINE ของคุณโดยอัตโนมัติ';
+        }
+      } else {
+        if (lineBadge) {
+          lineBadge.textContent = '⚪ ยังไม่ผูกบัญชี';
+          lineBadge.style.background = 'rgba(156,163,175,0.2)';
+          lineBadge.style.color = 'var(--label-2)';
+        }
+        if (lineDesc) {
+          lineDesc.textContent = 'พิมพ์คำสั่งด้านล่างนี้ในแชท LINE Official Account ของคุณเพื่อเชื่อมต่อบัญชีเข้ากับระบบ:';
+        }
+      }
+    } catch (_) {}
+
+    if (lineTestBtn) {
+      lineTestBtn.onclick = async () => {
+        lineTestBtn.disabled = true;
+        lineTestBtn.textContent = '📡 กำลังส่ง...';
+        if (lineTestResult) lineTestResult.textContent = 'กำลังยิงเข้า LINE...';
+
+        try {
+          const authToken = localStorage.getItem('sd-auth-token') || '';
+          const syncKey = (window.CloudSync && CloudSync.getSyncKey()) || '1';
+          const res = await fetch('/api/line/test', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
+              'X-Sync-Key': syncKey
+            },
+            body: JSON.stringify({ syncKey })
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            showToast('📲 ยิงแจ้งเตือนเข้า LINE สำเร็จ!', 'success');
+            if (lineTestResult) lineTestResult.innerHTML = '✅ ส่งการ์ดแจ้งเตือนเข้า LINE เรียบร้อยแล้ว! 🎉';
+          } else {
+            showToast(`❌ ${data.error || 'ส่งเข้า LINE ไม่สำเร็จ'}`, 'error');
+            if (lineTestResult) lineTestResult.innerHTML = `<span style="color:#ef4444">❌ ${data.error || 'ส่งไม่สำเร็จ'}</span>`;
+          }
+        } catch (e) {
+          if (lineTestResult) lineTestResult.innerHTML = '<span style="color:#ef4444">❌ เชื่อมต่อเซิร์ฟเวอร์ไม่ได้</span>';
+        }
+
+        lineTestBtn.disabled = false;
+        lineTestBtn.textContent = '📲 ทดสอบยิงเข้า LINE';
+      };
+    }
+
     function closeHandler() {
       modal.classList.remove('open');
       modal.style.display = '';

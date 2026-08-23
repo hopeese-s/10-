@@ -97,6 +97,17 @@ try {
   webpush = require('web-push');
 } catch (_) {}
 
+// ─── LINE Messaging API Setup ─────────────────────────────────
+const LINE_CHANNEL_ACCESS_TOKEN = (process.env.LINE_CHANNEL_ACCESS_TOKEN || '').replace(/['"]/g, '').trim();
+const LINE_CHANNEL_SECRET = (process.env.LINE_CHANNEL_SECRET || '').replace(/['"]/g, '').trim();
+const hasLine = Boolean(LINE_CHANNEL_ACCESS_TOKEN && LINE_CHANNEL_SECRET);
+
+if (hasLine) {
+  console.log('✅ LINE Messaging API configured for Push & Webhook');
+} else {
+  console.log('ℹ️ LINE Messaging API not configured (LINE_CHANNEL_ACCESS_TOKEN or LINE_CHANNEL_SECRET missing)');
+}
+
 // In-memory store + file persistence
 let store = {
   _users: {},             // { [username]: { id, username, displayName, passwordHash, salt, calendarKey, role, createdAt } }
@@ -104,6 +115,8 @@ let store = {
   _calKeys: {},           // { [calendarKey]: userId }
   _shares: {},            // { [shareToken]: { title, resources, folders, createdAt } }
   _pushSubscriptions: {}, // { [userId]: [subscriptionObjects] }
+  _lineUsers: {},         // { [lineUserId]: userId }
+  _userLine: {},          // { [userId]: lineUserId }
   _vapid: null
 };
 
@@ -116,6 +129,8 @@ try {
       _calKeys: loaded._calKeys || {},
       _shares: loaded._shares || {},
       _pushSubscriptions: loaded._pushSubscriptions || {},
+      _lineUsers: loaded._lineUsers || {},
+      _userLine: loaded._userLine || {},
       _vapid: loaded._vapid || null,
       ...loaded
     };
@@ -349,6 +364,8 @@ const dbAdapter = {
           store._calKeys = { ...store._calKeys, ...(authData._calKeys || {}) };
           store._shares = { ...store._shares, ...(authData._shares || {}) };
           store._pushSubscriptions = { ...store._pushSubscriptions, ...(authData._pushSubscriptions || {}) };
+          store._lineUsers = { ...store._lineUsers, ...(authData._lineUsers || {}) };
+          store._userLine = { ...store._userLine, ...(authData._userLine || {}) };
           if (authData._vapid && authData._vapid.publicKey && authData._vapid.privateKey) {
             vapidKeys = authData._vapid;
             store._vapid = authData._vapid;
@@ -372,6 +389,8 @@ const dbAdapter = {
         _calKeys: store._calKeys || {},
         _shares: store._shares || {},
         _pushSubscriptions: store._pushSubscriptions || {},
+        _lineUsers: store._lineUsers || {},
+        _userLine: store._userLine || {},
         _vapid: store._vapid || vapidKeys
       };
 
@@ -697,6 +716,384 @@ function generateIcsCalendar(userId, includeRoutines = false, includeStudy = tru
   return ics.join('\r\n');
 }
 
+// ─── LINE Messaging API Client & Flex Message Builders ────────
+async function sendLineReply(replyToken, messages) {
+  if (!hasLine || !replyToken) return false;
+  try {
+    const msgs = (Array.isArray(messages) ? messages : [messages]).map(m => typeof m === 'string' ? { type: 'text', text: m } : m);
+    const res = await fetch('https://api.line.me/v2/bot/message/reply', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`
+      },
+      body: JSON.stringify({ replyToken, messages: msgs })
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      console.warn('⚠️ LINE Reply Error:', res.status, errText);
+    }
+    return res.ok;
+  } catch (e) {
+    console.error('❌ LINE sendLineReply exception:', e.message);
+    return false;
+  }
+}
+
+async function sendLinePush(toUserId, messages) {
+  if (!hasLine || !toUserId) return false;
+  try {
+    const msgs = (Array.isArray(messages) ? messages : [messages]).map(m => typeof m === 'string' ? { type: 'text', text: m } : m);
+    const res = await fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`
+      },
+      body: JSON.stringify({ to: toUserId, messages: msgs })
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      console.warn('⚠️ LINE Push Error:', res.status, errText);
+    }
+    return res.ok;
+  } catch (e) {
+    console.error('❌ LINE sendLinePush exception:', e.message);
+    return false;
+  }
+}
+
+function buildScheduleFlex(dayTitle, dateStr, classesList, routineList) {
+  const contents = [];
+  
+  if (classesList && classesList.length > 0) {
+    contents.push({
+      type: 'text',
+      text: '🎓 คาบเรียน',
+      weight: 'bold',
+      color: '#C45A1B',
+      size: 'sm',
+      margin: 'md'
+    });
+    
+    classesList.forEach(cls => {
+      contents.push({
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#FFF8F3',
+        cornerRadius: 'md',
+        paddingAll: '10px',
+        margin: 'sm',
+        contents: [
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: `${cls.start} - ${cls.end} น.`, size: 'xs', color: '#888888', flex: 0 },
+              { type: 'text', text: cls.room ? `ห้อง ${cls.room}` : '', size: 'xs', color: '#C45A1B', align: 'end' }
+            ]
+          },
+          {
+            type: 'text',
+            text: `${cls.code} ${cls.name}`,
+            weight: 'bold',
+            size: 'sm',
+            color: '#1a1a1a',
+            wrap: true,
+            margin: 'xs'
+          }
+        ]
+      });
+    });
+  } else {
+    contents.push({
+      type: 'text',
+      text: '🎉 วันนี้ไม่มีวิชาเรียน พักผ่อนได้เต็มที่!',
+      size: 'sm',
+      color: '#666666',
+      margin: 'md'
+    });
+  }
+
+  if (routineList && routineList.length > 0) {
+    contents.push({
+      type: 'separator',
+      margin: 'lg'
+    });
+    contents.push({
+      type: 'text',
+      text: '📚 บล็อกทบทวน / กิจวัตร',
+      weight: 'bold',
+      color: '#3b82f6',
+      size: 'sm',
+      margin: 'md'
+    });
+    routineList.slice(0, 4).forEach(rt => {
+      contents.push({
+        type: 'box',
+        layout: 'horizontal',
+        margin: 'xs',
+        contents: [
+          { type: 'text', text: `${rt.start} - ${rt.end}`, size: 'xs', color: '#666666', flex: 2 },
+          { type: 'text', text: rt.title, size: 'xs', color: '#222222', flex: 4, wrap: true }
+        ]
+      });
+    });
+  }
+
+  return {
+    type: 'flex',
+    altText: `📅 ตาราง ${dayTitle} (${dateStr})`,
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#C45A1B',
+        paddingAll: '16px',
+        contents: [
+          { type: 'text', text: 'E-CALENDAR DASHBOARD', color: '#ffffff', size: 'xxs', weight: 'bold', opacity: 0.8 },
+          { type: 'text', text: `📅 ตาราง ${dayTitle}`, color: '#ffffff', size: 'lg', weight: 'bold' },
+          { type: 'text', text: dateStr, color: '#ffffff', size: 'xs', opacity: 0.9, margin: 'xs' }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '16px',
+        contents
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [
+          {
+            type: 'button',
+            action: {
+              type: 'uri',
+              label: '🌐 เปิด E-Calendar Dashboard',
+              uri: 'https://daily-study-dashboard-production.up.railway.app'
+            },
+            style: 'primary',
+            color: '#C45A1B',
+            height: 'sm'
+          }
+        ]
+      }
+    }
+  };
+}
+
+function buildClassReminderFlex(course, timeUntilStr = 'อีก 15 นาที') {
+  return {
+    type: 'flex',
+    altText: `⏰ แจ้งเตือนคาบเรียน: ${course.code} ${course.name} กำลังจะเริ่มใน ${timeUntilStr}!`,
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#DC2626',
+        paddingAll: '14px',
+        contents: [
+          { type: 'text', text: '⚡ CLASS REMINDER', color: '#ffffff', size: 'xxs', weight: 'bold', opacity: 0.85 },
+          { type: 'text', text: `⏰ กำลังจะเริ่มเรียนใน ${timeUntilStr}!`, color: '#ffffff', size: 'md', weight: 'bold' }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '16px',
+        contents: [
+          {
+            type: 'text',
+            text: `${course.code}`,
+            size: 'xs',
+            weight: 'bold',
+            color: '#DC2626'
+          },
+          {
+            type: 'text',
+            text: `${course.name}`,
+            size: 'md',
+            weight: 'bold',
+            color: '#111827',
+            wrap: true,
+            margin: 'xs'
+          },
+          {
+            type: 'box',
+            layout: 'vertical',
+            margin: 'md',
+            spacing: 'sm',
+            contents: [
+              {
+                type: 'box',
+                layout: 'horizontal',
+                contents: [
+                  { type: 'text', text: '⏰ เวลา:', size: 'xs', color: '#6B7280', flex: 1 },
+                  { type: 'text', text: `${course.start} - ${course.end} น.`, size: 'xs', weight: 'bold', color: '#1F2937', flex: 3 }
+                ]
+              },
+              {
+                type: 'box',
+                layout: 'horizontal',
+                contents: [
+                  { type: 'text', text: '📍 สถานที่:', size: 'xs', color: '#6B7280', flex: 1 },
+                  { type: 'text', text: course.room ? `ห้อง ${course.room}` : 'ออนไลน์ / ดูรายละเอียด', size: 'xs', weight: 'bold', color: '#1F2937', flex: 3 }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [
+          {
+            type: 'button',
+            action: {
+              type: 'uri',
+              label: '📖 ดูเอกสารการเรียน & Dashboard',
+              uri: course.classroomUrl || 'https://daily-study-dashboard-production.up.railway.app'
+            },
+            style: 'secondary',
+            height: 'sm'
+          }
+        ]
+      }
+    }
+  };
+}
+
+function buildLinkSuccessFlex(user) {
+  return {
+    type: 'flex',
+    altText: `🎉 ผูกบัญชี E-Calendar สำเร็จ: ${user.displayName || user.username}`,
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#10B981',
+        paddingAll: '16px',
+        contents: [
+          { type: 'text', text: 'E-CALENDAR NOTIFICATION', color: '#ffffff', size: 'xxs', weight: 'bold', opacity: 0.9 },
+          { type: 'text', text: '🎉 ผูกบัญชีสำเร็จเรียบร้อย!', color: '#ffffff', size: 'md', weight: 'bold' }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '16px',
+        contents: [
+          { type: 'text', text: `ยินดีต้อนรับคุณ ${user.displayName || user.username} (@${user.username})`, weight: 'bold', size: 'sm', color: '#111827' },
+          { type: 'text', text: 'ระบบจะส่งการแจ้งเตือนคาบเรียนล่วงหน้า 15 นาที และคุณสามารถพิมพ์ขอตารางเรียนผ่านแชทนี้ได้ตลอด 24 ชม.', size: 'xs', color: '#4B5563', wrap: true, margin: 'sm' }
+        ]
+      },
+      footer: {
+        type: 'box',
+        layout: 'horizontal',
+        spacing: 'sm',
+        contents: [
+          {
+            type: 'button',
+            action: {
+              type: 'message',
+              label: '📅 ตารางวันนี้',
+              text: 'ตารางวันนี้'
+            },
+            style: 'primary',
+            color: '#C45A1B',
+            height: 'sm'
+          },
+          {
+            type: 'button',
+            action: {
+              type: 'message',
+              label: '📝 งานค้าง',
+              text: 'งานค้าง'
+            },
+            style: 'secondary',
+            height: 'sm'
+          }
+        ]
+      }
+    }
+  };
+}
+
+// ─── Automated 15-Minute Pre-Class Reminder Scheduler (Every 60s) ───
+const sentReminderKeys = new Set();
+
+setInterval(async () => {
+  try {
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const currentDay = days[now.getDay()];
+
+    // Time 15 minutes in the future
+    const targetTime = new Date(now.getTime() + 15 * 60 * 1000);
+    const targetHHMM = String(targetTime.getHours()).padStart(2, '0') + ':' + String(targetTime.getMinutes()).padStart(2, '0');
+    const todayDateStr = now.toISOString().slice(0, 10);
+
+    if (sentReminderKeys.size > 300) sentReminderKeys.clear();
+
+    const activeUserIds = new Set([
+      '1',
+      ...Object.values(store._users || {}).map(u => u.id),
+      ...Object.values(store._lineUsers || {})
+    ]);
+
+    for (const userId of activeUserIds) {
+      const userData = (await dbAdapter.getUserData(userId)) || {};
+      const curriculum = userData.curriculum || DEFAULT_BME_CURRICULUM;
+
+      for (const course of curriculum) {
+        if (course.day === currentDay && course.start === targetHHMM) {
+          const reminderKey = `${todayDateStr}_${userId}_${course.code}_${course.start}`;
+          if (sentReminderKeys.has(reminderKey)) continue;
+          sentReminderKeys.add(reminderKey);
+
+          console.log(`⏰ [Auto-Reminder] 15-min pre-class reminder triggered for ${course.code} to user [${userId}]`);
+
+          // 1. Send Web Push
+          const subs = await dbAdapter.getPushSubscriptions(userId);
+          if (subs && subs.length > 0 && webpush && vapidKeys.publicKey) {
+            const pushPayload = JSON.stringify({
+              title: `⏰ อีก 15 นาทีเริ่มเรียน: ${course.code}`,
+              body: `${course.name} (${course.start} - ${course.end} น.) ห้อง ${course.room || '-'}`,
+              icon: '/icons/icon-192.png',
+              badge: '/icons/icon-192.png',
+              data: { url: '/' }
+            });
+            subs.forEach(s => {
+              webpush.sendNotification(s, pushPayload, {
+                TTL: 60,
+                urgency: 'high',
+                vapidDetails: {
+                  subject: process.env.VAPID_SUBJECT || 'mailto:support@hopeese.com',
+                  publicKey: vapidKeys.publicKey,
+                  privateKey: vapidKeys.privateKey
+                }
+              }).catch(() => {});
+            });
+          }
+
+          // 2. Send LINE Push
+          const lineUserId = store._userLine && store._userLine[userId];
+          if (lineUserId && hasLine) {
+            await sendLinePush(lineUserId, [buildClassReminderFlex(course, 'อีก 15 นาที')]);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ Automated reminder timer error:', err.message);
+  }
+}, 60 * 1000);
+
 // ─── HTTP Server & API Routing ─────────────────────────────
 const server = http.createServer(async (req, res) => {
   // CORS Headers
@@ -723,7 +1120,7 @@ const server = http.createServer(async (req, res) => {
       if (size > MAX_BODY_SIZE) {
         aborted = true;
         req.destroy();
-        callback(new Error('Body too large'), null);
+        callback(new Error('Body too large'), null, '');
         return;
       }
       body += chunk;
@@ -732,9 +1129,9 @@ const server = http.createServer(async (req, res) => {
       if (aborted) return;
       try {
         const parsed = JSON.parse(body || '{}');
-        callback(null, parsed);
+        callback(null, parsed, body);
       } catch (e) {
-        callback(e, null);
+        callback(e, null, body);
       }
     });
   }
@@ -1231,6 +1628,10 @@ const server = http.createServer(async (req, res) => {
         enabled: Boolean(webpush && vapidKeys.publicKey),
         active_vapid_key: vapidKeys.publicKey ? vapidKeys.publicKey.substring(0, 12) + '...' : null
       },
+      line_bot: {
+        configured: hasLine,
+        linked_users_count: Object.keys(store._lineUsers || {}).length
+      },
       timestamp: new Date().toISOString()
     }, null, 2));
     return;
@@ -1361,8 +1762,288 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      // Broadcast to LINE Bot as well if account is linked
+      const lineUserId = store._userLine && store._userLine[ownerId];
+      let lineSent = false;
+      if (lineUserId && hasLine) {
+        try {
+          await sendLinePush(lineUserId, [
+            buildClassReminderFlex({
+              code: 'SCPY161',
+              name: 'General Physics I (ทดสอบแจ้งเตือน)',
+              start: '09:30',
+              end: '12:30',
+              room: 'L2-002',
+              classroomUrl: 'https://classroom.google.com/u/6/c/ODcxMTQzMDA0NzAw'
+            }, 'อีก 15 นาที')
+          ]);
+          lineSent = true;
+        } catch (_) {}
+      }
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, sent, totalDevices: subs.length }));
+      res.end(JSON.stringify({ success: true, sent, totalDevices: subs.length, lineSent }));
+    });
+    return;
+  }
+
+  // ─── LINE Event Processing Engine ───────────────────────────
+  async function handleLineEvent(event) {
+    if (!event || !event.type) return;
+    const lineUserId = event.source && event.source.userId;
+    const replyToken = event.replyToken;
+
+    if (event.type === 'follow') {
+      const welcomeText = 
+        `👋 สวัสดีครับ! ยินดีต้อนรับสู่ E-Calendar Bot 📚\n\n` +
+        `เพื่อเริ่มรับการแจ้งเตือนตารางเรียนและการบ้าน กรุณาผูกบัญชีโดยพิมพ์คำสั่ง:\n` +
+        `👉 /link <Username ของคุณ>\n\n` +
+        `เช่น: /link witchaya\n` +
+        `(ดูชื่อบัญชีได้ที่หน้าเว็บ E-Calendar ครับ)`;
+      await sendLineReply(replyToken, welcomeText);
+      return;
+    }
+
+    if (event.type === 'message' && event.message && event.message.type === 'text') {
+      const text = event.message.text.trim();
+
+      // 1. Command: /link <key> or ผูกบัญชี <key>
+      const linkMatch = text.match(/^\/?(link|ผูก|ผูกบัญชี)\s*([a-zA-Z0-9_-]+)/i);
+      if (linkMatch || (!text.includes(' ') && (store._users[text.toLowerCase()] || store._calKeys[text]))) {
+        const targetKey = (linkMatch ? linkMatch[2] : text).toLowerCase();
+        let matchedUser = store._users[targetKey];
+        if (!matchedUser) {
+          const uid = store._calKeys[targetKey];
+          if (uid) {
+            matchedUser = Object.values(store._users).find(u => u.id === uid);
+          }
+        }
+        if (!matchedUser) {
+          matchedUser = Object.values(store._users).find(u => u.id === targetKey || u.username.toLowerCase() === targetKey);
+        }
+
+        if (matchedUser) {
+          if (!store._lineUsers) store._lineUsers = {};
+          if (!store._userLine) store._userLine = {};
+          store._lineUsers[lineUserId] = matchedUser.id;
+          store._userLine[matchedUser.id] = lineUserId;
+          await dbAdapter.saveSystemAuth();
+          saveStore();
+          
+          await sendLineReply(replyToken, [buildLinkSuccessFlex(matchedUser)]);
+          console.log(`🔗 LINE account [${lineUserId}] linked to user [${matchedUser.username}] (${matchedUser.id})`);
+          return;
+        } else {
+          await sendLineReply(replyToken, `❌ ไม่พบบัญชีผู้ใช้ "${targetKey}" ในระบบ\n\nกรุณาตรวจสอบชื่อ Username บนหน้าเว็บ Dashboard อีกครั้งครับ`);
+          return;
+        }
+      }
+
+      // Check linked user
+      const linkedUserId = (store._lineUsers && store._lineUsers[lineUserId]) || '1';
+      const targetUser = Object.values(store._users || {}).find(u => u.id === linkedUserId) || { id: linkedUserId, displayName: 'นักศึกษา' };
+
+      // 2. Command: ตารางวันนี้ / วันนี้ / today
+      if (/^(ตารางวันนี้|วันนี้|today|schedule)/i.test(text)) {
+        const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
+        const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        const dayNamesTH = {
+          sunday: 'วันอาทิตย์', monday: 'วันจันทร์', tuesday: 'วันอังคาร',
+          wednesday: 'วันพุธ', thursday: 'วันพฤหัสบดี', friday: 'วันศุกร์', saturday: 'วันเสาร์'
+        };
+        const dayCode = days[now.getDay()];
+        const dayName = dayNamesTH[dayCode];
+        const dateStr = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
+
+        const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+        const curriculum = userData.curriculum || DEFAULT_BME_CURRICULUM;
+        const todayClasses = curriculum.filter(c => c.day === dayCode).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
+        const dayMapCode = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
+        const todayRoutines = DEFAULT_BME_ROUTINE_EVENTS.filter(r => r.day === dayMapCode[dayCode]);
+
+        await sendLineReply(replyToken, [buildScheduleFlex(`${dayName}`, dateStr, todayClasses, todayRoutines)]);
+        return;
+      }
+
+      // 3. Command: ตารางพรุ่งนี้ / พรุ่งนี้ / tomorrow
+      if (/^(ตารางพรุ่งนี้|พรุ่งนี้|tomorrow)/i.test(text)) {
+        const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
+        now.setDate(now.getDate() + 1);
+        const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        const dayNamesTH = {
+          sunday: 'วันอาทิตย์', monday: 'วันจันทร์', tuesday: 'วันอังคาร',
+          wednesday: 'วันพุธ', thursday: 'วันพฤหัสบดี', friday: 'วันศุกร์', saturday: 'วันเสาร์'
+        };
+        const dayCode = days[now.getDay()];
+        const dayName = dayNamesTH[dayCode];
+        const dateStr = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
+
+        const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+        const curriculum = userData.curriculum || DEFAULT_BME_CURRICULUM;
+        const tomorrowClasses = curriculum.filter(c => c.day === dayCode).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
+        const dayMapCode = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
+        const tomorrowRoutines = DEFAULT_BME_ROUTINE_EVENTS.filter(r => r.day === dayMapCode[dayCode]);
+
+        await sendLineReply(replyToken, [buildScheduleFlex(`${dayName} (พรุ่งนี้)`, dateStr, tomorrowClasses, tomorrowRoutines)]);
+        return;
+      }
+
+      // 4. Command: งานค้าง / การบ้าน / todo / deadline
+      if (/^(งานค้าง|การบ้าน|todo|deadline|งาน)/i.test(text)) {
+        const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+        const tasks = userData.tasks || userData.todos || [];
+        const pending = tasks.filter(t => !t.done && !t.completed);
+
+        if (pending.length === 0) {
+          await sendLineReply(replyToken, '🎉 ยอดเยี่ยมมาก! คุณไม่มีงานค้างหรือการบ้านที่ยังไม่เสร็จในระบบครับ ✨');
+        } else {
+          let msg = `📝 รายการงานค้างของคุณ (${pending.length} รายการ):\n`;
+          pending.slice(0, 8).forEach((t, i) => {
+            msg += `\n${i + 1}. ${t.title || t.text || 'งาน'}${t.date || t.dueDate ? ` (กำหนดส่ง: ${t.date || t.dueDate})` : ''}`;
+          });
+          await sendLineReply(replyToken, msg);
+        }
+        return;
+      }
+
+      // 5. Command: ทดสอบ / test
+      if (/^(ทดสอบ|test)/i.test(text)) {
+        await sendLineReply(replyToken, [
+          buildClassReminderFlex({
+            code: 'SCPY161',
+            name: 'General Physics I (ทดสอบแจ้งเตือน)',
+            start: '09:30',
+            end: '12:30',
+            room: 'L2-002',
+            classroomUrl: 'https://classroom.google.com/u/6/c/ODcxMTQzMDA0NzAw'
+          }, 'อีก 15 นาที')
+        ]);
+        return;
+      }
+
+      // 6. Command: ยกเลิกการผูก / unlink
+      if (/^(ยกเลิกการผูก|unlink|logout)/i.test(text)) {
+        if (store._lineUsers && store._lineUsers[lineUserId]) {
+          const oldUid = store._lineUsers[lineUserId];
+          delete store._lineUsers[lineUserId];
+          if (store._userLine && store._userLine[oldUid]) delete store._userLine[oldUid];
+          await dbAdapter.saveSystemAuth();
+          saveStore();
+          await sendLineReply(replyToken, '👋 ยกเลิกการผูกบัญชี E-Calendar เรียบร้อยแล้วครับ หากต้องการผูกใหม่สามารถพิมพ์ /link <Username> ได้ตลอดเวลา');
+        } else {
+          await sendLineReply(replyToken, 'ℹ️ บัญชี LINE นี้ยังไม่ได้ผูกกับบัญชี E-Calendar ใดๆ ครับ');
+        }
+        return;
+      }
+
+      // Fallback: Help Menu
+      const isLinked = Boolean(store._lineUsers && store._lineUsers[lineUserId]);
+      const helpMsg = {
+        type: 'text',
+        text: isLinked 
+          ? `🤖 เมนูคำสั่ง E-Calendar Bot:\n• "ตารางวันนี้" — ดูวิชาเรียนวันนี้\n• "ตารางพรุ่งนี้" — ดูวิชาเรียนพรุ่งนี้\n• "งานค้าง" — ดูการบ้าน / To-Do\n• "ทดสอบ" — ทดสอบระบบแจ้งเตือน\n• "ยกเลิกการผูก" — ปลดการผูกบัญชี`
+          : `👋 สวัสดีครับ! บัญชี LINE นี้ยังไม่ได้ผูกกับ E-Calendar\n\nกรุณาพิมพ์:\n👉 /link <Username ของคุณ>\nเช่น: /link witchaya`,
+        quickReply: {
+          items: isLinked ? [
+            { type: 'action', action: { type: 'message', label: '📅 ตารางวันนี้', text: 'ตารางวันนี้' } },
+            { type: 'action', action: { type: 'message', label: '⏰ ตารางพรุ่งนี้', text: 'ตารางพรุ่งนี้' } },
+            { type: 'action', action: { type: 'message', label: '📝 งานค้าง', text: 'งานค้าง' } },
+            { type: 'action', action: { type: 'message', label: '⚡ ทดสอบ', text: 'ทดสอบ' } }
+          ] : [
+            { type: 'action', action: { type: 'message', label: '❓ วิธีใช้', text: 'วิธีใช้' } }
+          ]
+        }
+      };
+      await sendLineReply(replyToken, [helpMsg]);
+    }
+  }
+
+  // ─── API: LINE Messaging Webhook (POST /api/line/webhook) ───
+  if (pathname === '/api/line/webhook' && req.method === 'POST') {
+    parseJsonBody(async (err, data, rawBody) => {
+      if (err) {
+        res.writeHead(400);
+        res.end('Bad Request');
+        return;
+      }
+
+      // Signature Verification
+      if (LINE_CHANNEL_SECRET) {
+        const signature = req.headers['x-line-signature'];
+        const hash = crypto.createHmac('SHA256', LINE_CHANNEL_SECRET).update(rawBody || '').digest('base64');
+        if (hash !== signature) {
+          console.warn('⚠️ LINE Webhook signature mismatch');
+          res.writeHead(403);
+          res.end('Invalid signature');
+          return;
+        }
+      }
+
+      const events = (data && data.events) || [];
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'ok' }));
+
+      for (const event of events) {
+        try {
+          await handleLineEvent(event);
+        } catch (eventErr) {
+          console.error('❌ LINE handleLineEvent error:', eventErr);
+        }
+      }
+    });
+    return;
+  }
+
+  // ─── API: LINE Bot Status (GET /api/line/status) ───
+  if (pathname === '/api/line/status' && req.method === 'GET') {
+    res.setHeader('Cache-Control', 'no-store');
+    const ownerId = resolveOwnerId({});
+    const lineUserId = store._userLine && store._userLine[ownerId];
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      configured: hasLine,
+      linked: Boolean(lineUserId),
+      ownerId
+    }));
+    return;
+  }
+
+  // ─── API: LINE Bot Test Push (POST /api/line/test) ───
+  if (pathname === '/api/line/test' && req.method === 'POST') {
+    parseJsonBody(async (err, data) => {
+      const ownerId = resolveOwnerId(data);
+      const lineUserId = store._userLine && store._userLine[ownerId];
+
+      if (!hasLine) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'ยังไม่ได้ตั้งค่า LINE_CHANNEL_ACCESS_TOKEN บนเซิร์ฟเวอร์' }));
+        return;
+      }
+
+      if (!lineUserId) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'บัญชีนี้ยังไม่ได้ผูกกับ LINE Bot กรุณาเพิ่มเพื่อนใน LINE แล้วพิมพ์ /link ' + (store._users[ownerId] ? store._users[ownerId].username : ownerId) }));
+        return;
+      }
+
+      const success = await sendLinePush(lineUserId, [
+        buildClassReminderFlex({
+          code: 'SCPY161',
+          name: 'General Physics I (ทดสอบแจ้งเตือนผ่าน LINE)',
+          start: '09:30',
+          end: '12:30',
+          room: 'L2-002',
+          classroomUrl: 'https://classroom.google.com/u/6/c/ODcxMTQzMDA0NzAw'
+        }, 'อีก 15 นาที')
+      ]);
+
+      if (success) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'ส่งข้อความเข้า LINE เรียบร้อยแล้ว!' }));
+      } else {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'ส่งข้อความเข้า LINE ไม่สำเร็จ ตรวจสอบ Channel Access Token' }));
+      }
     });
     return;
   }

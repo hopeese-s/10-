@@ -701,6 +701,32 @@
             <div id="push-broadcast-result" style="font-size:11.5px;font-weight:600;color:var(--accent);margin-top:8px;min-height:16px"></div>
           </div>
 
+          <!-- LINE Bot Integration Card -->
+          <div style="background:linear-gradient(135deg, rgba(6,199,85,0.12), rgba(6,199,85,0.04));border:1px solid rgba(6,199,85,0.28);border-radius:var(--r-m);padding:14px;margin-bottom:14px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:18px">💬</span>
+                <div style="font-size:13px;font-weight:700;color:var(--label)">LINE Bot แจ้งเตือนผ่านแชท</div>
+              </div>
+              <span id="line-status-badge" style="font-size:10.5px;padding:3px 8px;border-radius:12px;background:rgba(6,199,85,0.15);color:#06c755;font-weight:700">กำลังโหลด...</span>
+            </div>
+            <p style="font-size:11.5px;color:var(--label-2);line-height:1.45;margin-bottom:10px" id="line-status-desc">
+              ผูกบัญชีกับ LINE Official เพื่อรับแจ้งเตือนคาบเรียนล่วงหน้า 15 นาที และขอดูตารางเรียนในแชทได้ตลอดเวลา
+            </p>
+            <div id="line-link-guide" style="background:var(--bg-card);border:1px dashed rgba(6,199,85,0.4);border-radius:var(--r-s);padding:8px 12px;font-size:11.5px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">
+              <div>
+                <span style="color:var(--label-2)">คำสั่งผูกบัญชี:</span> <code id="line-link-command" style="font-weight:700;color:#06c755;user-select:all">/link ...</code>
+              </div>
+              <button class="btn btn-secondary" id="line-copy-cmd-btn" style="font-size:10.5px;padding:3px 8px;cursor:pointer">คัดลอก</button>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-secondary" id="line-test-btn" style="flex:1;padding:7px 12px;font-size:12px;border-color:rgba(6,199,85,0.4);color:#06c755;font-weight:600;cursor:pointer">
+                📲 ทดสอบยิงเข้า LINE
+              </button>
+            </div>
+            <div id="line-test-result" style="font-size:11px;font-weight:600;color:#06c755;margin-top:6px;min-height:14px;text-align:center"></div>
+          </div>
+
           <!-- Feature Description -->
           <div style="font-size:12px;color:var(--label-2);line-height:1.5;background:var(--bg-2);padding:12px 14px;border-radius:var(--r-m);border:1px solid var(--sep)">
             <div style="font-weight:700;color:var(--label);margin-bottom:4px">⏰ ตารางการแจ้งเตือนอัตโนมัติ:</div>
