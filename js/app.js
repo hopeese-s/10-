@@ -1132,13 +1132,52 @@
       if (state.currentTopView === 'dashboard' && state.currentDashboardView === 'timeline') {
         const day = ROUTINES[state.currentDay];
         if (!day) return;
+        
+        let baseBlocks = day.blocks;
+        if (state.curriculum && state.curriculum.length > 0) {
+          const dayClasses = state.curriculum.filter(c => c.day === state.currentDay && c.start && c.end);
+          if (dayClasses.length > 0) {
+            const nonClassBlocks = day.blocks.filter(b => !b.isClass);
+            const liveClassBlocks = dayClasses.map(c => ({
+              id: `live-class-${c.code}`,
+              start: c.start,
+              end: c.end,
+              title: `${c.code} ${c.name}`,
+              subtitle: c.room ? c.room : '',
+              tag: 'class',
+              isClass: true,
+              classCode: c.code,
+              notes: c.room ? `ห้อง ${c.room}` : ''
+            }));
+            baseBlocks = [...nonClassBlocks, ...liveClassBlocks];
+          }
+        }
+
         const customExtra = state.customBlocks[state.currentDay] || [];
         const overrideIds = new Set(customExtra.filter(b => b._override).map(b => b.id));
-        const baseBlocks = day.blocks.filter(b => !overrideIds.has(b.id));
-        const allBlocks = [...baseBlocks, ...customExtra].sort((a,b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+        const mergedBase = baseBlocks.filter(b => !overrideIds.has(b.id));
+        const allBlocks = [...mergedBase, ...customExtra].sort((a,b) => timeToMinutes(a.start) - timeToMinutes(b.start));
         updateTimeIndicator(state.currentDay, allBlocks);
       }
     }, 30000);
+  }
+
+  // Helper: Get classes for day (prefer live curriculum)
+  function getClassesForDay(dayKey) {
+    if (state.curriculum && Array.isArray(state.curriculum) && state.curriculum.length > 0) {
+      const live = state.curriculum.filter(c => c.day === dayKey && c.start && c.end);
+      if (live.length > 0) {
+        return live.map(c => ({
+          code: c.code,
+          name: c.name,
+          type: c.type || 'บรรยาย',
+          room: c.room || '',
+          start: c.start,
+          end: c.end
+        }));
+      }
+    }
+    return CLASS_SCHEDULE[dayKey] || [];
   }
 
   // ─── Class Schedule (9th Verbatim) ───────────────────────
@@ -1152,7 +1191,7 @@
 
     let classListHtml = '';
     days.forEach(d => {
-      const classes = CLASS_SCHEDULE[d] || [];
+      const classes = getClassesForDay(d);
       if (!classes.length) return;
       classListHtml += `<h4 style="font-size:13px;font-weight:700;color:var(--label-2);margin-top:20px;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">${dayLabels[d]} ${d === todayKey ? '⭐ วันนี้' : ''}</h4>`;
       classListHtml += `<div class="week-class-list">`;
@@ -1163,7 +1202,7 @@
             <span class="wci-emoji">${sc.emoji}</span>
             <div class="wci-info">
               <div class="wci-name">${cls.name}</div>
-              <div class="wci-meta">📍 ${cls.room} · ⏰ ${cls.start}–${cls.end} · ${cls.type}</div>
+              <div class="wci-meta">📍 ${cls.room ? 'ห้อง ' + cls.room : ''} · ⏰ ${cls.start}–${cls.end} · ${cls.type}</div>
             </div>
             <span class="wci-code" style="background:${sc.bg};color:${sc.color}">${cls.code}</span>
           </div>`;
@@ -1185,7 +1224,7 @@
       <div style="background:var(--bg-2);border-radius:var(--r-l);border:1px solid var(--sep);padding:20px 24px;box-shadow:var(--shadow-1)">
         <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:20px">
           ${days.map(d => {
-            const classes = CLASS_SCHEDULE[d] || [];
+            const classes = getClassesForDay(d);
             const isToday = d === todayKey;
             return `
               <div style="flex:1;min-width:130px;text-align:center;padding:14px 10px;border-radius:var(--r-m);background:var(--bg-3);border:${isToday ? '2px solid var(--accent)' : '1px solid var(--sep)'}">
@@ -1224,7 +1263,7 @@
       const checks = state.checklist[ck] || {};
       const studyBlocks = day.blocks.filter(b => b.isStudyBlock);
       const done = Object.values(checks).filter(Boolean).length;
-      const classes = CLASS_SCHEDULE[key] || [];
+      const classes = getClassesForDay(key);
       const isToday = key === todayKey;
       return `
         <div class="week-day-card ${isToday ? 'today' : ''}" data-day="${key}">
@@ -2347,7 +2386,6 @@
           state.studyFolders = [{ id: 'f-shared', name: `🔗 ${bundle.label || 'เอกสารที่แชร์'}` }];
           state.studyLinks = safeLinks;
           state.selectedFolderId = 'f-shared';
-          localStorage.setItem('sd-study-active-folder', 'f-shared');
           setTimeout(() => {
             switchTopView('study');
             showToast(`โหมดเปิดอ่าน: ${bundle.label || 'เอกสารที่แชร์'}`, 'info');
@@ -3240,12 +3278,18 @@
     });
 
     // Draw initial SVG edges after DOM renders
+    requestAnimationFrame(() => {
+      drawGraphSvgEdges();
+      if (graphState.selectedNodeId) {
+        selectGraphNode(graphState.selectedNodeId);
+      }
+    });
     setTimeout(() => {
       drawGraphSvgEdges();
       if (graphState.selectedNodeId) {
         selectGraphNode(graphState.selectedNodeId);
       }
-    }, 50);
+    }, 150);
   }
 
   function updateGraphFiltering() {
