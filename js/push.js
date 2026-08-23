@@ -43,6 +43,7 @@ const PushClient = (() => {
       isSubscribed = true;
       const syncKey = (window.CloudSync && CloudSync.getSyncKey()) || '1';
       const authToken = localStorage.getItem('sd-auth-token') || '';
+      const subPayload = (subscription && typeof subscription.toJSON === 'function') ? subscription.toJSON() : subscription;
 
       const subRes = await fetch('/api/push/subscribe', {
         method: 'POST',
@@ -51,7 +52,7 @@ const PushClient = (() => {
           ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
           'X-Sync-Key': syncKey
         },
-        body: JSON.stringify({ subscription, syncKey })
+        body: JSON.stringify({ subscription: subPayload, syncKey })
       });
 
       if (subRes.ok) {
@@ -154,6 +155,7 @@ const PushClient = (() => {
       // 5. Send subscription to server
       const syncKey = (window.CloudSync && CloudSync.getSyncKey()) || '1';
       const authToken = localStorage.getItem('sd-auth-token') || '';
+      const subPayload = (subscription && typeof subscription.toJSON === 'function') ? subscription.toJSON() : subscription;
 
       const subRes = await fetch('/api/push/subscribe', {
         method: 'POST',
@@ -162,7 +164,7 @@ const PushClient = (() => {
           ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
           'X-Sync-Key': syncKey
         },
-        body: JSON.stringify({ subscription, syncKey })
+        body: JSON.stringify({ subscription: subPayload, syncKey })
       });
 
       if (subRes.ok) {

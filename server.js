@@ -1292,15 +1292,35 @@ const server = http.createServer(async (req, res) => {
 
       let sent = 0;
       let lastErr = null;
+      const pushOptions = {
+        TTL: 60,
+        urgency: 'high',
+        vapidDetails: {
+          subject: process.env.VAPID_SUBJECT || 'mailto:support@hopeese.com',
+          publicKey: vapidKeys.publicKey,
+          privateKey: vapidKeys.privateKey
+        }
+      };
+
       const sendPromises = subs.map(async (sub) => {
         try {
-          await webpush.sendNotification(sub, payload);
+          if (!sub || !sub.endpoint) return;
+          const targetSub = {
+            endpoint: sub.endpoint,
+            keys: (sub.keys && sub.keys.p256dh) ? sub.keys : (sub.subscription_data && sub.subscription_data.keys ? sub.subscription_data.keys : (sub.keys || {}))
+          };
+          if (!targetSub.keys || !targetSub.keys.p256dh || !targetSub.keys.auth) {
+            console.warn('⚠️ Push subscription missing encryption keys for endpoint:', sub.endpoint);
+            lastErr = 'Missing device encryption keys';
+            return;
+          }
+          await webpush.sendNotification(targetSub, payload, pushOptions);
           sent++;
         } catch (pushErr) {
-          lastErr = pushErr.message || pushErr.statusCode || 'Gateway Error';
-          console.warn(`Push delivery notice (Status: ${pushErr.statusCode || 'err'}):`, pushErr.message || pushErr);
+          lastErr = pushErr.body || pushErr.message || (pushErr.statusCode ? `HTTP ${pushErr.statusCode}` : 'Gateway Error');
+          console.warn(`Push delivery error to endpoint (Status: ${pushErr.statusCode || 'unknown'}):`, pushErr.body || pushErr.message);
           // Prune stale or expired subscriptions automatically
-          if (pushErr.statusCode === 410 || pushErr.statusCode === 404) {
+          if (pushErr.statusCode === 410 || pushErr.statusCode === 404 || pushErr.statusCode === 401 || pushErr.statusCode === 400) {
             if (supabase && sub.endpoint) {
               supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint).catch(() => {});
             }
