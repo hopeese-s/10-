@@ -892,7 +892,7 @@ const server = http.createServer(async (req, res) => {
 
   // ─── API: Auth Register (POST /api/auth/register) ───
   if (pathname === '/api/auth/register' && req.method === 'POST') {
-    parseJsonBody((err, data) => {
+    parseJsonBody(async (err, data) => {
       if (err || !data.username || !data.password) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'กรุณากรอก Username และ Password' }));
@@ -906,7 +906,12 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      if (store._users[username]) {
+      // Check fresh from Supabase if not loaded
+      if (supabase && (!store._users || Object.keys(store._users).length === 0)) {
+        await dbAdapter.loadSystemAuth();
+      }
+
+      if (store._users && store._users[username]) {
         res.writeHead(409, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Username นี้ถูกใช้งานแล้ว กรุณาเลือกชื่ออื่น' }));
         return;
@@ -914,7 +919,7 @@ const server = http.createServer(async (req, res) => {
 
       const salt = crypto.randomBytes(16).toString('hex');
       const passwordHash = hashPassword(data.password, salt);
-      const isFirstUser = Object.keys(store._users).length === 0;
+      const isFirstUser = Object.keys(store._users || {}).length === 0;
       const role = isFirstUser ? 'admin' : 'student';
       const userId = 'u_' + username;
       const calendarKey = generateCalendarKey();
@@ -930,28 +935,39 @@ const server = http.createServer(async (req, res) => {
         createdAt: new Date().toISOString()
       };
 
+      if (!store._users) store._users = {};
+      if (!store._calKeys) store._calKeys = {};
+      if (!store._sessions) store._sessions = {};
+
       store._users[username] = user;
       store._calKeys[calendarKey] = userId;
 
-      const masterTemplate = store['1'] || store['u_admin'] || {};
-      store[userId] = {
+      const masterTemplate = (await dbAdapter.getUserData('1')) || (await dbAdapter.getUserData('u_admin')) || store['1'] || {};
+      const initialUserData = {
         version: 1,
         updatedAt: new Date().toISOString(),
         checklist: {},
         subjects: {},
         customBlocks: {},
-        curriculum: masterTemplate.curriculum || [],
+        curriculum: masterTemplate.curriculum || DEFAULT_BME_CURRICULUM || [],
         studyFolders: masterTemplate.studyFolders || [],
-        studyLinks: (masterTemplate.studyLinks || []).filter(l => l.isShared !== false),
+        studyLinks: (masterTemplate.studyLinks || []).filter(l => l && l.isShared !== false),
         files: {}
       };
 
-      // Create session with 30-day expiry
+      // 1. Save new user data template directly into Supabase PostgreSQL
+      await dbAdapter.saveUserData(userId, initialUserData);
+
+      // 2. Create session with 30-day expiry
       const token = generateToken();
       const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
       store._sessions[token] = { userId, username, role, expiresAt };
 
+      // 3. Save all users & sessions directly into Supabase PostgreSQL
+      await dbAdapter.saveSystemAuth();
       saveStore();
+
+      console.log(`✅ New user registered & saved permanently to Supabase: ${username} (${role})`);
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
@@ -971,7 +987,7 @@ const server = http.createServer(async (req, res) => {
 
   // ─── API: Auth Login (POST /api/auth/login) ───
   if (pathname === '/api/auth/login' && req.method === 'POST') {
-    parseJsonBody((err, data) => {
+    parseJsonBody(async (err, data) => {
       if (err || !data.username || !data.password) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'กรุณากรอก Username และ Password' }));
@@ -979,7 +995,13 @@ const server = http.createServer(async (req, res) => {
       }
 
       const username = data.username.toLowerCase().trim();
-      const user = store._users[username];
+
+      // Ensure fresh users from Supabase
+      if (!store._users || !store._users[username]) {
+        await dbAdapter.loadSystemAuth();
+      }
+
+      const user = store._users && store._users[username];
 
       if (!user) {
         res.writeHead(401, { 'Content-Type': 'application/json' });
@@ -1002,9 +1024,13 @@ const server = http.createServer(async (req, res) => {
       // Create session with 30-day expiry (persistent login)
       const token = generateToken();
       const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      if (!store._sessions) store._sessions = {};
       store._sessions[token] = { userId: user.id, username, role: user.role, expiresAt };
 
+      await dbAdapter.saveSystemAuth();
       saveStore();
+
+      console.log(`✅ User logged in: ${username}`);
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
@@ -1048,8 +1074,9 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/auth/logout' && req.method === 'POST') {
     const authHeader = req.headers['authorization'] || '';
     const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-    if (token && store._sessions[token]) {
+    if (token && store._sessions && store._sessions[token]) {
       delete store._sessions[token];
+      await dbAdapter.saveSystemAuth();
       saveStore();
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1418,6 +1445,18 @@ setInterval(async () => {
   }
 }, 60000);
 
-server.listen(PORT, () => {
-  console.log(`🚀 E-Calendar Server running on port ${PORT} with Multi-User & iCal Live Feed`);
-});
+async function startServer() {
+  if (supabase) {
+    try {
+      await dbAdapter.loadSystemAuth();
+    } catch (e) {
+      console.warn('⚠️ Could not preload system auth from Supabase:', e.message);
+    }
+  }
+
+  server.listen(PORT, () => {
+    console.log(`🚀 E-Calendar Server running on port ${PORT} with Multi-User & iCal Live Feed`);
+  });
+}
+
+startServer();
