@@ -19,6 +19,10 @@ if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
 
+// ─── Environment & Cloud Configuration ────────────────────────
+const IS_PRODUCTION = process.env.NODE_ENV === 'production' || Boolean(process.env.RAILWAY_ENVIRONMENT) || Boolean(process.env.RENDER);
+const STRICT_CLOUD_MODE = process.env.STRICT_CLOUD_MODE === 'true';
+
 // ─── Cloudflare R2 S3 Storage Adapter ─────────────────────────
 let r2Client = null;
 const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
@@ -26,8 +30,9 @@ const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
 const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
 const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
 const R2_PUBLIC_DOMAIN = process.env.R2_PUBLIC_DOMAIN || '';
+const hasR2 = Boolean(R2_ACCOUNT_ID && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY && R2_BUCKET_NAME);
 
-if (R2_ACCOUNT_ID && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY && R2_BUCKET_NAME) {
+if (hasR2) {
   try {
     const { S3Client } = require('@aws-sdk/client-s3');
     r2Client = new S3Client({
@@ -38,9 +43,9 @@ if (R2_ACCOUNT_ID && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY && R2_BUCKET_NAME)
         secretAccessKey: R2_SECRET_ACCESS_KEY
       }
     });
-    console.log('✅ Cloudflare R2 Storage Adapter connected');
+    console.log('✅ Cloudflare R2 Storage Adapter connected (Bucket: ' + R2_BUCKET_NAME + ')');
   } catch (e) {
-    console.warn('⚠️ Cloudflare R2 initialization failed, falling back to local disk:', e.message);
+    console.error('❌ Cloudflare R2 initialization error:', e.message);
   }
 }
 
@@ -48,14 +53,37 @@ if (R2_ACCOUNT_ID && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY && R2_BUCKET_NAME)
 let supabase = null;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
+const hasSupabase = Boolean(SUPABASE_URL && SUPABASE_KEY);
 
-if (SUPABASE_URL && SUPABASE_KEY) {
+if (hasSupabase) {
   try {
     const { createClient } = require('@supabase/supabase-js');
     supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-    console.log('✅ Supabase PostgreSQL Database Adapter connected');
+    console.log('✅ Supabase PostgreSQL Database Adapter connected (' + SUPABASE_URL + ')');
   } catch (e) {
-    console.warn('⚠️ Supabase initialization failed, falling back to local store:', e.message);
+    console.error('❌ Supabase initialization error:', e.message);
+  }
+}
+
+// ─── Production Fail-Loudly Warnings ──────────────────────────
+if (IS_PRODUCTION && (!hasR2 || !hasSupabase)) {
+  console.error('\n' + '='.repeat(72));
+  console.error('🚨 [CRITICAL CONFIG WARNING] RUNNING ON EPHEMERAL HOSTING WITHOUT CLOUD!');
+  console.error('='.repeat(72));
+  if (!hasR2) {
+    console.error('❌ Cloudflare R2: NOT CONFIGURED');
+    console.error('   -> Uploaded files stored in /uploads/ will be WIPED on every container redeploy!');
+  }
+  if (!hasSupabase) {
+    console.error('❌ Supabase PostgreSQL: NOT CONFIGURED');
+    console.error('   -> User accounts and sync data stored in sync_store.json will be WIPED on redeploy!');
+  }
+  console.error('💡 Solution: Set SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and R2_* in Railway Variables.');
+  console.error('='.repeat(72) + '\n');
+
+  if (STRICT_CLOUD_MODE) {
+    console.error('🛑 STRICT_CLOUD_MODE is ON. Halting startup to prevent data loss.');
+    process.exit(1);
   }
 }
 
@@ -145,6 +173,93 @@ function saveStore() {
     });
   });
 }
+
+// ─── Unified Database Adapter (Supabase PostgreSQL + In-Memory Fallback) ───
+const dbAdapter = {
+  async getUserData(userId) {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('user_sync_data')
+          .select('data, version, updated_at')
+          .eq('user_id', String(userId))
+          .single();
+        if (!error && data && data.data) {
+          return {
+            ...data.data,
+            version: data.version,
+            updatedAt: data.updated_at
+          };
+        }
+      } catch (err) {
+        console.warn('⚠️ Supabase getUserData error:', err.message);
+      }
+    }
+    return store[userId] || null;
+  },
+
+  async saveUserData(userId, payload) {
+    // 1. In-memory & local store update
+    store[userId] = payload;
+    saveStore();
+
+    // 2. Persistent Supabase PostgreSQL upsert
+    if (supabase) {
+      try {
+        const { error } = await supabase
+          .from('user_sync_data')
+          .upsert({
+            user_id: String(userId),
+            data: payload,
+            version: parseInt(payload.version, 10) || 0,
+            updated_at: payload.updatedAt || new Date().toISOString()
+          }, { onConflict: 'user_id' });
+        if (error) console.warn('⚠️ Supabase upsert error:', error.message);
+      } catch (err) {
+        console.warn('⚠️ Supabase saveUserData error:', err.message);
+      }
+    }
+  },
+
+  async savePushSubscription(userId, subscription) {
+    if (!store._pushSubscriptions) store._pushSubscriptions = {};
+    if (!store._pushSubscriptions[userId]) store._pushSubscriptions[userId] = [];
+    const endpoint = subscription.endpoint;
+    store._pushSubscriptions[userId] = store._pushSubscriptions[userId].filter(s => s && s.endpoint !== endpoint);
+    store._pushSubscriptions[userId].push(subscription);
+    saveStore();
+
+    if (supabase) {
+      try {
+        await supabase
+          .from('push_subscriptions')
+          .upsert({
+            user_id: String(userId),
+            endpoint: endpoint,
+            subscription_data: subscription,
+            created_at: new Date().toISOString()
+          }, { onConflict: 'endpoint' });
+      } catch (err) {
+        console.warn('⚠️ Supabase savePushSubscription error:', err.message);
+      }
+    }
+  },
+
+  async getPushSubscriptions(userId) {
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('push_subscriptions')
+          .select('subscription_data')
+          .eq('user_id', String(userId));
+        if (!error && data && data.length > 0) {
+          return data.map(r => r.subscription_data);
+        }
+      } catch (_) {}
+    }
+    return (store._pushSubscriptions && store._pushSubscriptions[userId]) || [];
+  }
+};
 
 // Password helpers
 function hashPassword(password, salt) {
@@ -428,7 +543,7 @@ function generateIcsCalendar(userId, includeRoutines = false, includeStudy = tru
 }
 
 // ─── HTTP Server & API Routing ─────────────────────────────
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
   // CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -521,6 +636,7 @@ const server = http.createServer((req, res) => {
       if (aborted) return;
       writeStream.end();
       let fileUrl = `/uploads/${filename}`;
+      let uploadedToR2 = false;
 
       // Upload to Cloudflare R2 if configured
       if (r2Client) {
@@ -541,26 +657,35 @@ const server = http.createServer((req, res) => {
 
           if (R2_PUBLIC_DOMAIN) {
             fileUrl = `${R2_PUBLIC_DOMAIN.replace(/\/$/, '')}/${filename}`;
+          } else {
+            fileUrl = `https://${R2_BUCKET_NAME}.${R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${filename}`;
           }
-          console.log(`☁️ File uploaded to Cloudflare R2: ${fileUrl}`);
+          uploadedToR2 = true;
+          console.log(`☁️ File uploaded to Cloudflare R2 (Direct CDN URL): ${fileUrl}`);
+
+          // Remove local file to save disk space on ephemeral Railway container
+          fs.unlink(filePath, () => {});
         } catch (r2Err) {
           console.warn('⚠️ Cloudflare R2 upload failed, keeping local file URL fallback:', r2Err.message);
         }
       }
 
-      // Store file metadata in user's data
-      if (!store[ownerId]) store[ownerId] = {};
-      if (!store[ownerId].files) store[ownerId].files = {};
-      store[ownerId].files[fileId] = {
+      // Store file metadata in unified user data
+      const ownerData = (await dbAdapter.getUserData(ownerId)) || {};
+      if (!ownerData.files) ownerData.files = {};
+      const fileRecord = {
         id: fileId,
         name: url.searchParams.get('name') || 'file',
         url: fileUrl,
         size,
+        uploadedToR2,
         uploadedAt: new Date().toISOString()
       };
-      saveStore();
+      ownerData.files[fileId] = fileRecord;
+      await dbAdapter.saveUserData(ownerId, ownerData);
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, file: store[ownerId].files[fileId] }));
+      res.end(JSON.stringify({ success: true, file: fileRecord }));
     });
     return;
   }
@@ -874,6 +999,33 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // ─── API: System Health & Cloud Connection Status (GET /api/health) ───
+  if (pathname === '/api/health' && req.method === 'GET') {
+    res.setHeader('Cache-Control', 'no-store');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      status: 'healthy',
+      environment: IS_PRODUCTION ? 'production' : 'development',
+      storage: {
+        provider: r2Client ? 'cloudflare_r2' : 'local_ephemeral_fallback',
+        r2_connected: Boolean(r2Client),
+        bucket: R2_BUCKET_NAME || null,
+        publicDomain: R2_PUBLIC_DOMAIN || null,
+        warning: !r2Client && IS_PRODUCTION ? '⚠️ Cloudflare R2 is NOT configured. Uploads stored on ephemeral disk will be lost on container redeploy!' : null
+      },
+      database: {
+        provider: supabase ? 'supabase_postgresql' : 'local_ephemeral_fallback',
+        supabase_connected: Boolean(supabase),
+        warning: !supabase && IS_PRODUCTION ? '⚠️ Supabase PostgreSQL is NOT configured. User data stored in sync_store.json will be lost on container redeploy!' : null
+      },
+      push_notifications: {
+        enabled: Boolean(webpush && vapidKeys.publicKey)
+      },
+      timestamp: new Date().toISOString()
+    }, null, 2));
+    return;
+  }
+
   // ─── API: Web Push VAPID Public Key (GET /api/push/vapid-key) ───
   if (pathname === '/api/push/vapid-key' && req.method === 'GET') {
     res.setHeader('Cache-Control', 'no-store');
@@ -887,7 +1039,7 @@ const server = http.createServer((req, res) => {
 
   // ─── API: Web Push Subscribe (POST /api/push/subscribe) ───
   if (pathname === '/api/push/subscribe' && req.method === 'POST') {
-    parseJsonBody((err, data) => {
+    parseJsonBody(async (err, data) => {
       if (err || !data.subscription) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Missing push subscription' }));
@@ -895,13 +1047,7 @@ const server = http.createServer((req, res) => {
       }
 
       const ownerId = resolveOwnerId(data);
-      if (!store._pushSubscriptions) store._pushSubscriptions = {};
-      if (!store._pushSubscriptions[ownerId]) store._pushSubscriptions[ownerId] = [];
-
-      const endpoint = data.subscription.endpoint;
-      store._pushSubscriptions[ownerId] = store._pushSubscriptions[ownerId].filter(s => s && s.endpoint !== endpoint);
-      store._pushSubscriptions[ownerId].push(data.subscription);
-      saveStore();
+      await dbAdapter.savePushSubscription(ownerId, data.subscription);
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, message: 'Push subscription saved' }));
@@ -913,7 +1059,7 @@ const server = http.createServer((req, res) => {
   if (pathname === '/api/push/test' && req.method === 'POST') {
     parseJsonBody(async (err, data) => {
       const ownerId = resolveOwnerId(data);
-      const subs = (store._pushSubscriptions && store._pushSubscriptions[ownerId]) || [];
+      const subs = await dbAdapter.getPushSubscriptions(ownerId);
 
       if (!webpush || !vapidKeys.publicKey || subs.length === 0) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -953,7 +1099,19 @@ const server = http.createServer((req, res) => {
     const parts = cleanPath.split('/');
     const calKey = parts[0].replace('.ics', '').trim();
 
-    let targetUserId = store._calKeys[calKey] || calKey;
+    // Strict validation of calendar key token format
+    if (!calKey || !/^cal_[a-zA-Z0-9_-]+$/.test(calKey)) {
+      res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('400 Bad Request: Invalid calendar token format');
+      return;
+    }
+
+    const targetUserId = store._calKeys[calKey];
+    if (!targetUserId) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('404 Not Found: Calendar subscription feed not found or invalid token');
+      return;
+    }
 
     const includeStudy = url.searchParams.get('study') !== '0';
     const includeClass = url.searchParams.get('class') !== '0';
@@ -987,14 +1145,14 @@ const server = http.createServer((req, res) => {
     }
 
     if (req.method === 'GET') {
-      const data = store[key] || null;
+      const data = await dbAdapter.getUserData(key);
       res.writeHead(data ? 200 : 404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(data || { error: 'Not found' }));
       return;
     }
 
     if (req.method === 'POST') {
-      parseJsonBody((err, parsed) => {
+      parseJsonBody(async (err, parsed) => {
         if (err) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Invalid JSON body' }));
@@ -1009,16 +1167,17 @@ const server = http.createServer((req, res) => {
         }
 
         // Merge instead of overwrite to preserve files
-        const existing = store[key] || {};
-        store[key] = {
+        const existing = (await dbAdapter.getUserData(key)) || {};
+        const merged = {
           ...existing,
           ...parsed,
           files: { ...(existing.files || {}), ...(parsed.files || {}) },
           updatedAt: new Date().toISOString()
         };
-        saveStore();
+        await dbAdapter.saveUserData(key, merged);
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, key, updatedAt: store[key].updatedAt }));
+        res.end(JSON.stringify({ success: true, key, updatedAt: merged.updatedAt }));
       });
       return;
     }
@@ -1126,11 +1285,16 @@ setInterval(async () => {
   const nowTotalMinutes = currentHour * 60 + currentMinute;
   const todayStr = bangkokTime.toISOString().slice(0, 10);
 
-  for (const userId of Object.keys(store._pushSubscriptions || {})) {
-    const subs = store._pushSubscriptions[userId];
+  const userIds = new Set([
+    ...Object.keys(store._pushSubscriptions || {}),
+    ...Object.values(store._users || {}).map(u => u && u.id).filter(Boolean)
+  ]);
+
+  for (const userId of userIds) {
+    const subs = await dbAdapter.getPushSubscriptions(userId);
     if (!subs || subs.length === 0) continue;
 
-    const userData = store[userId] || {};
+    const userData = (await dbAdapter.getUserData(userId)) || {};
     const curriculum = (userData.curriculum && userData.curriculum.length > 0) ? userData.curriculum : DEFAULT_BME_CURRICULUM;
     const dayClasses = curriculum.filter(c => c.day && c.day.toLowerCase() === currentDay);
 
@@ -1155,19 +1319,13 @@ setInterval(async () => {
           data: { url: '/' }
         });
 
-        const validSubs = [];
         for (const sub of subs) {
           try {
             await webpush.sendNotification(sub, payload);
-            validSubs.push(sub);
           } catch (pushErr) {
-            if (pushErr.statusCode !== 410 && pushErr.statusCode !== 404) {
-              validSubs.push(sub);
-            }
+            console.warn('⚠️ Push notification failed for sub:', pushErr.statusCode);
           }
         }
-        store._pushSubscriptions[userId] = validSubs;
-        saveStore();
       }
     }
   }
