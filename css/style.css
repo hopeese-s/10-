@@ -1859,7 +1859,29 @@ body {
     display: none;
   }
   .app-header {
-    padding: 0 1rem;
+    height: auto;
+    min-height: calc(52px + max(env(safe-area-inset-top, 0px), 32px));
+    padding-top: max(env(safe-area-inset-top, 0px), 36px);
+    padding-bottom: 10px;
+    padding-left: 1rem;
+    padding-right: 1rem;
+    box-sizing: border-box;
+  }
+  .modal-overlay {
+    padding-top: max(env(safe-area-inset-top, 0px), 44px);
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 24px);
+    padding-left: 10px;
+    padding-right: 10px;
+    align-items: flex-start;
+  }
+  .modal-box {
+    margin-top: auto;
+    margin-bottom: auto;
+    max-height: calc(100vh - max(env(safe-area-inset-top, 0px), 44px) - max(env(safe-area-inset-bottom, 0px), 24px) - 16px);
+  }
+  .modal-box-large {
+    width: 100%;
+    max-height: calc(100vh - max(env(safe-area-inset-top, 0px), 44px) - max(env(safe-area-inset-bottom, 0px), 24px) - 10px);
   }
   #clock, .online-pill {
     display: none !important;
@@ -1868,7 +1890,7 @@ body {
     padding: 1.25rem 1rem 5.5rem;
   }
   .hero-section {
-    padding: 2rem 0 1.5rem;
+    padding: 1.5rem 0 1.25rem;
   }
   .hero-title {
     font-size: 2.2rem;

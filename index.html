@@ -387,13 +387,13 @@
     <!-- ─── In-App Multi-Page PDF & Resource Preview Modal ─── -->
     <div class="modal-overlay" id="preview-modal" role="dialog" aria-modal="true" aria-labelledby="preview-modal-title">
       <div class="modal-box modal-box-large">
-        <div class="modal-header" style="position:sticky;top:0;z-index:20;background:var(--bg-1);border-bottom:1px solid var(--sep);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px">
-          <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1">
-            <button class="btn btn-primary" id="preview-back-btn" style="font-size:12.5px;padding:6px 14px;display:inline-flex;align-items:center;gap:6px;font-weight:700;flex-shrink:0;box-shadow:0 2px 8px rgba(196,90,27,0.25)">
-              🔙 ย้อนกลับหน้าเว็บ
+        <div class="modal-header" style="position:sticky;top:0;z-index:20;background:var(--bg-1);border-bottom:1px solid var(--sep);padding:8px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1">
+            <button class="btn btn-secondary" id="preview-back-btn" style="font-size:12px;padding:4px 10px;display:inline-flex;align-items:center;gap:4px;font-weight:600;flex-shrink:0;border-radius:var(--r-pill)">
+              ← กลับ
             </button>
-            <span id="preview-badge" class="online-pill" style="background:var(--accent-bg);color:var(--accent);flex-shrink:0">PREVIEW</span>
-            <span class="modal-title" id="preview-modal-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:1.05rem">ตัวอย่างเอกสาร</span>
+            <span id="preview-badge" class="online-pill" style="background:var(--accent-bg);color:var(--accent);flex-shrink:0;font-size:11px">PREVIEW</span>
+            <span class="modal-title" id="preview-modal-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:1rem">ตัวอย่างเอกสาร</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px">
             <button class="modal-close" id="preview-close-btn" aria-label="ปิด" style="font-size:16px;padding:4px 8px">✕</button>
@@ -401,17 +401,14 @@
         </div>
         
         <!-- Multi-page scrollable canvas/document container -->
-        <div class="resource-preview-body" id="preview-modal-body" style="overflow-y:auto;-webkit-overflow-scrolling:touch;max-height:calc(85vh - 120px)"></div>
+        <div class="resource-preview-body" id="preview-modal-body" style="overflow-y:auto;-webkit-overflow-scrolling:touch;max-height:calc(85vh - 100px)"></div>
         
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 18px;border-top:1px solid var(--sep);background:var(--bg-1)" id="preview-modal-actions">
-          <button class="btn btn-primary" id="preview-footer-back-btn" style="font-size:12px;padding:6px 14px;font-weight:700;display:inline-flex;align-items:center;gap:6px">
-            🔙 ย้อนกลับหน้าเว็บ
-          </button>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <div style="font-size:12px;color:var(--label-3)" id="preview-meta-info"></div>
-            <button class="btn btn-secondary" id="preview-copy-link-btn" style="font-size:12px;padding:6px 12px">📋 คัดลอกลิงค์</button>
-            <a href="#" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" id="preview-open-ext-btn" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:6px;font-size:12px;padding:6px 12px">
-              🚀 เปิดในแท็บใหม่แยก
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 16px;border-top:1px solid var(--sep);background:var(--bg-1)" id="preview-modal-actions">
+          <div style="font-size:12px;color:var(--label-3)" id="preview-meta-info"></div>
+          <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
+            <button class="btn btn-secondary" id="preview-copy-link-btn" style="font-size:12px;padding:5px 10px;display:inline-flex;align-items:center;gap:4px;border-radius:var(--r-pill)">📋 Copy Link</button>
+            <a href="#" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" id="preview-open-ext-btn" title="เปิดในแท็บใหม่" aria-label="เปิดในแท็บใหม่" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-size:14px;padding:5px 12px;border-radius:var(--r-pill)">
+              🚀 ↗
             </a>
           </div>
         </div>

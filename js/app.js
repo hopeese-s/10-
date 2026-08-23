@@ -358,8 +358,6 @@
     const currentCurriculumJson = JSON.stringify(state.curriculum || []);
     const cloudCurriculumJson   = JSON.stringify(cloudData.curriculum || []);
 
-    const cloudIsNewer = cloudData.version !== undefined && cloudData.version > state.version;
-    const cloudTimeNewer = cloudData.updatedAt && state.updatedAt && cloudData.updatedAt > state.updatedAt;
     const dataDifferent = (currentChecklistJson !== cloudChecklistJson) ||
                           (currentSubjectsJson !== cloudSubjectsJson) ||
                           (currentCustomJson !== cloudCustomJson) ||
@@ -367,21 +365,32 @@
                           (currentLinksJson !== cloudLinksJson) ||
                           (currentCurriculumJson !== cloudCurriculumJson);
 
-    if (cloudIsNewer || cloudTimeNewer || dataDifferent) {
+    if (!dataDifferent) return 'same';
+
+    const localVer = parseInt(state.version, 10) || 0;
+    const cloudVer = parseInt(cloudData.version, 10) || 0;
+    const localTime = state.updatedAt || '';
+    const cloudTime = cloudData.updatedAt || '';
+
+    // 1. Cloud is strictly newer
+    if (cloudVer > localVer || (cloudVer === localVer && cloudTime > localTime)) {
       applyCloudData(cloudData);
       reRenderCurrentView();
       return 'pulled';
     }
 
-    // If local is newer, push to cloud
-    if (state.version > (cloudData.version || 0)) {
+    // 2. Local is strictly newer -> push local state to cloud
+    if (localVer > cloudVer || (localVer === cloudVer && localTime > cloudTime)) {
       if (window.CloudSync) {
         CloudSync.pushToCloud(state);
       }
       return 'pushed';
     }
 
-    return 'same';
+    // 3. Same versions or unversioned -> apply cloud data
+    applyCloudData(cloudData);
+    reRenderCurrentView();
+    return 'pulled';
   }
 
   function reRenderCurrentView() {
@@ -1665,14 +1674,14 @@
             <button class="view-mode-btn ${!isListMode ? 'active' : ''}" data-study-mode="grid" title="แสดงแบบการ์ด"><span>⊞</span> Grid</button>
             <button class="view-mode-btn ${isListMode ? 'active' : ''}" data-study-mode="list" title="แสดงแบบรายการ"><span>☰</span> List</button>
           </div>
-          <button class="btn btn-secondary" id="study-share-btn" style="font-size:12.5px;padding:7px 14px;display:inline-flex;align-items:center;gap:6px" title="แชร์คลังชีทเรียนให้เพื่อน">
-            แชร์คลังเอกสาร
+          <button class="btn btn-secondary" id="study-share-btn" style="font-size:12px;padding:6px 13px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;border-radius:var(--r-pill);font-weight:600" title="แชร์คลังชีทเรียนให้เพื่อน">
+            <span>🔗</span> แชร์คลัง
           </button>
-          <button class="btn btn-secondary" id="create-folder-btn" style="font-size:12.5px;padding:7px 14px;display:inline-flex;align-items:center;gap:6px">
-            สร้างโฟลเดอร์ใหม่
+          <button class="btn btn-secondary" id="create-folder-btn" style="font-size:12px;padding:6px 13px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;border-radius:var(--r-pill);font-weight:600">
+            <span>📁</span> + โฟลเดอร์
           </button>
-          <button class="btn btn-primary" id="add-resource-btn" style="font-size:12.5px;padding:7px 16px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;">
-            + เพิ่มเอกสาร
+          <button class="btn btn-primary" id="add-resource-btn" style="font-size:12px;padding:6px 15px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;border-radius:var(--r-pill);font-weight:700">
+            <span>+</span> เพิ่มเอกสาร
           </button>
         </div>
       </div>
@@ -2182,12 +2191,23 @@
             if (res.ok) {
               closeModal('auth-modal');
               showToast(`✅ ยินดีต้อนรับ ${res.user.displayName}!`, 'success');
+              
               // Pull user data
               const pull = await CloudSync.pullFromCloud();
               if (pull.ok && pull.data) {
                 applyCloudData(pull.data);
-                renderDashboardCurrentView();
+                reRenderCurrentView();
+                if (state.currentTopView === 'study') renderStudyView();
+                if (state.currentTopView === 'dashboard') renderDashboardCurrentView();
+                if (state.currentTopView === 'curriculum') renderCurriculumView();
               }
+
+              // Start background auto sync
+              CloudSync.startAutoSync(cloudData => {
+                if (cloudData) {
+                  syncSmartWithCloud(cloudData);
+                }
+              });
             } else {
               showToast(`⚠️ ${res.error}`, 'warning');
             }
@@ -2196,12 +2216,23 @@
             if (res.ok) {
               closeModal('auth-modal');
               showToast(`🎉 สมัครสมาชิกสำเร็จ ยินดีต้อนรับ ${res.user.displayName}!`, 'success');
+              
               // Pull initial template
               const pull = await CloudSync.pullFromCloud();
               if (pull.ok && pull.data) {
                 applyCloudData(pull.data);
-                renderDashboardCurrentView();
+                reRenderCurrentView();
+                if (state.currentTopView === 'study') renderStudyView();
+                if (state.currentTopView === 'dashboard') renderDashboardCurrentView();
+                if (state.currentTopView === 'curriculum') renderCurriculumView();
               }
+
+              // Start background auto sync
+              CloudSync.startAutoSync(cloudData => {
+                if (cloudData) {
+                  syncSmartWithCloud(cloudData);
+                }
+              });
             } else {
               showToast(`⚠️ ${res.error}`, 'warning');
             }
@@ -2661,19 +2692,48 @@
               });
             }
 
-            const newId = `link-${Date.now()}`;
+            let serverFileUrl = '';
+            const authToken = localStorage.getItem('sd-auth-token') || '';
+            const syncKey = (window.CloudSync && CloudSync.getSyncKey()) || '1';
 
-            // Store in IndexedDB for iOS/iPadOS localStorage safety
-            await LocalFileDB.setFile(newId, currentUploadedFileData);
+            // Attempt direct server upload so file is accessible on all devices (mobile, tablet, desktop)
+            if (file) {
+              try {
+                const uploadRes = await fetch(`/api/upload?name=${encodeURIComponent(file.name)}`, {
+                  method: 'POST',
+                  headers: {
+                    ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
+                    'X-Sync-Key': syncKey
+                  },
+                  body: file
+                });
+                if (uploadRes.ok) {
+                  const uploadData = await uploadRes.json();
+                  if (uploadData && uploadData.success && uploadData.file && uploadData.file.url) {
+                    serverFileUrl = uploadData.file.url;
+                  }
+                }
+              } catch (upErr) {
+                console.warn('Server upload failed, using local offline fallback', upErr);
+              }
+            }
+
+            const newId = `link-${Date.now()}`;
+            const finalUrl = serverFileUrl || currentUploadedFileData || '';
+
+            // Store in IndexedDB for instant offline preview
+            if (currentUploadedFileData) {
+              await LocalFileDB.setFile(newId, currentUploadedFileData);
+            }
 
             state.studyLinks.push({
               id: newId,
               folderId,
               title,
-              type: 'local',
-              url: (currentUploadedFileData && currentUploadedFileData.length > 500000) ? '' : currentUploadedFileData,
+              type: currentUploadedFileType || 'pdf',
+              url: finalUrl,
               desc,
-              isLocal: true,
+              isLocal: !serverFileUrl,
               fileSize: file ? file.size : undefined,
               createdAt: new Date().toISOString()
             });
@@ -3084,14 +3144,10 @@
       }
     }
 
-    // Back buttons
+    // Back button
     const backBtn = document.getElementById('preview-back-btn');
     if (backBtn) {
       backBtn.onclick = () => closeModal('preview-modal');
-    }
-    const footerBackBtn = document.getElementById('preview-footer-back-btn');
-    if (footerBackBtn) {
-      footerBackBtn.onclick = () => closeModal('preview-modal');
     }
 
     // Populate preview body
@@ -3099,15 +3155,13 @@
     if (body) {
       body.innerHTML = '';
 
-      if ((item.type === 'pdf' || (item.type === 'local' && (fileUrl.startsWith('data:application/pdf') || (!fileUrl.startsWith('data:image/') && fileUrl.startsWith('data:'))))) && fileUrl) {
+      const isPdfFile = (item.type === 'pdf' || (fileUrl && (fileUrl.endsWith('.pdf') || fileUrl.includes('.pdf') || fileUrl.startsWith('data:application/pdf') || (item.type === 'local' && !fileUrl.startsWith('data:image/')))));
+      const isImageFile = (item.type === 'image' || (fileUrl && (fileUrl.match(/\.(png|jpe?g|gif|webp|svg)$/i) || fileUrl.startsWith('data:image/'))));
+
+      if (isPdfFile && fileUrl) {
         // Multi-page PDF rendering via PDF.js (works on iPad, iPhone, PC)
         renderPdfWithPdfJs(fileUrl, body, item.title);
-      } else if (item.type === 'local' && fileUrl && (fileUrl.startsWith('data:image/') || fileUrl.match(/\.(png|jpe?g|gif|webp)$/i))) {
-        body.innerHTML = `
-          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;min-height:300px;max-height:calc(90vh - 130px);overflow:auto">
-            <img src="${fileUrl}" alt="${escHtml(item.title)}" style="max-width:100%;height:auto;max-height:75vh;object-fit:contain;border-radius:var(--r-m);box-shadow:var(--shadow-2)" />
-          </div>`;
-      } else if (item.type === 'image' && fileUrl) {
+      } else if (isImageFile && fileUrl) {
         body.innerHTML = `
           <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;min-height:300px;max-height:calc(90vh - 130px);overflow:auto">
             <img src="${escHtml(fileUrl)}" alt="${escHtml(item.title)}" style="max-width:100%;height:auto;max-height:75vh;object-fit:contain;border-radius:var(--r-m);box-shadow:var(--shadow-2)" />
