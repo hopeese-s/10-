@@ -340,7 +340,6 @@
               modePageBtn.style.color = '';
               modePageBtn.style.fontWeight = '600';
 
-              // Create placeholders and use IntersectionObserver for lazy loading
               const observer = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
                   if (entry.isIntersecting) {
@@ -356,20 +355,13 @@
               for (let i = 1; i <= numPages; i++) {
                 const wrapper = document.createElement('div');
                 wrapper.className = 'pdf-page-wrapper';
-                wrapper.style.minHeight = '800px';
-                wrapper.style.width = '100%';
-                wrapper.style.maxWidth = '800px';
-                wrapper.style.display = 'flex';
-                wrapper.style.flexDirection = 'column';
-                wrapper.style.justifyContent = 'center';
-                wrapper.style.alignItems = 'center';
-                wrapper.style.background = '#fff';
+                wrapper.style.cssText = 'background:#fff;border-radius:6px;box-shadow:0 4px 20px rgba(0,0,0,0.15);margin-bottom:20px;overflow:hidden;display:inline-flex;flex-direction:column;align-items:center;';
                 wrapper.dataset.pageIndex = i;
                 wrapper.dataset.loaded = 'false';
                 
                 wrapper.innerHTML = `
-                  <div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--label-3);font-size:14px;font-weight:600;">
-                    กำลังโหลดหน้า ${i}...
+                  <div style="padding:40px 60px;display:flex;align-items:center;justify-content:center;color:var(--label-3);font-size:14px;font-weight:600;">
+                    ⏳ กำลังโหลดหน้า ${i}...
                   </div>
                   <div style="width:100%;text-align:center;font-size:11px;color:var(--label-3);padding:6px 0;background:var(--bg-2);border-top:1px solid var(--sep)">
                     หน้า ${i} / ${numPages}
@@ -400,13 +392,15 @@
 
                   wrapper.innerHTML = '';
                   wrapper.style.minHeight = 'auto';
+                  wrapper.style.width = Math.floor(viewport.width) + 'px';
                   wrapper.appendChild(canvas);
                   
                   const label = document.createElement('div');
-                  label.style.cssText = 'text-align:center;font-size:11px;color:var(--label-3);padding:6px 0;background:var(--bg-2);border-top:1px solid var(--sep)';
+                  label.style.cssText = 'text-align:center;font-size:11px;color:var(--label-3);padding:6px 0;background:var(--bg-2);width:100%;border-top:1px solid var(--sep)';
                   label.textContent = `หน้า ${pageNum} / ${numPages}`;
                   wrapper.appendChild(label);
                 } catch (err) {
+                  if (err && err.name === 'RenderingCancelledException') return;
                   console.error('Error rendering page ' + pageNum, err);
                 }
               }
@@ -438,10 +432,17 @@
               const ctx = canvas.getContext('2d');
               const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null;
 
-              await page.render({ canvasContext: ctx, transform, viewport }).promise;
+              if (viewerRenderTask) {
+                try { viewerRenderTask.cancel(); } catch (_) {}
+                viewerRenderTask = null;
+              }
+
+              viewerRenderTask = page.render({ canvasContext: ctx, transform, viewport });
+              await viewerRenderTask.promise;
 
               const wrapper = document.createElement('div');
               wrapper.className = 'pdf-page-wrapper';
+              wrapper.style.width = Math.floor(viewport.width) + 'px';
               wrapper.appendChild(canvas);
               contentEl.appendChild(wrapper);
             }
@@ -455,20 +456,20 @@
           nextBtn.onclick = () => { if (currentPage < numPages) { currentPage++; renderDocument(); } };
 
           document.getElementById('viewer-zoom-in').onclick = () => {
-            currentScale = Math.min(2.5, currentScale + 0.15);
+            currentScale = Math.min(3.5, currentScale + 0.25);
             zoomVal.textContent = `${Math.round(currentScale * 100)}%`;
             renderDocument();
           };
 
           document.getElementById('viewer-zoom-out').onclick = () => {
-            currentScale = Math.max(0.3, currentScale - 0.15);
+            currentScale = Math.max(0.2, currentScale - 0.25);
             zoomVal.textContent = `${Math.round(currentScale * 100)}%`;
             renderDocument();
           };
 
           document.getElementById('viewer-zoom-fit').onclick = async () => {
             if (!pdfDoc) return;
-            const page = await pdfDoc.getPage(1);
+            const page = await pdfDoc.getPage(currentPage || 1);
             const vp = page.getViewport({ scale: 1.0 });
             const availW = Math.max(280, window.innerWidth - 60);
             currentScale = Math.max(0.3, Math.min(2.0, availW / vp.width));

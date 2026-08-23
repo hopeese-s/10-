@@ -2821,9 +2821,9 @@
 
       let currentPage = 1;
       let currentScale = 1.0;
-      let isRendering = false;
       let viewMode = 'page'; // 'page' or 'scroll'
       let renderedPages = {}; // cache for scroll mode
+      let currentRenderTask = null;
 
       bodyEl.innerHTML = `
         <div class="pdf-viewer-bar" style="position:sticky;top:0;z-index:15;background:var(--bg-1);border-bottom:1px solid var(--sep);padding:8px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
@@ -2858,9 +2858,9 @@
 
         <div id="pdf-page-container" style="display:block;text-align:center;padding:16px 8px;background:var(--bg-3);overflow-y:auto;overflow-x:auto;-webkit-overflow-scrolling:touch;min-height:350px;max-height:calc(90vh - 170px)">
           <div id="pdf-single-page-wrapper" style="display:inline-block;position:relative;background:#fff;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.15);overflow:hidden;margin:0 auto;text-align:left">
-            <canvas id="pdf-canvas" style="display:block;max-width:100%;height:auto"></canvas>
+            <canvas id="pdf-canvas" style="display:block;margin:0 auto"></canvas>
           </div>
-          <div id="pdf-scroll-container" style="display:none;flex-direction:column;align-items:center;gap:16px;width:100%;max-width:100%;margin:0 auto"></div>
+          <div id="pdf-scroll-container" style="display:none;flex-direction:column;align-items:center;gap:16px;width:100%;margin:0 auto"></div>
         </div>
       `;
 
@@ -2877,13 +2877,15 @@
       // Calculate initial auto-fit scale
       const firstPage = await pdf.getPage(1);
       const initialVp = firstPage.getViewport({ scale: 1.0 });
-      const availableWidth = Math.max(280, (bodyEl.clientWidth || window.innerWidth * 0.9) - 48);
-      currentScale = Math.min(1.3, Math.max(0.4, availableWidth / initialVp.width));
+      const availableWidth = Math.max(260, (container.clientWidth || window.innerWidth * 0.9) - 36);
+      currentScale = Math.min(1.5, Math.max(0.3, availableWidth / initialVp.width));
       if (zoomValEl) zoomValEl.textContent = `${Math.round(currentScale * 100)}%`;
 
       async function renderCurrentPage() {
-        if (isRendering) return;
-        isRendering = true;
+        if (currentRenderTask) {
+          try { currentRenderTask.cancel(); } catch (_) {}
+          currentRenderTask = null;
+        }
 
         if (prevBtn) prevBtn.disabled = (currentPage <= 1);
         if (nextBtn) nextBtn.disabled = (currentPage >= numPages);
@@ -2898,6 +2900,13 @@
           canvas.height = Math.floor(viewport.height * outputScale);
           canvas.style.width = Math.floor(viewport.width) + "px";
           canvas.style.height = Math.floor(viewport.height) + "px";
+          canvas.style.display = "block";
+          canvas.style.maxWidth = "none";
+
+          if (singleWrapper) {
+            singleWrapper.style.width = Math.floor(viewport.width) + "px";
+            singleWrapper.style.maxWidth = "none";
+          }
 
           const context = canvas.getContext('2d');
           const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null;
@@ -2908,18 +2917,19 @@
             viewport: viewport
           };
 
-          await page.render(renderContext).promise;
+          currentRenderTask = page.render(renderContext);
+          await currentRenderTask.promise;
         } catch (e) {
+          if (e && e.name === 'RenderingCancelledException') return;
           console.error('Error rendering page:', e);
         } finally {
-          isRendering = false;
+          currentRenderTask = null;
         }
       }
 
       async function renderAllPagesScroll() {
         scrollContainer.innerHTML = '';
         renderedPages = {};
-        isRendering = true;
 
         for (let i = 1; i <= numPages; i++) {
           try {
@@ -2933,8 +2943,7 @@
             pageCanvas.style.width = Math.floor(viewport.width) + "px";
             pageCanvas.style.height = Math.floor(viewport.height) + "px";
             pageCanvas.style.display = 'block';
-            pageCanvas.style.maxWidth = '100%';
-            pageCanvas.style.height = 'auto';
+            pageCanvas.style.maxWidth = 'none';
 
             const ctx = pageCanvas.getContext('2d');
             const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null;
@@ -2946,7 +2955,7 @@
             }).promise;
 
             const wrapper = document.createElement('div');
-            wrapper.style.cssText = 'background:#fff;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.15);overflow:hidden;width:100%;max-width:100%;text-align:center;display:flex;flex-direction:column;align-items:center;';
+            wrapper.style.cssText = `background:#fff;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.15);overflow:hidden;width:${Math.floor(viewport.width)}px;max-width:none;text-align:center;margin:0 auto;display:flex;flex-direction:column;align-items:center;`;
             wrapper.appendChild(pageCanvas);
 
             const pageLabel = document.createElement('div');
@@ -2957,11 +2966,10 @@
             scrollContainer.appendChild(wrapper);
             renderedPages[i] = true;
           } catch (e) {
+            if (e && e.name === 'RenderingCancelledException') continue;
             console.error('Error rendering page ' + i + ':', e);
           }
         }
-        isRendering = false;
-        container.scrollTop = 0;
       }
 
       function switchViewMode(mode) {
@@ -2987,9 +2995,7 @@
           if (pageModeBtn) { pageModeBtn.style.background = ''; pageModeBtn.style.color = ''; pageModeBtn.style.fontWeight = '600'; }
           if (scrollModeBtn) { scrollModeBtn.style.background = 'var(--accent-bg)'; scrollModeBtn.style.color = 'var(--accent)'; scrollModeBtn.style.fontWeight = '700'; }
           container.scrollTop = 0;
-          if (Object.keys(renderedPages).length === 0) {
-            renderAllPagesScroll();
-          }
+          renderAllPagesScroll();
         }
       }
 
@@ -3025,29 +3031,29 @@
         await renderCurrentPage();
       });
 
-      // Zoom handlers
+      // Zoom handlers (supports smooth scaling & cancels pending renders)
       bodyEl.querySelector('#pdf-zoom-in')?.addEventListener('click', async () => {
-        currentScale = Math.min(2.5, currentScale + 0.15);
+        currentScale = Math.min(3.5, currentScale + 0.25);
         if (zoomValEl) zoomValEl.textContent = `${Math.round(currentScale * 100)}%`;
-        if (viewMode === 'scroll') { renderedPages = {}; await renderAllPagesScroll(); }
-        else await renderCurrentPage();
+        if (viewMode === 'scroll') { await renderAllPagesScroll(); }
+        else { await renderCurrentPage(); }
       });
 
       bodyEl.querySelector('#pdf-zoom-out')?.addEventListener('click', async () => {
-        currentScale = Math.max(0.3, currentScale - 0.15);
+        currentScale = Math.max(0.2, currentScale - 0.25);
         if (zoomValEl) zoomValEl.textContent = `${Math.round(currentScale * 100)}%`;
-        if (viewMode === 'scroll') { renderedPages = {}; await renderAllPagesScroll(); }
-        else await renderCurrentPage();
+        if (viewMode === 'scroll') { await renderAllPagesScroll(); }
+        else { await renderCurrentPage(); }
       });
 
       bodyEl.querySelector('#pdf-zoom-fit')?.addEventListener('click', async () => {
-        const page = await pdf.getPage(1);
+        const page = await pdf.getPage(currentPage);
         const vp = page.getViewport({ scale: 1.0 });
-        const availableW = Math.max(280, (bodyEl.clientWidth || window.innerWidth * 0.9) - 48);
-        currentScale = Math.max(0.3, Math.min(2.0, availableW / vp.width));
+        const availableW = Math.max(260, (container.clientWidth || window.innerWidth * 0.9) - 36);
+        currentScale = Math.max(0.2, Math.min(2.5, availableW / vp.width));
         if (zoomValEl) zoomValEl.textContent = `${Math.round(currentScale * 100)}%`;
-        if (viewMode === 'scroll') { renderedPages = {}; await renderAllPagesScroll(); }
-        else await renderCurrentPage();
+        if (viewMode === 'scroll') { await renderAllPagesScroll(); }
+        else { await renderCurrentPage(); }
       });
 
       // Keyboard left/right arrows for page turning (page mode only)

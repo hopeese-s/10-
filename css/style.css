@@ -2522,15 +2522,17 @@ body {
   border-radius: 6px;
   overflow: hidden;
   background: #ffffff;
-  display: flex;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  max-width: 100%;
+  max-width: none;
 }
 
 .pdf-page-wrapper canvas {
   display: block;
-  max-width: 100%;
-  height: auto !important;
+  max-width: none !important;
+  height: auto;
 }
 
 .pdf-loading-spinner {
