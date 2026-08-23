@@ -1316,7 +1316,7 @@ const server = http.createServer(async (req, res) => {
           success: false,
           sent: 0,
           totalDevices: subs.length,
-          error: 'ส่งไม่สำเร็จ (Token อาจหมดอายุ) กรุณากดปุ่ม "เปิดบนเครื่องนี้" เพื่อรีเฟรชการเชื่อมต่อ'
+          error: `ส่งไม่สำเร็จ (${lastErr || 'Token อาจหมดอายุ'}) กรุณากดปุ่ม "ต่ออายุ Token" เพื่อรีเฟรชการเชื่อมต่อ`
         }));
         return;
       }

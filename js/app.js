@@ -2648,31 +2648,38 @@
       if (statusIcon) statusIcon.textContent = '🟢';
       if (statusHeading) statusHeading.textContent = 'เปิดการแจ้งเตือนบนเครื่องนี้แล้ว';
       if (statusDesc) statusDesc.textContent = `📱 มี ${deviceCount} อุปกรณ์ที่ผูกกับบัญชีนี้ (จะเด้งพร้อมกันทุกเครื่อง)`;
-      if (enableBtn) enableBtn.style.display = 'none';
+      if (enableBtn) {
+        enableBtn.style.display = 'inline-block';
+        enableBtn.textContent = '🔄 ต่ออายุ Token';
+      }
     } else {
       if (statusIcon) statusIcon.textContent = '⚪';
       if (statusHeading) statusHeading.textContent = 'ยังไม่ได้เปิดบนเครื่องนี้';
       if (statusDesc) statusDesc.textContent = 'คลิกปุ่มเพื่อเปิดรับการแจ้งเตือนเตือนคาบเรียนล่วงหน้า 15 นาที';
       if (enableBtn) {
         enableBtn.style.display = 'inline-block';
-        enableBtn.onclick = async () => {
-          enableBtn.disabled = true;
-          enableBtn.textContent = 'กำลังเปิด...';
-          const subRes = await PushClient.subscribe();
-          if (subRes.ok) {
-            showToast('🔔 เปิดการแจ้งเตือนบนเครื่องนี้สำเร็จ!', 'success');
-            openPushModal();
-          } else if (subRes.isIOSPrompt) {
-            alert('📱 คำแนะนำสำหรับ iPhone / iPad:\n\n1. กดปุ่มแชร์ (Share) ที่แถบด้านล่างของ Safari\n2. เลือก "เพิ่มไปยังหน้าจอโฮม" (Add to Home Screen)\n3. เปิดแอป E-Calendar จากหน้าจอโฮม แล้วกดปุ่ม 🔔 อีกครั้งเพื่อเปิดการแจ้งเตือนครับ');
-            enableBtn.disabled = false;
-            enableBtn.textContent = 'เปิดบนเครื่องนี้';
-          } else {
-            showToast(`❌ ${subRes.error}`, 'error');
-            enableBtn.disabled = false;
-            enableBtn.textContent = 'เปิดบนเครื่องนี้';
-          }
-        };
+        enableBtn.textContent = 'เปิดบนเครื่องนี้';
       }
+    }
+
+    if (enableBtn) {
+      enableBtn.onclick = async () => {
+        enableBtn.disabled = true;
+        enableBtn.textContent = 'กำลังเชื่อมต่อ...';
+        const subRes = await PushClient.subscribe();
+        if (subRes.ok) {
+          showToast('🔔 อัปเดตและต่ออายุ Token เครื่องนี้สำเร็จ!', 'success');
+          await openPushModal();
+        } else if (subRes.isIOSPrompt) {
+          alert('📱 คำแนะนำสำหรับ iPhone / iPad:\n\n1. กดปุ่มแชร์ (Share) ที่แถบด้านล่างของ Safari\n2. เลือก "เพิ่มไปยังหน้าจอโฮม" (Add to Home Screen)\n3. เปิดแอป E-Calendar จากหน้าจอโฮม แล้วกดปุ่ม 🔔 อีกครั้งเพื่อเปิดการแจ้งเตือนครับ');
+          enableBtn.disabled = false;
+          enableBtn.textContent = pushStatus.subscribed ? '🔄 ต่ออายุ Token' : 'เปิดบนเครื่องนี้';
+        } else {
+          showToast(`❌ ${subRes.error}`, 'error');
+          enableBtn.disabled = false;
+          enableBtn.textContent = pushStatus.subscribed ? '🔄 ต่ออายุ Token' : 'เปิดบนเครื่องนี้';
+        }
+      };
     }
 
     // Broadcast test button
@@ -2680,15 +2687,25 @@
       broadcastBtn.onclick = async () => {
         broadcastBtn.disabled = true;
         broadcastBtn.textContent = '⚡ กำลังยิงการแจ้งเตือนไปยังทุกเครื่อง...';
-        if (resultEl) resultEl.textContent = '📡 กำลังส่งข้อมูลไปยังเซิร์ฟเวอร์...';
+        if (resultEl) resultEl.innerHTML = '📡 กำลังส่งข้อมูลไปยังเซิร์ฟเวอร์...';
 
         const testRes = await PushClient.testNotification();
-        if (testRes.ok) {
+        if (testRes.ok && (testRes.sent > 0 || !testRes.error)) {
           showToast(`🚀 ยิงแจ้งเตือนถึง ${testRes.sent || 1} อุปกรณ์สำเร็จ!`, 'success');
-          if (resultEl) resultEl.textContent = `✅ ส่งแจ้งเตือนถึง ${testRes.sent || 1}/${testRes.totalDevices || 1} อุปกรณ์พร้อมกันเรียบร้อยแล้ว! 🎉`;
+          if (resultEl) resultEl.innerHTML = `✅ ส่งแจ้งเตือนถึง ${testRes.sent || 1}/${testRes.totalDevices || 1} อุปกรณ์พร้อมกันเรียบร้อยแล้ว! 🎉`;
         } else {
           showToast(`⚠️ ${testRes.error || 'ส่งแจ้งเตือนไม่สำเร็จ'}`, 'warning');
-          if (resultEl) resultEl.textContent = `❌ ${testRes.error || 'เกิดข้อผิดพลาดในการส่ง'}`;
+          if (resultEl) {
+            resultEl.innerHTML = `
+              <div style="color:#ef4444;font-size:11.5px;margin-bottom:6px">❌ ${testRes.error || 'เกิดข้อผิดพลาดในการส่ง'}</div>
+              <button id="push-auto-renew-btn" class="btn btn-secondary" style="font-size:11px;padding:5px 12px;background:var(--bg-1);cursor:pointer">
+                🔧 ซ่อมแซม & ต่ออายุ Token เดี๋ยวนี้
+              </button>
+            `;
+            document.getElementById('push-auto-renew-btn')?.addEventListener('click', async () => {
+              if (enableBtn) enableBtn.click();
+            });
+          }
         }
 
         broadcastBtn.disabled = false;
