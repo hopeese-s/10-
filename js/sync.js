@@ -7,7 +7,7 @@ const CloudSync = (function () {
   'use strict';
 
   // Dynamic host determination: always use current origin
-  const BASE_URL = typeof window !== 'undefined' && window.location ? window.location.origin : 'https://daily-study-dashboard-production.up.railway.app';
+  const BASE_URL = typeof window !== 'undefined' && window.location ? window.location.origin : 'https://e-calen.up.railway.app';
   const SYNC_API = `${BASE_URL}/api/sync`;
   const AUTH_API = `${BASE_URL}/api/auth`;
   const CAL_API  = `${BASE_URL}/api/calendar`;

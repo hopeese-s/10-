@@ -22,6 +22,7 @@ if (!fs.existsSync(UPLOAD_DIR)) {
 // ─── Environment & Cloud Configuration ────────────────────────
 const IS_PRODUCTION = process.env.NODE_ENV === 'production' || Boolean(process.env.RAILWAY_ENVIRONMENT) || Boolean(process.env.RENDER);
 const STRICT_CLOUD_MODE = process.env.STRICT_CLOUD_MODE === 'true';
+const APP_BASE_URL = (process.env.APP_BASE_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : 'https://e-calen.up.railway.app')).replace(/\/$/, '');
 
 // ─── Cloudflare R2 S3 Storage Adapter ─────────────────────────
 let r2Client = null;
@@ -880,7 +881,7 @@ function buildScheduleFlex(dayTitle, dateStr, classesList, routineList) {
             action: {
               type: 'uri',
               label: '🌐 เปิด E-Calendar Dashboard',
-              uri: 'https://daily-study-dashboard-production.up.railway.app'
+              uri: APP_BASE_URL
             },
             style: 'primary',
             color: '#C45A1B',
@@ -977,7 +978,7 @@ function buildCourseProfileFlex(course) {
     action: {
       type: 'uri',
       label: '🌐 เปิดดูชีท & เอกสาร',
-      uri: 'https://daily-study-dashboard-production.up.railway.app'
+      uri: APP_BASE_URL
     },
     style: 'secondary',
     height: 'sm'
@@ -1232,7 +1233,7 @@ function buildClassroomDirectoryFlex(curriculum, studyLinks) {
             action: {
               type: 'uri',
               label: '🌐 คลังความรู้ & ไฟล์ชีททั้งหมด',
-              uri: 'https://daily-study-dashboard-production.up.railway.app'
+              uri: APP_BASE_URL
             },
             style: 'secondary',
             height: 'sm'
@@ -1535,7 +1536,7 @@ function buildClassReminderFlex(course, timeUntilStr = 'อีก 15 นาท�
             action: {
               type: 'uri',
               label: '📖 ดูเอกสารการเรียน & Dashboard',
-              uri: course.classroomUrl || 'https://daily-study-dashboard-production.up.railway.app'
+              uri: course.classroomUrl || APP_BASE_URL
             },
             style: 'secondary',
             height: 'sm'
