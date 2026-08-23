@@ -188,15 +188,14 @@ const dbAdapter = {
       try {
         const { data, error } = await supabase
           .from('user_sync_data')
-          .select('data, version, updated_at')
+          .select('*')
           .eq('user_id', String(userId))
-          .order('updated_at', { ascending: false })
           .limit(1);
         if (!error && data && data.length > 0 && data[0].data) {
           return {
             ...data[0].data,
-            version: data[0].version,
-            updatedAt: data[0].updated_at
+            version: data[0].version || data[0].data.version || 0,
+            updatedAt: data[0].updated_at || data[0].data.updatedAt || new Date().toISOString()
           };
         }
       } catch (err) {
@@ -221,9 +220,18 @@ const dbAdapter = {
       };
 
       try {
-        const { error: upsertErr } = await supabase
+        let { error: upsertErr } = await supabase
           .from('user_sync_data')
           .upsert(record, { onConflict: 'user_id' });
+
+        // If it failed because columns don't exist, try minimal record
+        if (upsertErr && upsertErr.message && upsertErr.message.includes('column')) {
+          console.warn(`⚠️ Supabase missing columns for [${userId}], using minimal schema.`);
+          delete record.version;
+          delete record.updated_at;
+          const retry = await supabase.from('user_sync_data').upsert(record, { onConflict: 'user_id' });
+          upsertErr = retry.error;
+        }
 
         if (upsertErr) {
           console.warn(`⚠️ Supabase saveUserData upsert notice for [${userId}]:`, upsertErr.message);
@@ -263,12 +271,17 @@ const dbAdapter = {
     if (supabase) {
       try {
         await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
-        await supabase.from('push_subscriptions').insert({
+        const pushRecord = {
           user_id: String(userId),
           endpoint: endpoint,
           subscription_data: subscription,
           created_at: new Date().toISOString()
-        });
+        };
+        const { error: insErr } = await supabase.from('push_subscriptions').insert(pushRecord);
+        if (insErr && insErr.message && insErr.message.includes('column')) {
+          delete pushRecord.created_at;
+          await supabase.from('push_subscriptions').insert(pushRecord);
+        }
       } catch (err) {
         console.warn('⚠️ Supabase savePushSubscription error:', err.message);
       }
@@ -324,7 +337,6 @@ const dbAdapter = {
           .from('user_sync_data')
           .select('data')
           .eq('user_id', '__system_auth__')
-          .order('updated_at', { ascending: false })
           .limit(1);
         if (!error && data && data.length > 0 && data[0].data) {
           const authData = data[0].data;
@@ -360,24 +372,28 @@ const dbAdapter = {
       };
 
       try {
-        const { error: upsertErr } = await supabase
+        const record = {
+          user_id: '__system_auth__',
+          data: payload,
+          version: 1,
+          updated_at: new Date().toISOString()
+        };
+        let { error: upsertErr } = await supabase
           .from('user_sync_data')
-          .upsert({
-            user_id: '__system_auth__',
-            data: payload,
-            version: 1,
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'user_id' });
+          .upsert(record, { onConflict: 'user_id' });
+
+        if (upsertErr && upsertErr.message && upsertErr.message.includes('column')) {
+          console.warn('⚠️ Supabase missing columns for system_auth, using minimal schema.');
+          delete record.version;
+          delete record.updated_at;
+          const retry = await supabase.from('user_sync_data').upsert(record, { onConflict: 'user_id' });
+          upsertErr = retry.error;
+        }
 
         if (upsertErr) {
           console.warn('⚠️ Supabase saveSystemAuth upsert error, trying fallback delete+insert:', upsertErr.message);
           await supabase.from('user_sync_data').delete().eq('user_id', '__system_auth__');
-          const { error: insertErr } = await supabase.from('user_sync_data').insert({
-            user_id: '__system_auth__',
-            data: payload,
-            version: 1,
-            updated_at: new Date().toISOString()
-          });
+          const { error: insertErr } = await supabase.from('user_sync_data').insert(record);
           if (insertErr) {
             console.error('❌ Supabase saveSystemAuth fallback insert error:', insertErr.message);
           } else {
@@ -1177,7 +1193,7 @@ const server = http.createServer(async (req, res) => {
       try {
         const { data, error } = await supabase
           .from('user_sync_data')
-          .select('user_id, updated_at')
+          .select('user_id')
           .limit(10);
         if (error) {
           supabaseDiagnostics.table_status = 'error';
