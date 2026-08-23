@@ -657,6 +657,56 @@
           <button class="btn btn-primary" id="share-generate-btn" style="padding:8px 22px">✨ สร้างลิงก์แชร์</button>
         </div>
       </div>
+    <!-- ─── Web Push Notifications Control & Broadcast Test Modal ─── -->
+    <div class="modal-overlay" id="push-modal" role="dialog" aria-modal="true" aria-labelledby="push-modal-title" style="display:none">
+      <div class="modal-box" style="max-width:480px">
+        <div class="modal-header">
+          <span class="modal-title" id="push-modal-title">🔔 ระบบแจ้งเตือน (Web Push)</span>
+          <button class="modal-close" id="push-modal-close" aria-label="ปิด">✕</button>
+        </div>
+        <div class="modal-body">
+          <!-- Status Banner -->
+          <div id="push-device-status-banner" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--bg-3);border-radius:var(--r-m);border:1px solid var(--sep);margin-bottom:14px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:22px" id="push-status-icon">🔔</span>
+              <div>
+                <div style="font-size:13px;font-weight:700;color:var(--label)" id="push-status-heading">สถานะการแจ้งเตือน</div>
+                <div style="font-size:11.5px;color:var(--label-2)" id="push-status-desc">กำลังตรวจสอบ...</div>
+              </div>
+            </div>
+            <button class="btn btn-secondary" id="push-enable-device-btn" style="font-size:11.5px;padding:6px 12px;display:none">
+              เปิดบนเครื่องนี้
+            </button>
+          </div>
+
+          <!-- Broadcast Action Card -->
+          <div style="background:linear-gradient(135deg, rgba(224,122,56,0.12), rgba(224,122,56,0.04));border:1px solid rgba(224,122,56,0.28);border-radius:var(--r-m);padding:16px;margin-bottom:14px;text-align:center">
+            <div style="font-size:13.5px;font-weight:700;color:var(--label);margin-bottom:4px">
+              🚀 ทดสอบยิงแจ้งเตือนทุกอุปกรณ์ (Cross-Device)
+            </div>
+            <p style="font-size:11.5px;color:var(--label-2);line-height:1.45;margin-bottom:12px">
+              กดปุ่มนี้เพื่อส่งการแจ้งเตือนไปยัง <strong>ทุกอุปกรณ์</strong> (iPhone, iPad, Mac, PC) ที่ผูกกับบัญชีนี้พร้อมกันทันที
+            </p>
+            <button class="btn btn-primary" id="push-broadcast-test-btn" style="width:100%;padding:10px 18px;font-size:13px;font-weight:700;box-shadow:0 4px 14px rgba(224,122,56,0.3);cursor:pointer">
+              ⚡ ยิงแจ้งเตือนทดสอบทุกเครื่องเดี๋ยวนี้
+            </button>
+            <div id="push-broadcast-result" style="font-size:11.5px;font-weight:600;color:var(--accent);margin-top:8px;min-height:16px"></div>
+          </div>
+
+          <!-- Feature Description -->
+          <div style="font-size:12px;color:var(--label-2);line-height:1.5;background:var(--bg-2);padding:12px 14px;border-radius:var(--r-m);border:1px solid var(--sep)">
+            <div style="font-weight:700;color:var(--label);margin-bottom:4px">⏰ ตารางการแจ้งเตือนอัตโนมัติ:</div>
+            <ul style="padding-left:18px;margin:0">
+              <li>ระบบส่ง Push Notification แจ้งเตือนล่วงหน้า <strong>15 นาที</strong> ก่อนเริ่มคาบเรียน</li>
+              <li>ระบุชื่อวิชา รหัสวิชา และห้องเรียนครบถ้วน</li>
+              <li>ทำงานในพื้นหลังแบบ Real-Time แม้ปิดหน้าเว็บ</li>
+            </ul>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="push-modal-cancel-btn">ปิด</button>
+        </div>
+      </div>
     </div>
 
     <!-- ─── Toast ─── -->

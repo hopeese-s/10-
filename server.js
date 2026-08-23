@@ -1095,6 +1095,20 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ─── API: Web Push Subscription Status (GET /api/push/status) ───
+  if (pathname === '/api/push/status' && req.method === 'GET') {
+    res.setHeader('Cache-Control', 'no-store');
+    const ownerId = resolveOwnerId({});
+    const subs = await dbAdapter.getPushSubscriptions(ownerId);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      configured: Boolean(webpush && vapidKeys.publicKey),
+      deviceCount: subs.length,
+      ownerId
+    }));
+    return;
+  }
+
   // ─── API: Web Push Subscribe (POST /api/push/subscribe) ───
   if (pathname === '/api/push/subscribe' && req.method === 'POST') {
     parseJsonBody(async (err, data) => {
@@ -1107,13 +1121,19 @@ const server = http.createServer(async (req, res) => {
       const ownerId = resolveOwnerId(data);
       await dbAdapter.savePushSubscription(ownerId, data.subscription);
 
+      const subs = await dbAdapter.getPushSubscriptions(ownerId);
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, message: 'Push subscription saved' }));
+      res.end(JSON.stringify({
+        success: true,
+        message: 'Push subscription saved',
+        deviceCount: subs.length
+      }));
     });
     return;
   }
 
-  // ─── API: Web Push Test (POST /api/push/test) ───
+  // ─── API: Web Push Test / Broadcast (POST /api/push/test) ───
   if (pathname === '/api/push/test' && req.method === 'POST') {
     parseJsonBody(async (err, data) => {
       const ownerId = resolveOwnerId(data);
@@ -1121,28 +1141,37 @@ const server = http.createServer(async (req, res) => {
 
       if (!webpush || !vapidKeys.publicKey || subs.length === 0) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'No active push subscriptions or VAPID not configured' }));
+        res.end(JSON.stringify({
+          error: 'ยังไม่มีอุปกรณ์ที่ลงทะเบียนรับการแจ้งเตือนไว้ กรุณากดเปิดใช้งานการแจ้งเตือนบนอุปกรณ์นี้ก่อน'
+        }));
         return;
       }
 
+      const title = data.title || '🔔 E-Calendar: ทดสอบแจ้งเตือนทุกอุปกรณ์!';
+      const body = data.body || `กำลังส่งแจ้งเตือนไปยัง ${subs.length} อุปกรณ์ของคุณพร้อมกัน 🎉`;
+
       const payload = JSON.stringify({
-        title: '🔔 E-Calendar: ทดสอบการแจ้งเตือนสำเร็จ!',
-        body: 'ระบบแจ้งเตือนเตือนคาบเรียนล่วงหน้า 15 นาทีพร้อมใช้งานแล้ว 🎉',
+        title,
+        body,
         icon: '/icons/icon-192.png',
         badge: '/icons/icon-192.png',
         data: { url: '/' }
       });
 
       let sent = 0;
-      for (const sub of subs) {
+      const sendPromises = subs.map(async (sub) => {
         try {
           await webpush.sendNotification(sub, payload);
           sent++;
-        } catch (_) {}
-      }
+        } catch (pushErr) {
+          console.warn('Push delivery error to endpoint:', pushErr.statusCode);
+        }
+      });
+
+      await Promise.allSettled(sendPromises);
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, sent }));
+      res.end(JSON.stringify({ success: true, sent, totalDevices: subs.length }));
     });
     return;
   }

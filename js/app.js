@@ -2582,6 +2582,97 @@
     document.body.style.overflow = 'hidden';
   }
 
+  async function openPushModal() {
+    const modal = document.getElementById('push-modal');
+    if (!modal) return;
+
+    const statusHeading = document.getElementById('push-status-heading');
+    const statusDesc = document.getElementById('push-status-desc');
+    const statusIcon = document.getElementById('push-status-icon');
+    const enableBtn = document.getElementById('push-enable-device-btn');
+    const broadcastBtn = document.getElementById('push-broadcast-test-btn');
+    const resultEl = document.getElementById('push-broadcast-result');
+
+    if (resultEl) resultEl.textContent = '';
+
+    const pushStatus = window.PushClient ? PushClient.getStatus() : { supported: false, subscribed: false };
+
+    // Fetch total device count from backend
+    let deviceCount = 1;
+    try {
+      const authToken = localStorage.getItem('sd-auth-token') || '';
+      const syncKey = (window.CloudSync && CloudSync.getSyncKey()) || '1';
+      const res = await fetch('/api/push/status', {
+        headers: {
+          ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
+          'X-Sync-Key': syncKey
+        }
+      });
+      const data = await res.json();
+      if (data && typeof data.deviceCount === 'number') {
+        deviceCount = Math.max(1, data.deviceCount);
+      }
+    } catch (_) {}
+
+    if (pushStatus.subscribed) {
+      if (statusIcon) statusIcon.textContent = '🟢';
+      if (statusHeading) statusHeading.textContent = 'เปิดการแจ้งเตือนบนเครื่องนี้แล้ว';
+      if (statusDesc) statusDesc.textContent = `📱 มี ${deviceCount} อุปกรณ์ที่ผูกกับบัญชีนี้ (จะเด้งพร้อมกันทุกเครื่อง)`;
+      if (enableBtn) enableBtn.style.display = 'none';
+    } else {
+      if (statusIcon) statusIcon.textContent = '⚪';
+      if (statusHeading) statusHeading.textContent = 'ยังไม่ได้เปิดบนเครื่องนี้';
+      if (statusDesc) statusDesc.textContent = 'คลิกปุ่มเพื่อเปิดรับการแจ้งเตือนเตือนคาบเรียนล่วงหน้า 15 นาที';
+      if (enableBtn) {
+        enableBtn.style.display = 'inline-block';
+        enableBtn.onclick = async () => {
+          enableBtn.disabled = true;
+          enableBtn.textContent = 'กำลังเปิด...';
+          const subRes = await PushClient.subscribe();
+          if (subRes.ok) {
+            showToast('🔔 เปิดการแจ้งเตือนบนเครื่องนี้สำเร็จ!', 'success');
+            openPushModal();
+          } else if (subRes.isIOSPrompt) {
+            alert('📱 คำแนะนำสำหรับ iPhone / iPad:\n\n1. กดปุ่มแชร์ (Share) ที่แถบด้านล่างของ Safari\n2. เลือก "เพิ่มไปยังหน้าจอโฮม" (Add to Home Screen)\n3. เปิดแอป E-Calendar จากหน้าจอโฮม แล้วกดปุ่ม 🔔 อีกครั้งเพื่อเปิดการแจ้งเตือนครับ');
+            enableBtn.disabled = false;
+            enableBtn.textContent = 'เปิดบนเครื่องนี้';
+          } else {
+            showToast(`❌ ${subRes.error}`, 'error');
+            enableBtn.disabled = false;
+            enableBtn.textContent = 'เปิดบนเครื่องนี้';
+          }
+        };
+      }
+    }
+
+    // Broadcast test button
+    if (broadcastBtn) {
+      broadcastBtn.onclick = async () => {
+        broadcastBtn.disabled = true;
+        broadcastBtn.textContent = '⚡ กำลังยิงการแจ้งเตือนไปยังทุกเครื่อง...';
+        if (resultEl) resultEl.textContent = '📡 กำลังส่งข้อมูลไปยังเซิร์ฟเวอร์...';
+
+        const testRes = await PushClient.testNotification();
+        if (testRes.ok) {
+          showToast(`🚀 ยิงแจ้งเตือนถึง ${testRes.sent || 1} อุปกรณ์สำเร็จ!`, 'success');
+          if (resultEl) resultEl.textContent = `✅ ส่งแจ้งเตือนถึง ${testRes.sent || 1} อุปกรณ์พร้อมกันเรียบร้อยแล้ว! 🎉`;
+        } else {
+          showToast(`⚠️ ${testRes.error || 'ส่งแจ้งเตือนไม่สำเร็จ'}`, 'warning');
+          if (resultEl) resultEl.textContent = `❌ ${testRes.error || 'เกิดข้อผิดพลาดในการส่ง'}`;
+        }
+
+        broadcastBtn.disabled = false;
+        broadcastBtn.textContent = '⚡ ยิงแจ้งเตือนทดสอบทุกเครื่องเดี๋ยวนี้';
+      };
+    }
+
+    document.getElementById('push-modal-close').onclick = () => closeModal('push-modal');
+    document.getElementById('push-modal-cancel-btn').onclick = () => closeModal('push-modal');
+
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
   // Check URL params on startup for shared bundle token
   async function checkPublicShareRoute() {
     const urlParams = new URLSearchParams(window.location.search);
@@ -4132,16 +4223,22 @@
     // Calendar & Auth & Push header buttons
     document.getElementById('push-notify-btn')?.addEventListener('click', async () => {
       if (window.PushClient) {
-        showToast('กำลังขออนุญาตเปิดการแจ้งเตือน...', 'info');
-        const res = await PushClient.subscribe();
-        if (res.ok) {
-          showToast('🔔 เปิดการแจ้งเตือนเตือนคาบเรียนล่วงหน้า 15 นาทีสำเร็จ!', 'success');
-          // Send instant test notification
-          await PushClient.testNotification();
-        } else if (res.isIOSPrompt) {
-          alert('📱 คำแนะนำสำหรับ iPhone / iPad:\n\n1. กดปุ่มแชร์ (Share) ที่แถบด้านล่างของ Safari\n2. เลือก "เพิ่มไปยังหน้าจอโฮม" (Add to Home Screen)\n3. เปิดแอป E-Calendar จากหน้าจอโฮม แล้วกดปุ่ม 🔔 อีกครั้งเพื่อเปิดการแจ้งเตือนครับ');
+        const status = PushClient.getStatus();
+        if (!status.subscribed) {
+          showToast('กำลังขออนุญาตเปิดการแจ้งเตือน...', 'info');
+          const res = await PushClient.subscribe();
+          if (res.ok) {
+            showToast('🔔 เปิดการแจ้งเตือนสำเร็จ!', 'success');
+            await PushClient.testNotification();
+            openPushModal();
+          } else if (res.isIOSPrompt) {
+            alert('📱 คำแนะนำสำหรับ iPhone / iPad:\n\n1. กดปุ่มแชร์ (Share) ที่แถบด้านล่างของ Safari\n2. เลือก "เพิ่มไปยังหน้าจอโฮม" (Add to Home Screen)\n3. เปิดแอป E-Calendar จากหน้าจอโฮม แล้วกดปุ่ม 🔔 อีกครั้งเพื่อเปิดการแจ้งเตือนครับ');
+          } else {
+            showToast(`❌ ${res.error || 'เปิดการแจ้งเตือนไม่สำเร็จ'}`, 'error');
+            openPushModal();
+          }
         } else {
-          showToast(`❌ ${res.error || 'เปิดการแจ้งเตือนไม่สำเร็จ'}`, 'error');
+          openPushModal();
         }
       } else {
         showToast('เบราว์เซอร์ไม่รองรับการแจ้งเตือน', 'error');
