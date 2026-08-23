@@ -26,6 +26,44 @@ const PushClient = (() => {
     return outputArray;
   }
 
+  async function syncCurrentSubscription() {
+    try {
+      if (!swRegistration) {
+        swRegistration = await navigator.serviceWorker.ready;
+      }
+      const pushManager = (swRegistration && swRegistration.pushManager) || window.pushManager;
+      if (!pushManager) return null;
+
+      const subscription = await pushManager.getSubscription();
+      if (!subscription) {
+        isSubscribed = false;
+        return null;
+      }
+
+      isSubscribed = true;
+      const syncKey = (window.CloudSync && CloudSync.getSyncKey()) || '1';
+      const authToken = localStorage.getItem('sd-auth-token') || '';
+
+      const subRes = await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
+          'X-Sync-Key': syncKey
+        },
+        body: JSON.stringify({ subscription, syncKey })
+      });
+
+      if (subRes.ok) {
+        const data = await subRes.json();
+        return { ok: true, deviceCount: data.deviceCount };
+      }
+    } catch (e) {
+      console.warn('Subscription sync notice:', e);
+    }
+    return null;
+  }
+
   async function init() {
     if (!('serviceWorker' in navigator)) {
       isPushSupported = false;
@@ -40,6 +78,9 @@ const PushClient = (() => {
       if (isPushSupported && swRegistration.pushManager) {
         const subscription = await swRegistration.pushManager.getSubscription();
         isSubscribed = (subscription !== null);
+        if (subscription) {
+          syncCurrentSubscription();
+        }
       }
       return true;
     } catch (e) {
@@ -63,7 +104,6 @@ const PushClient = (() => {
     }
 
     try {
-      // Ensure Service Worker is registered & ready
       if (!swRegistration) {
         swRegistration = await navigator.serviceWorker.register('./sw.js');
       }
@@ -119,7 +159,8 @@ const PushClient = (() => {
 
       if (subRes.ok) {
         isSubscribed = true;
-        return { ok: true };
+        const subData = await subRes.json();
+        return { ok: true, deviceCount: subData.deviceCount };
       } else {
         return { ok: false, error: 'บันทึกการแจ้งเตือนไปยังเซิร์ฟเวอร์ไม่สำเร็จ' };
       }
@@ -144,9 +185,12 @@ const PushClient = (() => {
         body: JSON.stringify({ syncKey })
       });
       const data = await res.json();
-      return { ok: res.ok, sent: data.sent };
+      if (res.ok && data.success) {
+        return { ok: true, sent: data.sent, totalDevices: data.totalDevices };
+      }
+      return { ok: false, error: (data && data.error) || 'ส่งแจ้งเตือนไม่สำเร็จ' };
     } catch (e) {
-      return { ok: false, error: e.message };
+      return { ok: false, error: e.message || 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้' };
     }
   }
 
@@ -163,6 +207,7 @@ const PushClient = (() => {
   return {
     init,
     subscribe,
+    syncCurrentSubscription,
     testNotification,
     getStatus,
     isIOS,

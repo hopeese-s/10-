@@ -228,27 +228,40 @@ const dbAdapter = {
     if (!store._pushSubscriptions) store._pushSubscriptions = {};
     if (!store._pushSubscriptions[userId]) store._pushSubscriptions[userId] = [];
     const endpoint = subscription.endpoint;
-    store._pushSubscriptions[userId] = store._pushSubscriptions[userId].filter(s => s && s.endpoint !== endpoint);
+
+    // Remove this endpoint from all users to prevent duplicate stale associations
+    Object.keys(store._pushSubscriptions).forEach(uid => {
+      store._pushSubscriptions[uid] = (store._pushSubscriptions[uid] || []).filter(s => s && s.endpoint !== endpoint);
+    });
+
+    if (!store._pushSubscriptions[userId]) store._pushSubscriptions[userId] = [];
     store._pushSubscriptions[userId].push(subscription);
     saveStore();
 
+    // 1. Permanently backup to Supabase user_sync_data under __system_auth__
+    await this.saveSystemAuth();
+
+    // 2. Persist to Supabase push_subscriptions table
     if (supabase) {
       try {
-        await supabase
-          .from('push_subscriptions')
-          .upsert({
-            user_id: String(userId),
-            endpoint: endpoint,
-            subscription_data: subscription,
-            created_at: new Date().toISOString()
-          }, { onConflict: 'endpoint' });
+        await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
+        await supabase.from('push_subscriptions').insert({
+          user_id: String(userId),
+          endpoint: endpoint,
+          subscription_data: subscription,
+          created_at: new Date().toISOString()
+        });
       } catch (err) {
         console.warn('⚠️ Supabase savePushSubscription error:', err.message);
       }
     }
+    console.log(`📱 Push subscription saved for user [${userId}], total on this user: ${store._pushSubscriptions[userId].length}`);
   },
 
   async getPushSubscriptions(userId) {
+    const subsMap = new Map();
+
+    // 1. Fetch from Supabase push_subscriptions table
     if (supabase) {
       try {
         const { data, error } = await supabase
@@ -256,11 +269,34 @@ const dbAdapter = {
           .select('subscription_data')
           .eq('user_id', String(userId));
         if (!error && data && data.length > 0) {
-          return data.map(r => r.subscription_data);
+          data.forEach(r => {
+            if (r && r.subscription_data && r.subscription_data.endpoint) {
+              subsMap.set(r.subscription_data.endpoint, r.subscription_data);
+            }
+          });
         }
-      } catch (_) {}
+      } catch (err) {
+        console.warn('⚠️ Supabase getPushSubscriptions error:', err.message);
+      }
     }
-    return (store._pushSubscriptions && store._pushSubscriptions[userId]) || [];
+
+    // 2. Fetch from store._pushSubscriptions (loaded from __system_auth__)
+    const memSubs = (store._pushSubscriptions && store._pushSubscriptions[userId]) || [];
+    memSubs.forEach(s => {
+      if (s && s.endpoint) {
+        subsMap.set(s.endpoint, s);
+      }
+    });
+
+    // 3. Fallback: If only 1 user exists or for admin, also check default '1'
+    if (subsMap.size === 0 && userId !== '1') {
+      const defSubs = (store._pushSubscriptions && store._pushSubscriptions['1']) || [];
+      defSubs.forEach(s => {
+        if (s && s.endpoint) subsMap.set(s.endpoint, s);
+      });
+    }
+
+    return Array.from(subsMap.values());
   },
 
   async loadSystemAuth() {

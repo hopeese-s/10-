@@ -81,13 +81,9 @@ self.addEventListener('push', (event) => {
   const title = data.title || '⏰ E-Calendar: แจ้งเตือนคาบเรียน';
   const options = {
     body: data.body || 'มีวิชาเรียนที่กำลังจะเริ่มในอีก 15 นาที',
-    icon: data.icon || './icons/icon-192.png',
-    badge: data.badge || './icons/icon-192.png',
-    vibrate: [200, 100, 200],
-    data: data.data || { url: './' },
-    actions: [
-      { action: 'open', title: '📅 เปิดดูตาราง' }
-    ]
+    icon: data.icon || '/icons/icon-192.png',
+    badge: data.badge || '/icons/icon-192.png',
+    data: data.data || { url: '/' }
   };
 
   event.waitUntil(

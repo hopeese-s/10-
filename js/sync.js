@@ -60,6 +60,7 @@ const CloudSync = (function () {
         localStorage.setItem('sd-current-user', JSON.stringify(currentUser));
         setSyncKey(currentUser.id);
         updateUIStatus();
+        if (window.PushClient) window.PushClient.syncCurrentSubscription();
         return { ok: true, user: currentUser };
       } else {
         return { ok: false, error: data.error || 'สมัครสมาชิกไม่สำเร็จ' };
@@ -84,6 +85,7 @@ const CloudSync = (function () {
         localStorage.setItem('sd-current-user', JSON.stringify(currentUser));
         setSyncKey(currentUser.id);
         updateUIStatus();
+        if (window.PushClient) window.PushClient.syncCurrentSubscription();
         return { ok: true, user: currentUser };
       } else {
         return { ok: false, error: data.error || 'เข้าสู่ระบบไม่สำเร็จ' };
@@ -105,6 +107,7 @@ const CloudSync = (function () {
         localStorage.setItem('sd-current-user', JSON.stringify(currentUser));
         setSyncKey(currentUser.id);
         updateUIStatus();
+        if (window.PushClient) window.PushClient.syncCurrentSubscription();
         return currentUser;
       } else {
         // Token expired — clear it

@@ -2590,6 +2590,8 @@
     modal.style.display = 'flex';
     document.body.style.overflow = 'hidden';
 
+    const accountEl = document.getElementById('push-current-account');
+    const switchAccBtn = document.getElementById('push-switch-acc-btn');
     const statusHeading = document.getElementById('push-status-heading');
     const statusDesc = document.getElementById('push-status-desc');
     const statusIcon = document.getElementById('push-status-icon');
@@ -2598,6 +2600,30 @@
     const resultEl = document.getElementById('push-broadcast-result');
 
     if (resultEl) resultEl.textContent = '';
+
+    // Show current user account badge
+    const currentUser = window.CloudSync ? CloudSync.getCurrentUser() : null;
+    if (accountEl) {
+      if (currentUser) {
+        accountEl.textContent = `@${currentUser.username} (${currentUser.displayName || currentUser.username})`;
+        accountEl.style.color = 'var(--accent)';
+      } else {
+        accountEl.textContent = 'โหมดทั่วไป (Default Account)';
+        accountEl.style.color = 'var(--label)';
+      }
+    }
+
+    if (switchAccBtn) {
+      switchAccBtn.onclick = () => {
+        closeHandler();
+        openAuthModal();
+      };
+    }
+
+    // Automatically sync current device push token to backend under current account
+    if (window.PushClient) {
+      await PushClient.syncCurrentSubscription();
+    }
 
     const pushStatus = window.PushClient ? PushClient.getStatus() : { supported: false, subscribed: false };
 
@@ -2614,7 +2640,7 @@
       });
       const data = await res.json();
       if (data && typeof data.deviceCount === 'number') {
-        deviceCount = Math.max(1, data.deviceCount);
+        deviceCount = data.deviceCount;
       }
     } catch (_) {}
 
@@ -2659,7 +2685,7 @@
         const testRes = await PushClient.testNotification();
         if (testRes.ok) {
           showToast(`🚀 ยิงแจ้งเตือนถึง ${testRes.sent || 1} อุปกรณ์สำเร็จ!`, 'success');
-          if (resultEl) resultEl.textContent = `✅ ส่งแจ้งเตือนถึง ${testRes.sent || 1} อุปกรณ์พร้อมกันเรียบร้อยแล้ว! 🎉`;
+          if (resultEl) resultEl.textContent = `✅ ส่งแจ้งเตือนถึง ${testRes.sent || 1}/${testRes.totalDevices || 1} อุปกรณ์พร้อมกันเรียบร้อยแล้ว! 🎉`;
         } else {
           showToast(`⚠️ ${testRes.error || 'ส่งแจ้งเตือนไม่สำเร็จ'}`, 'warning');
           if (resultEl) resultEl.textContent = `❌ ${testRes.error || 'เกิดข้อผิดพลาดในการส่ง'}`;
@@ -2670,11 +2696,11 @@
       };
     }
 
-    const closeHandler = () => {
+    function closeHandler() {
       modal.classList.remove('open');
       modal.style.display = '';
       document.body.style.overflow = '';
-    };
+    }
 
     document.getElementById('push-modal-close').onclick = closeHandler;
     document.getElementById('push-modal-cancel-btn').onclick = closeHandler;
