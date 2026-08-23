@@ -883,12 +883,39 @@ const server = http.createServer((req, res) => {
     const ext = path.extname(resolvedPath).toLowerCase();
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
+    // Set caching: PDFs can be cached for a day, other files keep no‑cache
+    if (ext === '.pdf') {
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+    } else {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
 
-    res.writeHead(200, { 'Content-Type': contentType });
-    fs.createReadStream(resolvedPath).pipe(res);
+    // Support HTTP Range requests for progressive loading
+    const range = req.headers.range;
+    if (range) {
+      const positions = range.replace(/bytes=/, '').split('-');
+      let start = parseInt(positions[0], 10);
+      const total = stats.size;
+      const end = positions[1] ? parseInt(positions[1], 10) : total - 1;
+      if (isNaN(start) || start < 0) start = 0;
+      const chunkSize = (end - start) + 1;
+
+      res.writeHead(206, {
+        'Content-Range': `bytes ${start}-${end}/${total}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunkSize,
+        'Content-Type': contentType,
+      });
+      const stream = fs.createReadStream(resolvedPath, { start, end });
+      stream.pipe(res);
+    } else {
+      // No Range header – serve whole file
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Length', stats.size);
+      fs.createReadStream(resolvedPath).pipe(res);
+    }
   });
 });
 

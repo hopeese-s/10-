@@ -349,6 +349,8 @@
     const cloudFoldersJson     = JSON.stringify(cloudData.studyFolders || []);
     const currentLinksJson     = JSON.stringify(state.studyLinks || []);
     const cloudLinksJson       = JSON.stringify(cloudData.studyLinks || []);
+    const currentCurriculumJson = JSON.stringify(state.curriculum || []);
+    const cloudCurriculumJson   = JSON.stringify(cloudData.curriculum || []);
 
     const cloudIsNewer = cloudData.version !== undefined && cloudData.version > state.version;
     const cloudTimeNewer = cloudData.updatedAt && state.updatedAt && cloudData.updatedAt > state.updatedAt;
@@ -356,7 +358,8 @@
                           (currentSubjectsJson !== cloudSubjectsJson) ||
                           (currentCustomJson !== cloudCustomJson) ||
                           (currentFoldersJson !== cloudFoldersJson) ||
-                          (currentLinksJson !== cloudLinksJson);
+                          (currentLinksJson !== cloudLinksJson) ||
+                          (currentCurriculumJson !== cloudCurriculumJson);
 
     if (cloudIsNewer || cloudTimeNewer || dataDifferent) {
       applyCloudData(cloudData);
@@ -402,6 +405,12 @@
     if (cloudData.checklist)    state.checklist    = cloudData.checklist;
     if (cloudData.subjects)     state.subjects      = cloudData.subjects;
     if (cloudData.customBlocks) state.customBlocks  = cloudData.customBlocks;
+
+    // Curriculum — always prefer cloud version if non-empty
+    if (cloudData.curriculum && Array.isArray(cloudData.curriculum) && cloudData.curriculum.length > 0) {
+      state.curriculum = cloudData.curriculum;
+      localStorage.setItem('sd-curriculum', JSON.stringify(state.curriculum));
+    }
 
     // Folders: take cloud version if non-empty, else keep local
     if (cloudData.studyFolders && Array.isArray(cloudData.studyFolders) && cloudData.studyFolders.length > 0) {
@@ -465,6 +474,15 @@
         saveStudyLinks();
       }
       state.curriculumViewMode = localStorage.getItem('sd-curriculum-mode') || 'grid';
+
+      // Curriculum — load saved or default
+      const savedCurriculum = localStorage.getItem('sd-curriculum');
+      if (savedCurriculum) {
+        try {
+          const parsed = JSON.parse(savedCurriculum);
+          if (Array.isArray(parsed) && parsed.length > 0) state.curriculum = parsed;
+        } catch (_) {}
+      }
     } catch (e) {
       state.studyFolders = [...DEFAULT_STUDY_FOLDERS];
       state.studyLinks = [...DEFAULT_STUDY_LINKS];
@@ -785,11 +803,38 @@
     const day = ROUTINES[dayKey];
     if (!day) return;
 
+    // Build live class blocks from state.curriculum (override hardcoded ROUTINES class blocks)
+    const liveCurriculum = (state.curriculum && state.curriculum.length > 0)
+      ? state.curriculum
+      : null;
+
+    let baseBlocks = day.blocks;
+    if (liveCurriculum) {
+      // Replace class blocks for this day with live curriculum data
+      const dayClasses = liveCurriculum.filter(c => c.day === dayKey && c.start && c.end);
+      if (dayClasses.length > 0) {
+        // Remove old hardcoded class blocks for this day, keep non-class blocks
+        const nonClassBlocks = day.blocks.filter(b => !b.isClass);
+        const liveClassBlocks = dayClasses.map(c => ({
+          id: `live-class-${c.code}`,
+          start: c.start,
+          end: c.end,
+          title: `${c.code} ${c.name}`,
+          subtitle: c.room ? c.room : '',
+          tag: 'class',
+          isClass: true,
+          classCode: c.code,
+          notes: c.room ? `ห้อง ${c.room}` : ''
+        }));
+        baseBlocks = [...nonClassBlocks, ...liveClassBlocks];
+      }
+    }
+
     // Merge base blocks + custom blocks (overrides replace, extras are added)
     const customExtra = (state.customBlocks[dayKey] || []);
     const overrideIds = new Set(customExtra.filter(b => b._override).map(b => b.id));
-    const baseBlocks = day.blocks.filter(b => !overrideIds.has(b.id));
-    const allBlocks = [...baseBlocks, ...customExtra].sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+    const mergedBase = baseBlocks.filter(b => !overrideIds.has(b.id));
+    const allBlocks = [...mergedBase, ...customExtra].sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
 
     const checkKey = getCheckKey(dayKey);
     const checks = state.checklist[checkKey] || {};
@@ -1240,10 +1285,11 @@
   }
 
   function saveCurriculum() {
+    touchUpdatedAt();
     try {
       localStorage.setItem('sd-curriculum', JSON.stringify(state.curriculum));
     } catch (_) {}
-    CloudSync.pushToCloud(state);
+    if (window.CloudSync) CloudSync.pushToCloud(state);
   }
 
   function renderCurriculumView() {
