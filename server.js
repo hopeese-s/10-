@@ -1604,6 +1604,402 @@ function buildLinkSuccessFlex(user) {
   };
 }
 
+function buildNextClassFlex(course, status, minutesDiff, upcomingCourse) {
+  if (status === 'done_today') {
+    return {
+      type: 'flex',
+      altText: '🎉 เรียนครบทุกคาบแล้วสำหรับวันนี้!',
+      contents: {
+        type: 'bubble',
+        header: {
+          type: 'box',
+          layout: 'vertical',
+          backgroundColor: '#10B981',
+          paddingAll: '16px',
+          contents: [
+            { type: 'text', text: 'TODAY SCHEDULE STATUS', color: '#ffffff', size: 'xxs', weight: 'bold' },
+            { type: 'text', text: '🎉 เรียนครบทุกวิชาแล้วสำหรับวันนี้!', color: '#ffffff', size: 'md', weight: 'bold' }
+          ]
+        },
+        body: {
+          type: 'box',
+          layout: 'vertical',
+          paddingAll: '16px',
+          contents: [
+            { type: 'text', text: 'คุณไม่มีคาบเรียนที่เหลือในวันนี้แล้วครับ พักผ่อนให้เต็มที่ หรือทบทวนบทเรียนได้เลย ✨', size: 'xs', color: '#4B5563', wrap: true }
+          ]
+        },
+        footer: {
+          type: 'box',
+          layout: 'horizontal',
+          spacing: 'sm',
+          contents: [
+            { type: 'button', action: { type: 'message', label: '⏰ ตารางพรุ่งนี้', text: 'ตารางพรุ่งนี้' }, style: 'primary', color: '#C45A1B', height: 'sm' },
+            { type: 'button', action: { type: 'message', label: '📝 เช็คงานค้าง', text: 'งานค้าง' }, style: 'secondary', height: 'sm' }
+          ]
+        }
+      }
+    };
+  }
+
+  const isOngoing = status === 'ongoing';
+  const headerBg = isOngoing ? '#2563EB' : '#EA580C';
+  const headerTitle = isOngoing ? '🟢 กำลังเรียนอยู่ในขณะนี้' : `⏰ อีก ${minutesDiff} นาทีจะเริ่มเรียน`;
+
+  return {
+    type: 'flex',
+    altText: `⚡ ${headerTitle}: ${course.code} ${course.name}`,
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: headerBg,
+        paddingAll: '16px',
+        contents: [
+          { type: 'text', text: isOngoing ? 'CURRENT ACTIVE CLASS' : 'NEXT UPCOMING CLASS', color: '#ffffff', size: 'xxs', weight: 'bold' },
+          { type: 'text', text: headerTitle, color: '#ffffff', size: 'md', weight: 'bold' }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '16px',
+        spacing: 'sm',
+        contents: [
+          { type: 'text', text: `${course.code}`, size: 'xs', weight: 'bold', color: headerBg },
+          { type: 'text', text: `${course.name}`, size: 'md', weight: 'bold', color: '#111827', wrap: true },
+          {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#F3F4F6',
+            cornerRadius: 'md',
+            paddingAll: '12px',
+            margin: 'sm',
+            contents: [
+              {
+                type: 'box',
+                layout: 'horizontal',
+                contents: [
+                  { type: 'text', text: '⏰ เวลาเรียน:', size: 'xs', color: '#6B7280', flex: 1 },
+                  { type: 'text', text: `${course.start} - ${course.end} น.`, size: 'xs', weight: 'bold', color: '#1F2937', flex: 2 }
+                ]
+              },
+              {
+                type: 'box',
+                layout: 'horizontal',
+                margin: 'xs',
+                contents: [
+                  { type: 'text', text: '📍 ห้องเรียน:', size: 'xs', color: '#6B7280', flex: 1 },
+                  { type: 'text', text: course.room ? `ห้อง ${course.room}` : 'ออนไลน์ / ดูรายละเอียด', size: 'xs', weight: 'bold', color: '#1F2937', flex: 2 }
+                ]
+              }
+            ]
+          },
+          ...(upcomingCourse ? [
+            {
+              type: 'box',
+              layout: 'horizontal',
+              margin: 'sm',
+              contents: [
+                { type: 'text', text: '👉 คาบถัดไป:', size: 'xxs', color: '#9CA3AF', flex: 1 },
+                { type: 'text', text: `${upcomingCourse.code} (${upcomingCourse.start} น.)`, size: 'xxs', color: '#4B5563', flex: 2 }
+              ]
+            }
+          ] : [])
+        ]
+      },
+      footer: {
+        type: 'box',
+        layout: 'horizontal',
+        spacing: 'sm',
+        contents: [
+          {
+            type: 'button',
+            action: { type: 'uri', label: '📖 เข้า Classroom', uri: course.classroomUrl || APP_BASE_URL },
+            style: 'primary',
+            color: '#10B981',
+            height: 'sm'
+          },
+          {
+            type: 'button',
+            action: { type: 'message', label: '📅 ตารางวันนี้', text: 'ตารางวันนี้' },
+            style: 'secondary',
+            height: 'sm'
+          }
+        ]
+      }
+    }
+  };
+}
+
+function buildSemesterCreditsFlex(curriculum) {
+  const courses = curriculum || DEFAULT_BME_CURRICULUM;
+  const uniqueCourses = [];
+  const seenCodes = new Set();
+  courses.forEach(c => {
+    if (!seenCodes.has(c.code)) {
+      seenCodes.add(c.code);
+      uniqueCourses.push(c);
+    }
+  });
+
+  const totalCredits = uniqueCourses.reduce((sum, c) => sum + (c.credits || 3), 0);
+  const courseItems = uniqueCourses.slice(0, 7).map(c => ({
+    type: 'box',
+    layout: 'horizontal',
+    margin: 'xs',
+    contents: [
+      { type: 'text', text: `${c.code}`, size: 'xs', weight: 'bold', color: '#1E293B', flex: 2 },
+      { type: 'text', text: `${c.name}`, size: 'xs', color: '#475569', flex: 4, wrap: true },
+      { type: 'text', text: `${c.credits || 3} นก.`, size: 'xs', weight: 'bold', color: '#059669', flex: 1, align: 'end' }
+    ]
+  }));
+
+  return {
+    type: 'flex',
+    altText: `📊 สรุปหน่วยกิตประจำภาคการศึกษา: รวม ${totalCredits} หน่วยกิต`,
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#4F46E5',
+        paddingAll: '16px',
+        contents: [
+          { type: 'text', text: 'ACADEMIC CREDIT SUMMARY', color: '#ffffff', size: 'xxs', weight: 'bold' },
+          { type: 'text', text: '📊 สรุปหน่วยกิต & รายวิชา', color: '#ffffff', size: 'md', weight: 'bold' }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '16px',
+        contents: [
+          {
+            type: 'box',
+            layout: 'horizontal',
+            backgroundColor: '#EEF2FF',
+            cornerRadius: 'md',
+            paddingAll: '12px',
+            contents: [
+              { type: 'text', text: '🎓 หน่วยกิตรวมเทอมนี้:', size: 'xs', color: '#3730A3', flex: 2 },
+              { type: 'text', text: `${totalCredits} หน่วยกิต (${uniqueCourses.length} วิชา)`, size: 'xs', weight: 'bold', color: '#4F46E5', flex: 2, align: 'end' }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'vertical',
+            margin: 'md',
+            contents: courseItems
+          }
+        ]
+      },
+      footer: {
+        type: 'box',
+        layout: 'horizontal',
+        spacing: 'sm',
+        contents: [
+          {
+            type: 'button',
+            action: { type: 'message', label: '🗓️ ตารางสัปดาห์', text: 'ตารางสัปดาห์' },
+            style: 'primary',
+            color: '#4F46E5',
+            height: 'sm'
+          },
+          {
+            type: 'button',
+            action: { type: 'message', label: '⏳ วันสอบ', text: 'สอบ' },
+            style: 'secondary',
+            height: 'sm'
+          }
+        ]
+      }
+    }
+  };
+}
+
+function buildFreeTimeFlex(dayTitle, dateStr, freeSlots, todayRoutines) {
+  const slotItems = freeSlots.length === 0 ? [
+    { type: 'text', text: 'วันนี้มีตารางเรียนเต็มวัน ไม่มีช่วงว่างระหว่างคาบครับ 💪', size: 'xs', color: '#6B7280' }
+  ] : freeSlots.map(s => ({
+    type: 'box',
+    layout: 'horizontal',
+    backgroundColor: '#F0FDF4',
+    cornerRadius: 'md',
+    paddingAll: '10px',
+    margin: 'xs',
+    contents: [
+      { type: 'text', text: `⏳ ${s.start} - ${s.end} น.`, size: 'xs', weight: 'bold', color: '#166534', flex: 2 },
+      { type: 'text', text: `ว่าง ${s.durationMinutes} นาที (${s.suggest})`, size: 'xs', color: '#15803D', flex: 3, align: 'end', wrap: true }
+    ]
+  }));
+
+  return {
+    type: 'flex',
+    altText: `🕒 ช่วงเวลาว่างประจำวัน (${dayTitle})`,
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#0D9488',
+        paddingAll: '16px',
+        contents: [
+          { type: 'text', text: 'FREE TIME & STUDY PLANNER', color: '#ffffff', size: 'xxs', weight: 'bold' },
+          { type: 'text', text: `🕒 ช่วงเวลาว่าง ${dayTitle}`, color: '#ffffff', size: 'md', weight: 'bold' },
+          { type: 'text', text: dateStr, color: '#ffffff', size: 'xs', margin: 'xs' }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '14px',
+        contents: [
+          { type: 'text', text: '💡 บล็อกเวลาว่างระหว่างคาบเรียนวันนี้:', size: 'xs', weight: 'bold', color: '#0F766E', margin: 'none' },
+          { type: 'box', layout: 'vertical', margin: 'sm', contents: slotItems }
+        ]
+      },
+      footer: {
+        type: 'box',
+        layout: 'horizontal',
+        spacing: 'sm',
+        contents: [
+          { type: 'button', action: { type: 'message', label: '📅 ดูตารางวันนี้', text: 'ตารางวันนี้' }, style: 'primary', color: '#0D9488', height: 'sm' },
+          { type: 'button', action: { type: 'message', label: '🍽️ กินไรดี', text: 'กินไรดี' }, style: 'secondary', height: 'sm' }
+        ]
+      }
+    }
+  };
+}
+
+function buildQuickNoteFlex(notes) {
+  const items = (!notes || notes.length === 0) ? [
+    { type: 'text', text: 'ยังไม่มีโน้ตที่บันทึกไว้ครับ (พิมพ์ "+โน้ต <ข้อความ>" เพื่อจดโน้ตได้ทันที)', size: 'xs', color: '#6B7280' }
+  ] : notes.slice(0, 6).map((n, i) => ({
+    type: 'box',
+    layout: 'vertical',
+    backgroundColor: '#FEF9C3',
+    cornerRadius: 'md',
+    paddingAll: '10px',
+    margin: 'xs',
+    contents: [
+      { type: 'text', text: `📌 ${i + 1}. ${n.text || n.title}`, size: 'xs', weight: 'bold', color: '#854D0E', wrap: true },
+      ...(n.createdAt ? [{ type: 'text', text: `${n.createdAt.slice(0, 10)}`, size: 'xxs', color: '#A16207', margin: 'xs' }] : [])
+    ]
+  }));
+
+  return {
+    type: 'flex',
+    altText: `📌 บันทึกโน้ตสั้นของคุณ (${(notes || []).length} รายการ)`,
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#CA8A04',
+        paddingAll: '16px',
+        contents: [
+          { type: 'text', text: 'QUICK MEMO & NOTES', color: '#ffffff', size: 'xxs', weight: 'bold' },
+          { type: 'text', text: '📌 บันทึกโน้ตกันลืม', color: '#ffffff', size: 'md', weight: 'bold' }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '14px',
+        contents: items
+      },
+      footer: {
+        type: 'box',
+        layout: 'horizontal',
+        spacing: 'sm',
+        contents: [
+          { type: 'button', action: { type: 'message', label: '📝 การบ้าน', text: 'งานค้าง' }, style: 'primary', color: '#CA8A04', height: 'sm' },
+          { type: 'button', action: { type: 'message', label: '📅 ตารางวันนี้', text: 'ตารางวันนี้' }, style: 'secondary', height: 'sm' }
+        ]
+      }
+    }
+  };
+}
+
+function buildFoodRouletteFlex(food) {
+  return {
+    type: 'flex',
+    altText: `🍽️ เมนูแนะนำวันนี้: ${food.name} (${food.location})`,
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#E11D48',
+        paddingAll: '16px',
+        contents: [
+          { type: 'text', text: 'MAHIDOL SALAYA FOOD ROULETTE', color: '#ffffff', size: 'xxs', weight: 'bold' },
+          { type: 'text', text: '🎲 สุ่มเมนูอาหารแถวมหิดล!', color: '#ffffff', size: 'md', weight: 'bold' }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '16px',
+        spacing: 'sm',
+        contents: [
+          { type: 'text', text: `✨ ${food.name}`, size: 'lg', weight: 'bold', color: '#BE123C', wrap: true },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: '📍 พิกัด:', size: 'xs', color: '#6B7280', flex: 1 },
+              { type: 'text', text: `${food.location}`, size: 'xs', weight: 'bold', color: '#1F2937', flex: 3 }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: '💡 เมนูเด็ด:', size: 'xs', color: '#6B7280', flex: 1 },
+              { type: 'text', text: `${food.highlight}`, size: 'xs', color: '#374151', flex: 3, wrap: true }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: '💵 ราคาประมาณ:', size: 'xs', color: '#6B7280', flex: 1 },
+              { type: 'text', text: `${food.price}`, size: 'xs', color: '#059669', weight: 'bold', flex: 3 }
+            ]
+          }
+        ]
+      },
+      footer: {
+        type: 'box',
+        layout: 'horizontal',
+        spacing: 'sm',
+        contents: [
+          {
+            type: 'button',
+            action: {
+              type: 'uri',
+              label: '🗺️ เปิดแผนที่',
+              uri: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(food.location + ' มหิดล ศาลายา')}`
+            },
+            style: 'primary',
+            color: '#E11D48',
+            height: 'sm'
+          },
+          {
+            type: 'button',
+            action: { type: 'message', label: '🎲 สุ่มใหม่', text: 'กินไรดี' },
+            style: 'secondary',
+            height: 'sm'
+          }
+        ]
+      }
+    }
+  };
+}
+
 // ─── Automated 15-Minute Pre-Class Reminder Scheduler (Every 60s) ───
 const sentReminderKeys = new Set();
 
@@ -2485,7 +2881,178 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // ─── 4. Command: ตารางสัปดาห์ / สัปดาห์นี้ / week ───
+      // ─── 4. Command: คาบต่อไป / วิชาต่อไป / next / เรียนไรต่อ / ห้องต่อไป ───
+      if (/^(คาบต่อไป|วิชาต่อไป|next|เรียนไรต่อ|ห้องต่อไป|คาบถัดไป)/i.test(text)) {
+        const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+        const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        const dayCode = days[now.getDay()];
+        const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+        const curriculum = userData.curriculum || DEFAULT_BME_CURRICULUM;
+        const todayClasses = curriculum.filter(c => c.day === dayCode).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
+
+        const classesWithMin = todayClasses.map(c => {
+          const [sh, sm] = (c.start || '00:00').split(':').map(Number);
+          const [eh, em] = (c.end || '00:00').split(':').map(Number);
+          return { ...c, startMin: sh * 60 + sm, endMin: eh * 60 + em };
+        });
+
+        const ongoing = classesWithMin.find(c => currentMinutes >= c.startMin && currentMinutes < c.endMin);
+        const upcoming = classesWithMin.filter(c => c.startMin > currentMinutes);
+
+        if (ongoing) {
+          const nextUpcoming = upcoming[0] || null;
+          const remainingMin = ongoing.endMin - currentMinutes;
+          await sendLineReply(replyToken, [buildNextClassFlex(ongoing, 'ongoing', remainingMin, nextUpcoming)]);
+          return;
+        } else if (upcoming.length > 0) {
+          const nextClass = upcoming[0];
+          const diffMin = nextClass.startMin - currentMinutes;
+          const nextNextClass = upcoming[1] || null;
+          await sendLineReply(replyToken, [buildNextClassFlex(nextClass, 'upcoming', diffMin, nextNextClass)]);
+          return;
+        } else {
+          await sendLineReply(replyToken, [buildNextClassFlex(null, 'done_today', 0, null)]);
+          return;
+        }
+      }
+
+      // ─── 5. Command: โน้ตด่วน / Memo (+โน้ต <ข้อความ> / ลบโน้ต <เลข> / โน้ต) ───
+      const addNoteMatch = text.match(/^(\+โน้ต|จดโน้ต|เพิ่มโน้ต|note)\s*(.+)/i);
+      if (addNoteMatch) {
+        const noteText = addNoteMatch[2].trim();
+        if (noteText) {
+          const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+          if (!userData.quickNotes) userData.quickNotes = [];
+          userData.quickNotes.push({
+            id: Date.now().toString(),
+            text: noteText,
+            createdAt: new Date().toISOString()
+          });
+          await dbAdapter.saveUserData(linkedUserId, userData);
+          await sendLineReply(replyToken, [buildQuickNoteFlex(userData.quickNotes)]);
+          return;
+        }
+      }
+
+      const deleteNoteMatch = text.match(/^(ลบโน้ต|delnote)\s*(\d+)/i);
+      if (deleteNoteMatch) {
+        const targetIdx = parseInt(deleteNoteMatch[2], 10) - 1;
+        const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+        if (userData.quickNotes && targetIdx >= 0 && targetIdx < userData.quickNotes.length) {
+          const removed = userData.quickNotes.splice(targetIdx, 1)[0];
+          await dbAdapter.saveUserData(linkedUserId, userData);
+          await sendLineReply(replyToken, `🗑️ ลบโน้ต "${removed.text}" เรียบร้อยแล้วครับ`);
+        } else {
+          await sendLineReply(replyToken, `❌ ไม่พบลำดับโน้ตที่ ${deleteNoteMatch[2]} ครับ (พิมพ์ "โน้ต" เพื่อดูรายการโน้ตทั้งหมด)`);
+        }
+        return;
+      }
+
+      if (/^(โน้ต|ดูโน้ต|notes|memo|บันทึก|ข้อความกันลืม)/i.test(text)) {
+        const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+        await sendLineReply(replyToken, [buildQuickNoteFlex(userData.quickNotes || [])]);
+        return;
+      }
+
+      // ─── 6. Command: เวลาว่าง / อ่านหนังสือตอนไหน ───
+      if (/^(เวลาว่าง|ว่างตอนไหน|freetime|อ่านหนังสือตอนไหน|ช่องว่าง|ช่วงว่าง)/i.test(text)) {
+        const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
+        const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        const dayNamesTH = {
+          sunday: 'วันอาทิตย์', monday: 'วันจันทร์', tuesday: 'วันอังคาร',
+          wednesday: 'วันพุธ', thursday: 'วันพฤหัสบดี', friday: 'วันศุกร์', saturday: 'วันเสาร์'
+        };
+        const dayCode = days[now.getDay()];
+        const dayName = dayNamesTH[dayCode];
+        const dateStr = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
+
+        const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+        const curriculum = userData.curriculum || DEFAULT_BME_CURRICULUM;
+        const todayClasses = curriculum.filter(c => c.day === dayCode).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
+
+        const freeSlots = [];
+        for (let i = 0; i < todayClasses.length - 1; i++) {
+          const currentClass = todayClasses[i];
+          const nextClass = todayClasses[i + 1];
+          const [eh, em] = currentClass.end.split(':').map(Number);
+          const [sh, sm] = nextClass.start.split(':').map(Number);
+          const endM = eh * 60 + em;
+          const startM = sh * 60 + sm;
+          const diff = startM - endM;
+          if (diff > 15) {
+            let suggest = 'พักผ่อน / ทานข้าว';
+            if (diff >= 90) suggest = 'ทบทวนบทเรียน / อ่านหนังสือ';
+            else if (diff >= 45) suggest = 'ทำการบ้าน / เคลียร์ชีท';
+            freeSlots.push({
+              start: currentClass.end,
+              end: nextClass.start,
+              durationMinutes: diff,
+              suggest
+            });
+          }
+        }
+
+        const dayMapCode = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
+        const todayRoutines = DEFAULT_BME_ROUTINE_EVENTS.filter(r => r.day === dayMapCode[dayCode]);
+
+        await sendLineReply(replyToken, [buildFreeTimeFlex(dayName, dateStr, freeSlots, todayRoutines)]);
+        return;
+      }
+
+      // ─── 7. Command: หน่วยกิต & สรุปเทอม (Credits Summary) ───
+      if (/^(หน่วยกิต|สรุปเทอม|credits|credit|วิชาทั้งหมด)/i.test(text)) {
+        const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+        const curriculum = userData.curriculum || DEFAULT_BME_CURRICULUM;
+        await sendLineReply(replyToken, [buildSemesterCreditsFlex(curriculum)]);
+        return;
+      }
+
+      // ─── 8. Command: สุ่มของกินแถวมหิดล (Food Roulette) ───
+      if (/^(กินไรดี|หิว|อาหาร|เมนูวันนี้|สุ่มของกิน|กินอะไรดี|food|กินไร)/i.test(text)) {
+        const foodList = [
+          { name: 'ข้าวราดแกง / ข้าวขาหมู', location: 'โรงอาหารกลาง (โรงชาย)', highlight: 'มีให้เลือกหลากหลาย ราคาประหยัด อิ่มคุ้ม', price: '35 - 50 บาท' },
+          { name: 'ก๋วยเตี๋ยวต้มยำ / สเต็ก', location: 'โรงอาหารคณะวิทย์ (SC)', highlight: 'น้ำซุปเข้มข้น แอร์เย็น นั่งสบาย', price: '45 - 65 บาท' },
+          { name: 'สุกี้โรล / อาหารคลีน', location: 'Green Canteen (ข้างสระว่ายน้ำ)', highlight: 'อาหารเพื่อสุขภาพ แคลอรี่ต่ำ อร่อยไม่อ้วน', price: '50 - 75 บาท' },
+          { name: 'ข้าวไข่ข้น / ข้าวผัดต้มยำ', location: 'ซอยตั้งสิน (หลัง ม.)', highlight: 'ร้านเด็ดเด็กมหิดล ให้เยอะ จานใหญ่', price: '55 - 80 บาท' },
+          { name: 'ชาบู / ปิ้งย่างบุฟเฟต์', location: 'หน้า ม. ประตู 4', highlight: 'เติมพลังหลังเรียนหนัก เนื้อนุ่ม น้ำจิ้มเด็ด', price: '199 - 299 บาท' },
+          { name: 'ก๋วยเตี๋ยวเรืออยุธยา', location: 'ตลาดศาลายา (หน้าสถานีรถไฟ)', highlight: 'รสแซ่บไม่ต้องปรุง กากหมูเจียวกรอบๆ', price: '40 - 60 บาท' },
+          { name: 'ส้มตำ ยำ ลาบ น้ำตก', location: 'ประตู 5 มหิดล', highlight: 'แซ่บซี้ด คอหมูย่างเด็ด ข้าวเหนียวนุ่ม', price: '50 - 90 บาท' }
+        ];
+        const picked = foodList[Math.floor(Math.random() * foodList.length)];
+        await sendLineReply(replyToken, [buildFoodRouletteFlex(picked)]);
+        return;
+      }
+
+      // ─── 9. Command: ตารางเรียนระบุวัน (ตาราง จันทร์, ตาราง อังคาร, etc.) ───
+      const dayArgMatch = text.match(/^(ตาราง|ตารางเรียน)?\s*(จันทร์|อังคาร|พุธ|พฤหัส|พฤหัสบดี|ศุกร์|เสาร์|อาทิตย์|monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/i);
+      if (dayArgMatch) {
+        const rawDay = (dayArgMatch[2] || '').toLowerCase();
+        const dayMap = {
+          'จันทร์': 'monday', 'monday': 'monday',
+          'อังคาร': 'tuesday', 'tuesday': 'tuesday',
+          'พุธ': 'wednesday', 'wednesday': 'wednesday',
+          'พฤหัส': 'thursday', 'พฤหัสบดี': 'thursday', 'thursday': 'thursday',
+          'ศุกร์': 'friday', 'friday': 'friday',
+          'เสาร์': 'saturday', 'saturday': 'saturday',
+          'อาทิตย์': 'sunday', 'sunday': 'sunday'
+        };
+        const targetDayCode = dayMap[rawDay] || 'monday';
+        const dayNamesTH = {
+          monday: 'วันจันทร์', tuesday: 'วันอังคาร', wednesday: 'วันพุธ',
+          thursday: 'วันพฤหัสบดี', friday: 'วันศุกร์', saturday: 'วันเสาร์', sunday: 'วันอาทิตย์'
+        };
+        const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+        const curriculum = userData.curriculum || DEFAULT_BME_CURRICULUM;
+        const targetClasses = curriculum.filter(c => c.day === targetDayCode).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
+        const dayMapCode = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
+        const targetRoutines = DEFAULT_BME_ROUTINE_EVENTS.filter(r => r.day === dayMapCode[targetDayCode]);
+
+        await sendLineReply(replyToken, [buildScheduleFlex(`${dayNamesTH[targetDayCode]}`, `ตารางเรียน`, targetClasses, targetRoutines)]);
+        return;
+      }
+
+      // ─── 10. Command: ตารางสัปดาห์ / สัปดาห์นี้ / week ───
       if (/^(ตารางสัปดาห์|สัปดาห์นี้|ทั้งสัปดาห์|ตารางทั้งหมด|week|all schedule)/i.test(text)) {
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
         const curriculum = userData.curriculum || DEFAULT_BME_CURRICULUM;
@@ -2493,7 +3060,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // ─── 5. Command: คลาสรูม / classroom / ชีท / ลิงก์เรียน ───
+      // ─── 11. Command: คลาสรูม / classroom / ชีท / ลิงก์เรียน ───
       if (/^(คลาสรูม|classroom|ลิงก์เรียน|ลิงก์ห้องเรียน|ชีท|ชีทเรียน|google classroom)/i.test(text)) {
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
         const curriculum = userData.curriculum || DEFAULT_BME_CURRICULUM;
@@ -2502,13 +3069,13 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // ─── 6. Command: D-Day / สอบ / วันสอบ / นับถอยหลัง ───
+      // ─── 12. Command: D-Day / สอบ / วันสอบ / นับถอยหลัง ───
       if (/^(สอบ|วันสอบ|dday|นับถอยหลัง|exam|ตารางสอบ)/i.test(text)) {
         await sendLineReply(replyToken, [buildDDayCountdownFlex()]);
         return;
       }
 
-      // ─── 7. Command: สรุปเช้า / เช้านี้ / สรุปวัน / briefing ───
+      // ─── 13. Command: สรุปเช้า / เช้านี้ / สรุปวัน / briefing ───
       if (/^(สรุปเช้า|เช้านี้|สรุปวัน|morning|briefing|สรุปวันนี้)/i.test(text)) {
         const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
         const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
@@ -2532,14 +3099,14 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // ─── 8. Command: Course Finder (ค้นหารายละเอียดวิชา / ห้องเรียน) ───
+      // ─── 14. Command: Course Finder (ค้นหารายละเอียดวิชา / ห้องเรียน) ───
       const courseMatch = findCourseMatch(text, (await dbAdapter.getUserData(linkedUserId))?.curriculum);
       if (courseMatch && (text.startsWith('วิชา') || text.startsWith('ห้อง') || text.length <= 10 || /^(sc|eg|la)/i.test(text))) {
         await sendLineReply(replyToken, [buildCourseProfileFlex(courseMatch)]);
         return;
       }
 
-      // ─── 9. Command: ตารางวันนี้ / วันนี้ / today ───
+      // ─── 15. Command: ตารางวันนี้ / วันนี้ / today ───
       if (/^(ตารางวันนี้|วันนี้|today|schedule|เรียนไร|มีเรียนมั้ย)/i.test(text)) {
         const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
         const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
@@ -2561,7 +3128,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // ─── 10. Command: ตารางพรุ่งนี้ / พรุ่งนี้ / tomorrow ───
+      // ─── 16. Command: ตารางพรุ่งนี้ / พรุ่งนี้ / tomorrow ───
       if (/^(ตารางพรุ่งนี้|พรุ่งนี้|tomorrow|พรุ่งนี้เรียนไร)/i.test(text)) {
         const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
         now.setDate(now.getDate() + 1);
@@ -2584,7 +3151,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // ─── 11. Command: งานค้าง / การบ้าน / todo / deadline ───
+      // ─── 17. Command: งานค้าง / การบ้าน / todo / deadline ───
       if (/^(งานค้าง|การบ้าน|todo|deadline|งาน|ส่งงานไรบ้าง)/i.test(text)) {
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
         const tasks = userData.tasks || userData.todos || [];
@@ -2603,7 +3170,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // ─── 12. Command: ทดสอบ / test ───
+      // ─── 18. Command: ทดสอบ / test ───
       if (/^(ทดสอบ|test)/i.test(text)) {
         await sendLineReply(replyToken, [
           buildClassReminderFlex({
@@ -2618,7 +3185,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // ─── 13. Command: ยกเลิกการผูก / unlink ───
+      // ─── 19. Command: ยกเลิกการผูก / unlink ───
       if (/^(ยกเลิกการผูก|unlink|logout)/i.test(text)) {
         if (store._lineUsers && store._lineUsers[lineUserId]) {
           const oldUid = store._lineUsers[lineUserId];
@@ -2639,18 +3206,19 @@ const server = http.createServer(async (req, res) => {
         type: 'text',
         text: isLinked 
           ? `🤖 เมนูและคำสั่ง E-Calendar Bot:\n\n` +
-            `📅 ตารางเรียน:\n• "ตารางวันนี้" / "ตารางพรุ่งนี้"\n• "ตารางสัปดาห์" (สรุปจันทร์-ศุกร์)\n• "วิชา ฟิสิกส์" หรือ "SCPY161" (ค้นหารายละเอียดวิชา)\n\n` +
-            `📝 การบ้าน & งานค้าง:\n• "+งาน <ชื่องาน> ส่ง <วันที่>" (สั่งจดงาน)\n• "งานค้าง" (ดูรายการงาน)\n• "เสร็จ 1" (ติ๊กงานลำดับที่ 1 ว่าเสร็จ)\n\n` +
-            `⏳ อื่นๆ:\n• "คลาสรูม" (รวมลิงก์ Google Classroom)\n• "สอบ" (นับถอยหลังวันสอบ D-Day)\n• "สรุปเช้า" (สรุปภาพรวมวันนี้)`
+            `⚡ สด & ตารางเรียน:\n• "คาบต่อไป" (ดูวิชาที่กำลังเรียน/คาบถัดไป)\n• "ตารางวันนี้" / "ตารางพรุ่งนี้" / "ตาราง จันทร์"\n• "ตารางสัปดาห์" (สรุปจันทร์-ศุกร์)\n• "วิชา ฟิสิกส์" หรือ "SCPY161" (ค้นหารายละเอียดวิชา)\n\n` +
+            `📝 การบ้าน & โน้ต:\n• "+งาน <ชื่องาน> ส่ง <วันที่>" (จดการบ้าน)\n• "งานค้าง" / "เสร็จ 1" (เช็ค/ติ๊กงานเสร็จ)\n• "+โน้ต <ข้อความ>" / "โน้ต" (สมุดโน้ตกันลืม)\n\n` +
+            `⏳ วางแผน & อื่นๆ:\n• "เวลาว่าง" (หาช่วงเวลาว่างระหว่างคาบ)\n• "หน่วยกิต" (สรุปหน่วยกิตเทอมนี้)\n• "คลาสรูม" (รวมลิงก์ Classroom)\n• "สอบ" (นับถอยหลังสอบ D-Day)\n• "กินไรดี" (สุ่มของกินแถวมหิดล!)`
           : `👋 สวัสดีครับ! บัญชี LINE นี้ยังไม่ได้ผูกกับ E-Calendar\n\nกรุณาพิมพ์:\n👉 /link <Username ของคุณ>\nเช่น: /link witchaya`,
         quickReply: {
           items: isLinked ? [
+            { type: 'action', action: { type: 'message', label: '⚡ คาบต่อไป', text: 'คาบต่อไป' } },
             { type: 'action', action: { type: 'message', label: '📅 ตารางวันนี้', text: 'ตารางวันนี้' } },
-            { type: 'action', action: { type: 'message', label: '🗓️ ตารางสัปดาห์', text: 'ตารางสัปดาห์' } },
+            { type: 'action', action: { type: 'message', label: '🕒 เวลาว่าง', text: 'เวลาว่าง' } },
             { type: 'action', action: { type: 'message', label: '📝 งานค้าง', text: 'งานค้าง' } },
-            { type: 'action', action: { type: 'message', label: '📚 คลาสรูม', text: 'คลาสรูม' } },
-            { type: 'action', action: { type: 'message', label: '⏳ นับถอยหลังสอบ', text: 'สอบ' } },
-            { type: 'action', action: { type: 'message', label: '🌅 สรุปเช้า', text: 'สรุปเช้า' } }
+            { type: 'action', action: { type: 'message', label: '📌 โน้ต', text: 'โน้ต' } },
+            { type: 'action', action: { type: 'message', label: '📊 หน่วยกิต', text: 'หน่วยกิต' } },
+            { type: 'action', action: { type: 'message', label: '🍽️ กินไรดี', text: 'กินไรดี' } }
           ] : [
             { type: 'action', action: { type: 'message', label: '❓ วิธีใช้', text: 'วิธีใช้' } }
           ]
