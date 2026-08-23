@@ -305,7 +305,10 @@
         syncSmartWithCloud(pullRes.data);
       }
     }
-    if (window.CloudSync) CloudSync.updateUIStatus();
+    // Initialize Push Notifications
+    if (window.PushClient) {
+      PushClient.init().catch(() => {});
+    }
 
     setupGlobalEventListeners();
     setup9thEventListeners();
@@ -439,6 +442,12 @@
       localStorage.setItem('sd-study-links', JSON.stringify(state.studyLinks));
     }
 
+    // Course Grades: sync from cloud
+    if (cloudData.courseGrades && typeof cloudData.courseGrades === 'object') {
+      state.courseGrades = cloudData.courseGrades;
+      localStorage.setItem('sd-course-grades', JSON.stringify(state.courseGrades));
+    }
+
     localStorage.setItem('sd-checklist',     JSON.stringify(state.checklist));
     localStorage.setItem('sd-subjects',      JSON.stringify(state.subjects));
     localStorage.setItem('sd-custom-blocks', JSON.stringify(state.customBlocks));
@@ -452,6 +461,7 @@
       state.checklist    = JSON.parse(localStorage.getItem('sd-checklist') || '{}');
       state.subjects     = JSON.parse(localStorage.getItem('sd-subjects') || '{}');
       state.customBlocks = JSON.parse(localStorage.getItem('sd-custom-blocks') || '{}');
+      state.courseGrades = JSON.parse(localStorage.getItem('sd-course-grades') || '{}');
 
       // Study Folders
       const savedFolders = localStorage.getItem('sd-study-folders');
@@ -493,6 +503,7 @@
     } catch (e) {
       state.studyFolders = [...DEFAULT_STUDY_FOLDERS];
       state.studyLinks = [...DEFAULT_STUDY_LINKS];
+      state.courseGrades = {};
     }
   }
 
@@ -1343,12 +1354,78 @@
     if (window.CloudSync) CloudSync.pushToCloud(state);
   }
 
+  // ─── GPAX Calculator & Grade Simulator ────────────────────
+  const GRADE_OPTIONS = [
+    { label: '– ยังไม่ตัดเกรด', value: '' },
+    { label: 'A (4.00)', value: 'A', point: 4.0 },
+    { label: 'B+ (3.50)', value: 'B+', point: 3.5 },
+    { label: 'B (3.00)', value: 'B', point: 3.0 },
+    { label: 'C+ (2.50)', value: 'C+', point: 2.5 },
+    { label: 'C (2.00)', value: 'C', point: 2.0 },
+    { label: 'D+ (1.50)', value: 'D+', point: 1.5 },
+    { label: 'D (1.00)', value: 'D', point: 1.0 },
+    { label: 'F (0.00)', value: 'F', point: 0.0 },
+    { label: 'S (Pass)', value: 'S', point: null },
+    { label: 'U (Fail)', value: 'U', point: null }
+  ];
+
+  function getGradePoint(g) {
+    const opt = GRADE_OPTIONS.find(o => o.value === g);
+    return opt ? opt.point : null;
+  }
+
+  function calculateCurriculumGPA() {
+    const courses = getCurriculumCourses();
+    const grades = state.courseGrades || {};
+    let totalPoints = 0;
+    let totalGradedCredits = 0;
+    let totalAttemptedCredits = 0;
+    let gradedCount = 0;
+
+    courses.forEach(c => {
+      const rawCredit = parseFloat(c.credits) || 3;
+      totalAttemptedCredits += rawCredit;
+      const g = grades[c.code];
+      const pt = getGradePoint(g);
+      if (pt !== null && pt !== undefined) {
+        totalPoints += pt * rawCredit;
+        totalGradedCredits += rawCredit;
+        gradedCount++;
+      }
+    });
+
+    const gpax = totalGradedCredits > 0 ? (totalPoints / totalGradedCredits).toFixed(2) : '0.00';
+    return {
+      gpax: parseFloat(gpax),
+      gpaxStr: gpax,
+      totalGradedCredits,
+      totalAttemptedCredits,
+      gradedCount,
+      totalCourses: courses.length
+    };
+  }
+
   function renderCurriculumView() {
     const container = document.getElementById('view-egbe-curriculum');
     if (!container) return;
 
     const curriculumCourses = getCurriculumCourses();
     const isList = state.curriculumViewMode === 'list';
+    const gpaInfo = calculateCurriculumGPA();
+
+    let honorsBadgeHtml = '';
+    let honorsText = '🎓 ปกติ';
+    if (gpaInfo.totalGradedCredits >= 15) {
+      if (gpaInfo.gpax >= 3.50) {
+        honorsBadgeHtml = '<span class="tag-chip" style="background:rgba(16,185,129,0.15);color:#059669;font-weight:700">🏆 เกียรตินิยมอันดับ 1</span>';
+        honorsText = '🏆 เกียรตินิยมอันดับ 1 (≥ 3.50)';
+      } else if (gpaInfo.gpax >= 3.25) {
+        honorsBadgeHtml = '<span class="tag-chip" style="background:rgba(59,130,246,0.15);color:#2563eb;font-weight:700">🥈 เกียรตินิยมอันดับ 2</span>';
+        honorsText = '🥈 เกียรตินิยมอันดับ 2 (≥ 3.25)';
+      } else {
+        honorsText = '🎓 ผ่านเกณฑ์ปกติ';
+      }
+    }
 
     let contentHtml = '';
     if (isList) {
@@ -1357,6 +1434,7 @@
         <div class="curriculum-list-wrap">
           ${curriculumCourses.map(c => {
             const sc = SUBJECT_COLORS[c.code] || { color: 'var(--accent)', bg: 'var(--accent-bg)', emoji: '📘' };
+            const currentGrade = (state.courseGrades && state.courseGrades[c.code]) || '';
             return `
               <div class="curriculum-list-row course-card-clickable" data-code="${c.code}" style="cursor:pointer">
                 <div class="clr-badge-col">
@@ -1369,9 +1447,16 @@
                   <h3 style="font-size:14.5px;font-weight:700;color:var(--label);margin-bottom:3px">${escHtml(c.name)} <span style="font-size:12px;font-weight:500;color:var(--label-3)">(${c.type})</span></h3>
                   <p style="font-size:12px;color:var(--label-2);line-height:1.45">${escHtml(c.desc)}</p>
                 </div>
-                <div class="clr-meta-col">
-                  <div style="font-size:12px;font-weight:600;color:var(--label)">📍 ${escHtml(c.room || '-')}</div>
-                  <div style="font-size:11.5px;color:var(--label-3);margin-top:2px">⏰ ${escHtml(c.schedule || '-')}</div>
+                <div class="clr-meta-col" style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+                  <div style="display:flex;align-items:center;gap:6px" onclick="event.stopPropagation()">
+                    <span style="font-size:11px;color:var(--label-3);font-weight:600">เกรด:</span>
+                    <select class="grade-picker-select" data-code="${c.code}">
+                      ${GRADE_OPTIONS.map(opt => `
+                        <option value="${opt.value}" ${currentGrade === opt.value ? 'selected' : ''}>${opt.label}</option>
+                      `).join('')}
+                    </select>
+                  </div>
+                  <div style="font-size:11.5px;color:var(--label-3)">⏰ ${escHtml(c.schedule || '-')}</div>
                 </div>
               </div>
             `;
@@ -1384,6 +1469,7 @@
         <div class="cards-grid">
           ${curriculumCourses.map(c => {
             const sc = SUBJECT_COLORS[c.code] || { color: 'var(--accent)', bg: 'var(--accent-bg)', emoji: '📘' };
+            const currentGrade = (state.courseGrades && state.courseGrades[c.code]) || '';
             return `
               <div class="card-item course-card-clickable" data-code="${c.code}" style="cursor:pointer">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
@@ -1394,9 +1480,19 @@
                 </div>
                 <h3 style="font-size:15px;font-weight:700;margin-bottom:6px;color:var(--label)">${escHtml(c.name)}</h3>
                 <p style="font-size:12.5px;color:var(--label-2);line-height:1.5;margin-bottom:12px">${escHtml(c.desc)}</p>
-                <div style="font-size:11.5px;color:var(--label-3);border-top:1px solid var(--sep);padding-top:10px;display:flex;flex-direction:column;gap:3px">
-                  <div>ห้อง: <strong>${escHtml(c.room || '-')}</strong></div>
-                  <div>เวลา: <strong>${escHtml(c.schedule || '-')}</strong></div>
+                <div style="font-size:11.5px;color:var(--label-3);border-top:1px solid var(--sep);padding-top:10px;display:flex;flex-direction:column;gap:6px">
+                  <div style="display:flex;justify-content:space-between;align-items:center" onclick="event.stopPropagation()">
+                    <span style="font-weight:600">เกรดวิชานี้:</span>
+                    <select class="grade-picker-select" data-code="${c.code}">
+                      ${GRADE_OPTIONS.map(opt => `
+                        <option value="${opt.value}" ${currentGrade === opt.value ? 'selected' : ''}>${opt.label}</option>
+                      `).join('')}
+                    </select>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;align-items:center">
+                    <span>ห้อง: <strong>${escHtml(c.room || '-')}</strong></span>
+                    <span>เวลา: <strong>${escHtml(c.schedule || '-')}</strong></span>
+                  </div>
                 </div>
               </div>`;
           }).join('')}
@@ -1405,20 +1501,59 @@
     }
 
     container.innerHTML = `
-      <div class="curriculum-header-row">
+      <div class="curriculum-header-row" style="margin-bottom:1.25rem">
         <div>
           <h2 style="font-family:var(--font-serif);font-size:1.6rem;font-weight:700;margin-bottom:4px">หลักสูตรวิศวกรรมชีวแพทย์ (BME Mahidol 2026)</h2>
-          <p style="font-size:13.5px;color:var(--label-2)">โครงสร้างรายวิชาปีที่ 1 ภาคเรียนที่ 1 รวมทั้งสิ้น 21 หน่วยกิต (คลิกที่การ์ดวิชาเพื่อดูรายละเอียด/แก้ไขห้องเรียน)</p>
+          <p style="font-size:13.5px;color:var(--label-2)">โครงสร้างรายวิชาปีที่ 1 ภาคเรียนที่ 1 รวมทั้งสิ้น 21 หน่วยกิต (คลิกการ์ดเพื่อดูรายละเอียด/แก้ไข)</p>
         </div>
-        <div class="view-mode-toggle" aria-label="รูปแบบการแสดงผล">
-          <button class="view-mode-btn ${!isList ? 'active' : ''}" data-mode="grid" title="แสดงแบบการ์ด">
-            <span>⊞</span> การ์ด (Grid)
-          </button>
-          <button class="view-mode-btn ${isList ? 'active' : ''}" data-mode="list" title="แสดงแบบรายการ">
-            <span>☰</span> รายการ (List)
-          </button>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <div class="view-mode-toggle" aria-label="รูปแบบการแสดงผล">
+            <button class="view-mode-btn ${!isList ? 'active' : ''}" data-mode="grid" title="แสดงแบบการ์ด">
+              <span>⊞</span> การ์ด (Grid)
+            </button>
+            <button class="view-mode-btn ${isList ? 'active' : ''}" data-mode="list" title="แสดงแบบรายการ">
+              <span>☰</span> รายการ (List)
+            </button>
+          </div>
         </div>
       </div>
+
+      <!-- GPAX Calculator Card -->
+      <div class="gpax-banner-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+          <div>
+            <h3 style="font-size:1.15rem;font-weight:700;margin-bottom:2px;display:flex;align-items:center;gap:8px">
+              📊 GPAX Calculator &amp; Grade Simulator
+              ${honorsBadgeHtml}
+            </h3>
+            <p style="font-size:12.5px;color:var(--label-2)">เลือกเกรดรายวิชาด้านล่างเพื่อคำนวณและจำลองเกรดล่วงหน้า (บันทึกและซิงค์ Cloud อัตโนมัติ)</p>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn btn-secondary" id="gpa-sim-a" style="font-size:11.5px;padding:4px 10px;border-radius:var(--r-pill)">✨ จำลอง A ล้วน</button>
+            <button class="btn btn-secondary" id="gpa-sim-bplus" style="font-size:11.5px;padding:4px 10px;border-radius:var(--r-pill)">📈 จำลอง B+ ล้วน</button>
+            <button class="btn btn-secondary" id="gpa-reset" style="font-size:11.5px;padding:4px 10px;border-radius:var(--r-pill);color:var(--label-3)">🔄 ล้างเกรด</button>
+          </div>
+        </div>
+        <div class="gpax-stats-grid">
+          <div class="gpax-stat-box">
+            <span class="gpax-stat-label">เกรดเฉลี่ยสะสม (GPAX)</span>
+            <span class="gpax-stat-val" style="color:var(--accent)">${gpaInfo.gpaxStr}</span>
+          </div>
+          <div class="gpax-stat-box">
+            <span class="gpax-stat-label">หน่วยกิตที่คำนวณ</span>
+            <span class="gpax-stat-val">${gpaInfo.totalGradedCredits} <span style="font-size:12px;font-weight:500;color:var(--label-3)">/ ${gpaInfo.totalAttemptedCredits} cr</span></span>
+          </div>
+          <div class="gpax-stat-box">
+            <span class="gpax-stat-label">จำนวนวิชาที่ตัดเกรด</span>
+            <span class="gpax-stat-val">${gpaInfo.gradedCount} <span style="font-size:12px;font-weight:500;color:var(--label-3)">/ ${gpaInfo.totalCourses} วิชา</span></span>
+          </div>
+          <div class="gpax-stat-box">
+            <span class="gpax-stat-label">สถานะเกียรตินิยม</span>
+            <span style="font-size:12.5px;font-weight:700;color:var(--label);margin-top:4px">${honorsText}</span>
+          </div>
+        </div>
+      </div>
+
       ${contentHtml}
     `;
 
@@ -1434,9 +1569,58 @@
       });
     });
 
+    // Attach grade selector change listeners
+    container.querySelectorAll('.grade-picker-select').forEach(sel => {
+      sel.addEventListener('change', (e) => {
+        const code = e.target.dataset.code;
+        const val = e.target.value;
+        if (!state.courseGrades) state.courseGrades = {};
+        if (val) {
+          state.courseGrades[code] = val;
+        } else {
+          delete state.courseGrades[code];
+        }
+        localStorage.setItem('sd-course-grades', JSON.stringify(state.courseGrades));
+        touchUpdatedAt();
+        if (window.CloudSync) CloudSync.pushToCloud(state);
+        renderCurriculumView();
+      });
+    });
+
+    // Attach Simulation Buttons
+    document.getElementById('gpa-sim-a')?.addEventListener('click', () => {
+      if (!state.courseGrades) state.courseGrades = {};
+      curriculumCourses.forEach(c => { state.courseGrades[c.code] = 'A'; });
+      localStorage.setItem('sd-course-grades', JSON.stringify(state.courseGrades));
+      touchUpdatedAt();
+      if (window.CloudSync) CloudSync.pushToCloud(state);
+      renderCurriculumView();
+      showToast('✨ จำลองเกรด A ทุกวิชาเรียบร้อย!', 'success');
+    });
+
+    document.getElementById('gpa-sim-bplus')?.addEventListener('click', () => {
+      if (!state.courseGrades) state.courseGrades = {};
+      curriculumCourses.forEach(c => { state.courseGrades[c.code] = 'B+'; });
+      localStorage.setItem('sd-course-grades', JSON.stringify(state.courseGrades));
+      touchUpdatedAt();
+      if (window.CloudSync) CloudSync.pushToCloud(state);
+      renderCurriculumView();
+      showToast('📈 จำลองเกรด B+ ทุกวิชาเรียบร้อย!', 'success');
+    });
+
+    document.getElementById('gpa-reset')?.addEventListener('click', () => {
+      state.courseGrades = {};
+      localStorage.setItem('sd-course-grades', JSON.stringify(state.courseGrades));
+      touchUpdatedAt();
+      if (window.CloudSync) CloudSync.pushToCloud(state);
+      renderCurriculumView();
+      showToast('🔄 ล้างเกรดทั้งหมดเรียบร้อย', 'info');
+    });
+
     // Attach course click listeners
     container.querySelectorAll('.course-card-clickable').forEach(card => {
-      card.addEventListener('click', () => {
+      card.addEventListener('click', (e) => {
+        if (e.target.tagName === 'SELECT' || e.target.closest('select')) return;
         const code = card.dataset.code;
         if (code) openCourseModal(code);
       });
@@ -3056,6 +3240,49 @@
         else { await renderCurrentPage(); }
       });
 
+      // Native Touch Pinch-to-Zoom Gesture for Mobile PDF Preview
+      let touchStartDist = 0;
+      let touchStartScale = currentScale;
+      let isPinching = false;
+      let pinchTimeout = null;
+
+      container.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 2) {
+          isPinching = true;
+          touchStartDist = Math.hypot(
+            e.touches[0].pageX - e.touches[1].pageX,
+            e.touches[0].pageY - e.touches[1].pageY
+          );
+          touchStartScale = currentScale;
+        }
+      }, { passive: true });
+
+      container.addEventListener('touchmove', (e) => {
+        if (isPinching && e.touches.length === 2 && touchStartDist > 0) {
+          const currentDist = Math.hypot(
+            e.touches[0].pageX - e.touches[1].pageX,
+            e.touches[0].pageY - e.touches[1].pageY
+          );
+          const factor = currentDist / touchStartDist;
+          currentScale = Math.max(0.3, Math.min(3.5, touchStartScale * factor));
+          if (zoomValEl) zoomValEl.textContent = `${Math.round(currentScale * 100)}%`;
+
+          clearTimeout(pinchTimeout);
+          pinchTimeout = setTimeout(async () => {
+            if (viewMode === 'scroll') { await renderAllPagesScroll(); }
+            else { await renderCurrentPage(); }
+          }, 120);
+        }
+      }, { passive: true });
+
+      container.addEventListener('touchend', async (e) => {
+        if (e.touches.length < 2 && isPinching) {
+          isPinching = false;
+          if (viewMode === 'scroll') { await renderAllPagesScroll(); }
+          else { await renderCurrentPage(); }
+        }
+      }, { passive: true });
+
       // Keyboard left/right arrows for page turning (page mode only)
       _pdfKeydownHandler = async (e) => {
         if (!document.getElementById('preview-modal')?.classList.contains('open')) {
@@ -3902,7 +4129,23 @@
       });
     });
 
-    // Calendar & Auth header buttons
+    // Calendar & Auth & Push header buttons
+    document.getElementById('push-notify-btn')?.addEventListener('click', async () => {
+      if (window.PushClient) {
+        showToast('กำลังขออนุญาตเปิดการแจ้งเตือน...', 'info');
+        const res = await PushClient.subscribe();
+        if (res.ok) {
+          showToast('🔔 เปิดการแจ้งเตือนเตือนคาบเรียนล่วงหน้า 15 นาทีสำเร็จ!', 'success');
+          // Send instant test notification
+          await PushClient.testNotification();
+        } else {
+          showToast(`❌ ${res.error || 'เปิดการแจ้งเตือนไม่สำเร็จ'}`, 'error');
+        }
+      } else {
+        showToast('เบราว์เซอร์ไม่รองรับการแจ้งเตือน', 'error');
+      }
+    });
+
     document.getElementById('calendar-sync-btn')?.addEventListener('click', () => openCalendarModal());
     document.getElementById('auth-user-btn')?.addEventListener('click', () => openAuthModal());
 

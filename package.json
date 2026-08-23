@@ -7,6 +7,19 @@
     "start": "node server.js",
     "dev": "node server.js"
   },
-  "keywords": ["study", "dashboard", "routine", "BME", "Mahidol"],
-  "engines": { "node": ">=16" }
+  "keywords": [
+    "study",
+    "dashboard",
+    "routine",
+    "BME",
+    "Mahidol"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1116.0",
+    "@supabase/supabase-js": "^2.112.3",
+    "web-push": "^3.6.7"
+  }
 }

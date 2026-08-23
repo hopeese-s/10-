@@ -477,6 +477,47 @@
             renderDocument();
           };
 
+          // Native Touch Pinch-to-Zoom Gesture for Mobile
+          let touchStartDist = 0;
+          let touchStartScale = currentScale;
+          let isPinching = false;
+          let pinchTimeout = null;
+
+          document.querySelector('.viewer-main')?.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 2) {
+              isPinching = true;
+              touchStartDist = Math.hypot(
+                e.touches[0].pageX - e.touches[1].pageX,
+                e.touches[0].pageY - e.touches[1].pageY
+              );
+              touchStartScale = currentScale;
+            }
+          }, { passive: true });
+
+          document.querySelector('.viewer-main')?.addEventListener('touchmove', (e) => {
+            if (isPinching && e.touches.length === 2 && touchStartDist > 0) {
+              const currentDist = Math.hypot(
+                e.touches[0].pageX - e.touches[1].pageX,
+                e.touches[0].pageY - e.touches[1].pageY
+              );
+              const factor = currentDist / touchStartDist;
+              currentScale = Math.max(0.3, Math.min(3.5, touchStartScale * factor));
+              zoomVal.textContent = `${Math.round(currentScale * 100)}%`;
+
+              clearTimeout(pinchTimeout);
+              pinchTimeout = setTimeout(() => {
+                renderDocument();
+              }, 120);
+            }
+          }, { passive: true });
+
+          document.querySelector('.viewer-main')?.addEventListener('touchend', (e) => {
+            if (e.touches.length < 2 && isPinching) {
+              isPinching = false;
+              renderDocument();
+            }
+          }, { passive: true });
+
           // Keyboard navigation
           document.addEventListener('keydown', (e) => {
             if (viewMode === 'page') {

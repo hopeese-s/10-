@@ -19,12 +19,60 @@ if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
 
+// ─── Cloudflare R2 S3 Storage Adapter ─────────────────────────
+let r2Client = null;
+const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
+const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
+const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
+const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
+const R2_PUBLIC_DOMAIN = process.env.R2_PUBLIC_DOMAIN || '';
+
+if (R2_ACCOUNT_ID && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY && R2_BUCKET_NAME) {
+  try {
+    const { S3Client } = require('@aws-sdk/client-s3');
+    r2Client = new S3Client({
+      region: 'auto',
+      endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId: R2_ACCESS_KEY_ID,
+        secretAccessKey: R2_SECRET_ACCESS_KEY
+      }
+    });
+    console.log('✅ Cloudflare R2 Storage Adapter connected');
+  } catch (e) {
+    console.warn('⚠️ Cloudflare R2 initialization failed, falling back to local disk:', e.message);
+  }
+}
+
+// ─── Supabase PostgreSQL Database Adapter ─────────────────────
+let supabase = null;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
+
+if (SUPABASE_URL && SUPABASE_KEY) {
+  try {
+    const { createClient } = require('@supabase/supabase-js');
+    supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+    console.log('✅ Supabase PostgreSQL Database Adapter connected');
+  } catch (e) {
+    console.warn('⚠️ Supabase initialization failed, falling back to local store:', e.message);
+  }
+}
+
+// ─── Web Push Notifications VAPID Setup ───────────────────────
+let webpush = null;
+try {
+  webpush = require('web-push');
+} catch (_) {}
+
 // In-memory store + file persistence
 let store = {
-  _users: {},     // { [username]: { id, username, displayName, passwordHash, salt, calendarKey, role, createdAt } }
-  _sessions: {},  // { [token]: { userId, username, role, expiresAt } }
-  _calKeys: {},   // { [calendarKey]: userId }
-  _shares: {}     // { [shareToken]: { title, resources, folders, createdAt } }
+  _users: {},             // { [username]: { id, username, displayName, passwordHash, salt, calendarKey, role, createdAt } }
+  _sessions: {},          // { [token]: { userId, username, role, expiresAt } }
+  _calKeys: {},           // { [calendarKey]: userId }
+  _shares: {},            // { [shareToken]: { title, resources, folders, createdAt } }
+  _pushSubscriptions: {}, // { [userId]: [subscriptionObjects] }
+  _vapid: null
 };
 
 try {
@@ -35,6 +83,8 @@ try {
       _sessions: loaded._sessions || {},
       _calKeys: loaded._calKeys || {},
       _shares: loaded._shares || {},
+      _pushSubscriptions: loaded._pushSubscriptions || {},
+      _vapid: loaded._vapid || null,
       ...loaded
     };
     // Ensure index mapping for calKeys
@@ -46,6 +96,35 @@ try {
   }
 } catch (e) {
   console.error('Error loading DB file:', e);
+}
+
+// Ensure VAPID keys are initialized
+let vapidKeys = {
+  publicKey: process.env.VAPID_PUBLIC_KEY || '',
+  privateKey: process.env.VAPID_PRIVATE_KEY || ''
+};
+
+if (!vapidKeys.publicKey || !vapidKeys.privateKey) {
+  if (store._vapid && store._vapid.publicKey && store._vapid.privateKey) {
+    vapidKeys = store._vapid;
+  } else if (webpush) {
+    vapidKeys = webpush.generateVAPIDKeys();
+    store._vapid = vapidKeys;
+    try { fs.writeFileSync(DB_FILE, JSON.stringify(store, null, 2)); } catch (_) {}
+  }
+}
+
+if (webpush && vapidKeys.publicKey && vapidKeys.privateKey) {
+  try {
+    webpush.setVapidDetails(
+      process.env.VAPID_SUBJECT || 'mailto:admin@e-calendar.app',
+      vapidKeys.publicKey,
+      vapidKeys.privateKey
+    );
+    console.log('✅ Web Push Notification Service active');
+  } catch (e) {
+    console.warn('⚠️ Web Push configuration failed:', e.message);
+  }
 }
 
 // Async save to avoid blocking
@@ -438,10 +517,37 @@ const server = http.createServer((req, res) => {
       }
       writeStream.write(chunk);
     });
-    req.on('end', () => {
+    req.on('end', async () => {
       if (aborted) return;
       writeStream.end();
-      const fileUrl = `/uploads/${filename}`;
+      let fileUrl = `/uploads/${filename}`;
+
+      // Upload to Cloudflare R2 if configured
+      if (r2Client) {
+        try {
+          const { PutObjectCommand } = require('@aws-sdk/client-s3');
+          const fileBuffer = fs.readFileSync(filePath);
+          const contentType = safeExt === '.pdf' ? 'application/pdf' :
+                              safeExt === '.png' ? 'image/png' :
+                              safeExt === '.jpg' || safeExt === '.jpeg' ? 'image/jpeg' :
+                              safeExt === '.webp' ? 'image/webp' : 'application/octet-stream';
+
+          await r2Client.send(new PutObjectCommand({
+            Bucket: R2_BUCKET_NAME,
+            Key: filename,
+            Body: fileBuffer,
+            ContentType: contentType
+          }));
+
+          if (R2_PUBLIC_DOMAIN) {
+            fileUrl = `${R2_PUBLIC_DOMAIN.replace(/\/$/, '')}/${filename}`;
+          }
+          console.log(`☁️ File uploaded to Cloudflare R2: ${fileUrl}`);
+        } catch (r2Err) {
+          console.warn('⚠️ Cloudflare R2 upload failed, keeping local file URL fallback:', r2Err.message);
+        }
+      }
+
       // Store file metadata in user's data
       if (!store[ownerId]) store[ownerId] = {};
       if (!store[ownerId].files) store[ownerId].files = {};
@@ -768,6 +874,75 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // ─── API: Web Push VAPID Public Key (GET /api/push/vapid-key) ───
+  if (pathname === '/api/push/vapid-key' && req.method === 'GET') {
+    res.setHeader('Cache-Control', 'no-store');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      publicKey: vapidKeys.publicKey || '',
+      enabled: Boolean(webpush && vapidKeys.publicKey)
+    }));
+    return;
+  }
+
+  // ─── API: Web Push Subscribe (POST /api/push/subscribe) ───
+  if (pathname === '/api/push/subscribe' && req.method === 'POST') {
+    parseJsonBody((err, data) => {
+      if (err || !data.subscription) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Missing push subscription' }));
+        return;
+      }
+
+      const ownerId = resolveOwnerId(data);
+      if (!store._pushSubscriptions) store._pushSubscriptions = {};
+      if (!store._pushSubscriptions[ownerId]) store._pushSubscriptions[ownerId] = [];
+
+      const endpoint = data.subscription.endpoint;
+      store._pushSubscriptions[ownerId] = store._pushSubscriptions[ownerId].filter(s => s && s.endpoint !== endpoint);
+      store._pushSubscriptions[ownerId].push(data.subscription);
+      saveStore();
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, message: 'Push subscription saved' }));
+    });
+    return;
+  }
+
+  // ─── API: Web Push Test (POST /api/push/test) ───
+  if (pathname === '/api/push/test' && req.method === 'POST') {
+    parseJsonBody(async (err, data) => {
+      const ownerId = resolveOwnerId(data);
+      const subs = (store._pushSubscriptions && store._pushSubscriptions[ownerId]) || [];
+
+      if (!webpush || !vapidKeys.publicKey || subs.length === 0) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'No active push subscriptions or VAPID not configured' }));
+        return;
+      }
+
+      const payload = JSON.stringify({
+        title: '🔔 E-Calendar: ทดสอบการแจ้งเตือนสำเร็จ!',
+        body: 'ระบบแจ้งเตือนเตือนคาบเรียนล่วงหน้า 15 นาทีพร้อมใช้งานแล้ว 🎉',
+        icon: '/icons/icon-192.png',
+        badge: '/icons/icon-192.png',
+        data: { url: '/' }
+      });
+
+      let sent = 0;
+      for (const sub of subs) {
+        try {
+          await webpush.sendNotification(sub, payload);
+          sent++;
+        } catch (_) {}
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, sent }));
+    });
+    return;
+  }
+
   // ─── API: Live iCalendar Feed (GET /api/calendar/:calendarKey/feed.ics) ───
   if (pathname.startsWith('/api/calendar/')) {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -934,6 +1109,69 @@ setInterval(() => {
   });
   if (changed) saveStore();
 }, 60 * 60 * 1000);
+
+// ─── Background Scheduler: Check 15-min Class Reminders ───────
+const _notifiedReminders = {}; // { 'userId_date_slot': true }
+
+setInterval(async () => {
+  if (!webpush || !store._pushSubscriptions || !vapidKeys.publicKey) return;
+
+  const now = new Date();
+  // Bangkok time UTC+7
+  const bangkokTime = new Date(now.getTime() + 7 * 3600000);
+  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const currentDay = days[bangkokTime.getUTCDay()];
+  const currentHour = bangkokTime.getUTCHours();
+  const currentMinute = bangkokTime.getUTCMinutes();
+  const nowTotalMinutes = currentHour * 60 + currentMinute;
+  const todayStr = bangkokTime.toISOString().slice(0, 10);
+
+  for (const userId of Object.keys(store._pushSubscriptions || {})) {
+    const subs = store._pushSubscriptions[userId];
+    if (!subs || subs.length === 0) continue;
+
+    const userData = store[userId] || {};
+    const curriculum = (userData.curriculum && userData.curriculum.length > 0) ? userData.curriculum : DEFAULT_BME_CURRICULUM;
+    const dayClasses = curriculum.filter(c => c.day && c.day.toLowerCase() === currentDay);
+
+    for (const cls of dayClasses) {
+      if (!cls.start) continue;
+      const [sh, sm] = cls.start.split(':').map(Number);
+      if (isNaN(sh) || isNaN(sm)) continue;
+      const classStartMinutes = sh * 60 + sm;
+      const diffMinutes = classStartMinutes - nowTotalMinutes;
+
+      // Check if class starts in 14 to 16 minutes
+      if (diffMinutes >= 14 && diffMinutes <= 16) {
+        const reminderKey = `${userId}_${todayStr}_${cls.id || cls.code || cls.name}_${cls.start}`;
+        if (_notifiedReminders[reminderKey]) continue;
+        _notifiedReminders[reminderKey] = true;
+
+        const payload = JSON.stringify({
+          title: `⏰ อีก 15 นาที: ${cls.name || cls.code}`,
+          body: `รหัส ${cls.code || ''} ${cls.room ? 'ห้อง ' + cls.room : ''} (เวลา ${cls.start} - ${cls.end || ''})`,
+          icon: '/icons/icon-192.png',
+          badge: '/icons/icon-192.png',
+          data: { url: '/' }
+        });
+
+        const validSubs = [];
+        for (const sub of subs) {
+          try {
+            await webpush.sendNotification(sub, payload);
+            validSubs.push(sub);
+          } catch (pushErr) {
+            if (pushErr.statusCode !== 410 && pushErr.statusCode !== 404) {
+              validSubs.push(sub);
+            }
+          }
+        }
+        store._pushSubscriptions[userId] = validSubs;
+        saveStore();
+      }
+    }
+  }
+}, 60000);
 
 server.listen(PORT, () => {
   console.log(`🚀 E-Calendar Server running on port ${PORT} with Multi-User & iCal Live Feed`);

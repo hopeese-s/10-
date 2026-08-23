@@ -438,7 +438,8 @@ const CloudSync = (function () {
       customBlocks: data.customBlocks || {},
       curriculum:   data.curriculum   || [],
       studyFolders: data.studyFolders || [],
-      studyLinks:   data.studyLinks   || []
+      studyLinks:   data.studyLinks   || [],
+      courseGrades: data.courseGrades || {}
     };
   }
 
