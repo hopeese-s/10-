@@ -861,9 +861,9 @@ function buildScheduleFlex(dayTitle, dateStr, classesList, routineList) {
         backgroundColor: '#C45A1B',
         paddingAll: '16px',
         contents: [
-          { type: 'text', text: 'E-CALENDAR DASHBOARD', color: '#ffffff', size: 'xxs', weight: 'bold', opacity: 0.8 },
+          { type: 'text', text: 'E-CALENDAR DASHBOARD', color: '#ffffff', size: 'xxs', weight: 'bold' },
           { type: 'text', text: `📅 ตาราง ${dayTitle}`, color: '#ffffff', size: 'lg', weight: 'bold' },
-          { type: 'text', text: dateStr, color: '#ffffff', size: 'xs', opacity: 0.9, margin: 'xs' }
+          { type: 'text', text: dateStr, color: '#ffffff', size: 'xs', margin: 'xs' }
         ]
       },
       body: {
@@ -995,9 +995,9 @@ function buildCourseProfileFlex(course) {
         backgroundColor: '#C45A1B',
         paddingAll: '16px',
         contents: [
-          { type: 'text', text: 'COURSE INFORMATION', color: '#ffffff', size: 'xxs', weight: 'bold', opacity: 0.85 },
+          { type: 'text', text: 'COURSE INFORMATION', color: '#ffffff', size: 'xxs', weight: 'bold' },
           { type: 'text', text: `${course.code}`, color: '#ffffff', size: 'xl', weight: 'bold' },
-          { type: 'text', text: `${course.name}`, color: '#ffffff', size: 'sm', wrap: true, opacity: 0.95 }
+          { type: 'text', text: `${course.name}`, color: '#ffffff', size: 'sm', wrap: true }
         ]
       },
       body: {
@@ -1132,7 +1132,7 @@ function buildWeeklyScheduleFlex(curriculum) {
         paddingAll: '12px',
         contents: [
           { type: 'text', text: `📅 ${d.title}`, color: '#ffffff', weight: 'bold', size: 'md' },
-          { type: 'text', text: `${dayClasses.length} คาบเรียน`, color: '#ffffff', size: 'xxs', opacity: 0.9 }
+          { type: 'text', text: `${dayClasses.length} คาบเรียน`, color: '#ffffff', size: 'xxs' }
         ]
       },
       body: {
@@ -1213,9 +1213,9 @@ function buildClassroomDirectoryFlex(curriculum, studyLinks) {
         backgroundColor: '#059669',
         paddingAll: '16px',
         contents: [
-          { type: 'text', text: 'E-CALENDAR STUDY HUB', color: '#ffffff', size: 'xxs', weight: 'bold', opacity: 0.85 },
+          { type: 'text', text: 'E-CALENDAR STUDY HUB', color: '#ffffff', size: 'xxs', weight: 'bold' },
           { type: 'text', text: '📚 รวมลิงก์ Google Classroom', color: '#ffffff', size: 'md', weight: 'bold' },
-          { type: 'text', text: 'คลิกเพื่อเข้าห้องเรียนและส่งงานได้ทันที', color: '#ffffff', size: 'xs', opacity: 0.9, margin: 'xs' }
+          { type: 'text', text: 'คลิกเพื่อเข้าห้องเรียนและส่งงานได้ทันที', color: '#ffffff', size: 'xs', margin: 'xs' }
         ]
       },
       body: {
@@ -1256,7 +1256,7 @@ function buildTaskAddedFlex(task, totalPending) {
         backgroundColor: '#10B981',
         paddingAll: '14px',
         contents: [
-          { type: 'text', text: 'TO-DO LIST SYNCED', color: '#ffffff', size: 'xxs', weight: 'bold', opacity: 0.9 },
+          { type: 'text', text: 'TO-DO LIST SYNCED', color: '#ffffff', size: 'xxs', weight: 'bold' },
           { type: 'text', text: '✅ เพิ่มงานสำเร็จ!', color: '#ffffff', size: 'md', weight: 'bold' }
         ]
       },
@@ -1351,7 +1351,7 @@ function buildDDayCountdownFlex() {
         backgroundColor: '#DC2626',
         paddingAll: '16px',
         contents: [
-          { type: 'text', text: 'EXAM COUNTDOWN', color: '#ffffff', size: 'xxs', weight: 'bold', opacity: 0.85 },
+          { type: 'text', text: 'EXAM COUNTDOWN', color: '#ffffff', size: 'xxs', weight: 'bold' },
           { type: 'text', text: '⏳ นับถอยหลังวันสอบ (D-Day)', color: '#ffffff', size: 'md', weight: 'bold' }
         ]
       },
@@ -1394,9 +1394,9 @@ function buildDailyBriefingFlex(dayName, dateStr, classesList, pendingTasks, rou
         backgroundColor: '#EA580C',
         paddingAll: '16px',
         contents: [
-          { type: 'text', text: 'DAILY BRIEFING', color: '#ffffff', size: 'xxs', weight: 'bold', opacity: 0.9 },
+          { type: 'text', text: 'DAILY BRIEFING', color: '#ffffff', size: 'xxs', weight: 'bold' },
           { type: 'text', text: `🌅 สรุปข้อมูล ${dayName}`, color: '#ffffff', size: 'lg', weight: 'bold' },
-          { type: 'text', text: dateStr, color: '#ffffff', size: 'xs', opacity: 0.9 }
+          { type: 'text', text: dateStr, color: '#ffffff', size: 'xs' }
         ]
       },
       body: {
@@ -1476,7 +1476,7 @@ function buildClassReminderFlex(course, timeUntilStr = 'อีก 15 นาท�
         backgroundColor: '#DC2626',
         paddingAll: '14px',
         contents: [
-          { type: 'text', text: '⚡ CLASS REMINDER', color: '#ffffff', size: 'xxs', weight: 'bold', opacity: 0.85 },
+          { type: 'text', text: '⚡ CLASS REMINDER', color: '#ffffff', size: 'xxs', weight: 'bold' },
           { type: 'text', text: `⏰ กำลังจะเริ่มเรียนใน ${timeUntilStr}!`, color: '#ffffff', size: 'md', weight: 'bold' }
         ]
       },
@@ -1559,7 +1559,7 @@ function buildLinkSuccessFlex(user) {
         backgroundColor: '#10B981',
         paddingAll: '16px',
         contents: [
-          { type: 'text', text: 'E-CALENDAR NOTIFICATION', color: '#ffffff', size: 'xxs', weight: 'bold', opacity: 0.9 },
+          { type: 'text', text: 'E-CALENDAR NOTIFICATION', color: '#ffffff', size: 'xxs', weight: 'bold' },
           { type: 'text', text: '🎉 ผูกบัญชีสำเร็จเรียบร้อย!', color: '#ffffff', size: 'md', weight: 'bold' }
         ]
       },
