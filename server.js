@@ -2000,6 +2000,158 @@ function buildFoodRouletteFlex(food) {
   };
 }
 
+function buildHelpMenuFlex() {
+  return {
+    type: 'flex',
+    altText: '🤖 คู่มือคำสั่งและฟีเจอร์ทั้งหมดของ E-Calendar Bot',
+    contents: {
+      type: 'carousel',
+      contents: [
+        {
+          type: 'bubble',
+          size: 'kilo',
+          header: {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#C45A1B',
+            paddingAll: '14px',
+            contents: [
+              { type: 'text', text: 'SCHEDULE & LIVE CLASSES', color: '#ffffff', size: 'xxs', weight: 'bold' },
+              { type: 'text', text: '📅 1. ตารางเรียน & คาบสด', color: '#ffffff', size: 'md', weight: 'bold' }
+            ]
+          },
+          body: {
+            type: 'box',
+            layout: 'vertical',
+            paddingAll: '14px',
+            spacing: 'sm',
+            contents: [
+              { type: 'text', text: '⚡ "คาบต่อไป" — เช็ควิชาที่กำลังเรียน/คาบถัดไป', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '📅 "ตารางวันนี้" / "ตารางพรุ่งนี้"', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '🗓️ "ตารางสัปดาห์" — สรุปจันทร์-ศุกร์', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '📌 "ตาราง จันทร์" — ดูเฉพาะวันที่ระบุ', size: 'xs', color: '#1F2937', wrap: true }
+            ]
+          },
+          footer: {
+            type: 'box',
+            layout: 'horizontal',
+            spacing: 'sm',
+            contents: [
+              { type: 'button', action: { type: 'message', label: '⚡ คาบต่อไป', text: 'คาบต่อไป' }, style: 'primary', color: '#C45A1B', height: 'sm' },
+              { type: 'button', action: { type: 'message', label: '📅 วันนี้', text: 'ตารางวันนี้' }, style: 'secondary', height: 'sm' }
+            ]
+          }
+        },
+        {
+          type: 'bubble',
+          size: 'kilo',
+          header: {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#059669',
+            paddingAll: '14px',
+            contents: [
+              { type: 'text', text: 'TASK & MEMO MANAGER', color: '#ffffff', size: 'xxs', weight: 'bold' },
+              { type: 'text', text: '📝 2. การบ้าน & โน้ตกันลืม', color: '#ffffff', size: 'md', weight: 'bold' }
+            ]
+          },
+          body: {
+            type: 'box',
+            layout: 'vertical',
+            paddingAll: '14px',
+            spacing: 'sm',
+            contents: [
+              { type: 'text', text: '➕ "+งาน <ชื่อ> ส่ง <วัน>" — สั่งจดการบ้าน', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '📝 "งานค้าง" — เช็ครายการงานที่ยังไม่เสร็จ', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '✅ "เสร็จ 1" — ติ๊กงานลำดับที่ 1 ว่าเสร็จ', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '📌 "+โน้ต <ข้อความ>" — สมุดจดกันลืม', size: 'xs', color: '#1F2937', wrap: true }
+            ]
+          },
+          footer: {
+            type: 'box',
+            layout: 'horizontal',
+            spacing: 'sm',
+            contents: [
+              { type: 'button', action: { type: 'message', label: '📝 งานค้าง', text: 'งานค้าง' }, style: 'primary', color: '#059669', height: 'sm' },
+              { type: 'button', action: { type: 'message', label: '📌 ดูโน้ต', text: 'โน้ต' }, style: 'secondary', height: 'sm' }
+            ]
+          }
+        },
+        {
+          type: 'bubble',
+          size: 'kilo',
+          header: {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#2563EB',
+            paddingAll: '14px',
+            contents: [
+              { type: 'text', text: 'COURSE & CLASSROOM HUB', color: '#ffffff', size: 'xxs', weight: 'bold' },
+              { type: 'text', text: '🔍 3. ค้นหาวิชา & คลาสรูม', color: '#ffffff', size: 'md', weight: 'bold' }
+            ]
+          },
+          body: {
+            type: 'box',
+            layout: 'vertical',
+            paddingAll: '14px',
+            spacing: 'sm',
+            contents: [
+              { type: 'text', text: '🔎 "วิชา ฟิสิกส์" หรือ "SCPY161" — ดูห้อง/เวลา/ชีท', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '🏢 "ห้อง L2-002" — ค้นหาวิชาตามห้อง', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '📚 "คลาสรูม" — รวมลิงก์ Google Classroom', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '⏰ แจ้งเตือนก่อนเรียน 15 นาทีอัตโนมัติ', size: 'xs', color: '#2563EB', weight: 'bold', wrap: true }
+            ]
+          },
+          footer: {
+            type: 'box',
+            layout: 'horizontal',
+            spacing: 'sm',
+            contents: [
+              { type: 'button', action: { type: 'message', label: '📚 คลาสรูม', text: 'คลาสรูม' }, style: 'primary', color: '#2563EB', height: 'sm' },
+              { type: 'button', action: { type: 'message', label: '🔍 วิชาฟิสิกส์', text: 'วิชา ฟิสิกส์' }, style: 'secondary', height: 'sm' }
+            ]
+          }
+        },
+        {
+          type: 'bubble',
+          size: 'kilo',
+          header: {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#7C3AED',
+            paddingAll: '14px',
+            contents: [
+              { type: 'text', text: 'PLANNING & LIFESTYLE', color: '#ffffff', size: 'xxs', weight: 'bold' },
+              { type: 'text', text: '⏳ 4. วางแผน & ไลฟ์สไตล์', color: '#ffffff', size: 'md', weight: 'bold' }
+            ]
+          },
+          body: {
+            type: 'box',
+            layout: 'vertical',
+            paddingAll: '14px',
+            spacing: 'sm',
+            contents: [
+              { type: 'text', text: '🕒 "เวลาว่าง" — คำนวณช่วงว่างระหว่างคาบ', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '📊 "หน่วยกิต" — สรุปหน่วยกิตเทอมนี้', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '⏳ "สอบ" — นับถอยหลังวันสอบ D-Day', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '🍽️ "กินไรดี" — สุ่มเมนู/ร้านเด็ดแถวมหิดล!', size: 'xs', color: '#1F2937', wrap: true }
+            ]
+          },
+          footer: {
+            type: 'box',
+            layout: 'horizontal',
+            spacing: 'sm',
+            contents: [
+              { type: 'button', action: { type: 'message', label: '🕒 เวลาว่าง', text: 'เวลาว่าง' }, style: 'primary', color: '#7C3AED', height: 'sm' },
+              { type: 'button', action: { type: 'message', label: '🍽️ กินไรดี', text: 'กินไรดี' }, style: 'secondary', height: 'sm' }
+            ]
+          }
+        }
+      ]
+    }
+  };
+}
+
 // ─── Automated 15-Minute Pre-Class Reminder Scheduler (Every 60s) ───
 const sentReminderKeys = new Set();
 
@@ -3200,18 +3352,12 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // ─── Fallback: Smart Interactive Menu ───
+      // ─── Fallback: Smart Interactive Menu (Carousel & Quick Replies) ───
       const isLinked = Boolean(store._lineUsers && store._lineUsers[lineUserId]);
-      const helpMsg = {
-        type: 'text',
-        text: isLinked 
-          ? `🤖 เมนูและคำสั่ง E-Calendar Bot:\n\n` +
-            `⚡ สด & ตารางเรียน:\n• "คาบต่อไป" (ดูวิชาที่กำลังเรียน/คาบถัดไป)\n• "ตารางวันนี้" / "ตารางพรุ่งนี้" / "ตาราง จันทร์"\n• "ตารางสัปดาห์" (สรุปจันทร์-ศุกร์)\n• "วิชา ฟิสิกส์" หรือ "SCPY161" (ค้นหารายละเอียดวิชา)\n\n` +
-            `📝 การบ้าน & โน้ต:\n• "+งาน <ชื่องาน> ส่ง <วันที่>" (จดการบ้าน)\n• "งานค้าง" / "เสร็จ 1" (เช็ค/ติ๊กงานเสร็จ)\n• "+โน้ต <ข้อความ>" / "โน้ต" (สมุดโน้ตกันลืม)\n\n` +
-            `⏳ วางแผน & อื่นๆ:\n• "เวลาว่าง" (หาช่วงเวลาว่างระหว่างคาบ)\n• "หน่วยกิต" (สรุปหน่วยกิตเทอมนี้)\n• "คลาสรูม" (รวมลิงก์ Classroom)\n• "สอบ" (นับถอยหลังสอบ D-Day)\n• "กินไรดี" (สุ่มของกินแถวมหิดล!)`
-          : `👋 สวัสดีครับ! บัญชี LINE นี้ยังไม่ได้ผูกกับ E-Calendar\n\nกรุณาพิมพ์:\n👉 /link <Username ของคุณ>\nเช่น: /link witchaya`,
-        quickReply: {
-          items: isLinked ? [
+      if (isLinked) {
+        const menuFlex = buildHelpMenuFlex();
+        menuFlex.quickReply = {
+          items: [
             { type: 'action', action: { type: 'message', label: '⚡ คาบต่อไป', text: 'คาบต่อไป' } },
             { type: 'action', action: { type: 'message', label: '📅 ตารางวันนี้', text: 'ตารางวันนี้' } },
             { type: 'action', action: { type: 'message', label: '🕒 เวลาว่าง', text: 'เวลาว่าง' } },
@@ -3219,12 +3365,21 @@ const server = http.createServer(async (req, res) => {
             { type: 'action', action: { type: 'message', label: '📌 โน้ต', text: 'โน้ต' } },
             { type: 'action', action: { type: 'message', label: '📊 หน่วยกิต', text: 'หน่วยกิต' } },
             { type: 'action', action: { type: 'message', label: '🍽️ กินไรดี', text: 'กินไรดี' } }
-          ] : [
-            { type: 'action', action: { type: 'message', label: '❓ วิธีใช้', text: 'วิธีใช้' } }
           ]
-        }
-      };
-      await sendLineReply(replyToken, [helpMsg]);
+        };
+        await sendLineReply(replyToken, [menuFlex]);
+      } else {
+        const welcomeUnlinked = {
+          type: 'text',
+          text: `👋 สวัสดีครับ! บัญชี LINE นี้ยังไม่ได้ผูกกับ E-Calendar\n\nกรุณาพิมพ์:\n👉 /link <Username ของคุณ>\nเช่น: /link witchaya\n\n(ดูชื่อ Username ได้บนหน้าเว็บ E-Calendar Dashboard ครับ)`,
+          quickReply: {
+            items: [
+              { type: 'action', action: { type: 'message', label: '❓ วิธีใช้', text: 'วิธีใช้' } }
+            ]
+          }
+        };
+        await sendLineReply(replyToken, [welcomeUnlinked]);
+      }
     }
   }
 
