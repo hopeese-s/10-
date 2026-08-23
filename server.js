@@ -190,12 +190,13 @@ const dbAdapter = {
           .from('user_sync_data')
           .select('data, version, updated_at')
           .eq('user_id', String(userId))
-          .single();
-        if (!error && data && data.data) {
+          .order('updated_at', { ascending: false })
+          .limit(1);
+        if (!error && data && data.length > 0 && data[0].data) {
           return {
-            ...data.data,
-            version: data.version,
-            updatedAt: data.updated_at
+            ...data[0].data,
+            version: data[0].version,
+            updatedAt: data[0].updated_at
           };
         }
       } catch (err) {
@@ -210,20 +211,33 @@ const dbAdapter = {
     store[userId] = payload;
     saveStore();
 
-    // 2. Persistent Supabase PostgreSQL upsert
+    // 2. Persistent Supabase PostgreSQL write
     if (supabase) {
+      const record = {
+        user_id: String(userId),
+        data: payload,
+        version: parseInt(payload.version, 10) || 0,
+        updated_at: payload.updatedAt || new Date().toISOString()
+      };
+
       try {
-        const { error } = await supabase
+        const { error: upsertErr } = await supabase
           .from('user_sync_data')
-          .upsert({
-            user_id: String(userId),
-            data: payload,
-            version: parseInt(payload.version, 10) || 0,
-            updated_at: payload.updatedAt || new Date().toISOString()
-          }, { onConflict: 'user_id' });
-        if (error) console.warn('⚠️ Supabase upsert error:', error.message);
+          .upsert(record, { onConflict: 'user_id' });
+
+        if (upsertErr) {
+          console.warn(`⚠️ Supabase saveUserData upsert notice for [${userId}]:`, upsertErr.message);
+          // Fallback: Delete existing and Insert
+          await supabase.from('user_sync_data').delete().eq('user_id', String(userId));
+          const { error: insertErr } = await supabase.from('user_sync_data').insert(record);
+          if (insertErr) {
+            console.error(`❌ Supabase saveUserData fallback insert error for [${userId}]:`, insertErr.message);
+          } else {
+            console.log(`✅ Supabase saveUserData saved via insert fallback for [${userId}]`);
+          }
+        }
       } catch (err) {
-        console.warn('⚠️ Supabase saveUserData error:', err.message);
+        console.error(`❌ Supabase saveUserData exception for [${userId}]:`, err.message);
       }
     }
   },
@@ -310,46 +324,68 @@ const dbAdapter = {
           .from('user_sync_data')
           .select('data')
           .eq('user_id', '__system_auth__')
-          .single();
-        if (!error && data && data.data) {
-          store._users = { ...store._users, ...(data.data._users || {}) };
-          store._sessions = { ...store._sessions, ...(data.data._sessions || {}) };
-          store._calKeys = { ...store._calKeys, ...(data.data._calKeys || {}) };
-          store._shares = { ...store._shares, ...(data.data._shares || {}) };
-          store._pushSubscriptions = { ...store._pushSubscriptions, ...(data.data._pushSubscriptions || {}) };
-          if (data.data._vapid && data.data._vapid.publicKey && data.data._vapid.privateKey) {
-            vapidKeys = data.data._vapid;
-            store._vapid = data.data._vapid;
+          .order('updated_at', { ascending: false })
+          .limit(1);
+        if (!error && data && data.length > 0 && data[0].data) {
+          const authData = data[0].data;
+          store._users = { ...store._users, ...(authData._users || {}) };
+          store._sessions = { ...store._sessions, ...(authData._sessions || {}) };
+          store._calKeys = { ...store._calKeys, ...(authData._calKeys || {}) };
+          store._shares = { ...store._shares, ...(authData._shares || {}) };
+          store._pushSubscriptions = { ...store._pushSubscriptions, ...(authData._pushSubscriptions || {}) };
+          if (authData._vapid && authData._vapid.publicKey && authData._vapid.privateKey) {
+            vapidKeys = authData._vapid;
+            store._vapid = authData._vapid;
             configureWebPush();
           }
-          console.log('✅ Loaded persistent User Accounts, Sessions, and System Config from Supabase');
+          console.log(`✅ Loaded ${Object.keys(store._users).length} User Account(s) & System Config permanently from Supabase`);
+        } else if (error) {
+          console.warn('⚠️ Supabase loadSystemAuth notice:', error.message);
         }
       } catch (err) {
-        console.warn('⚠️ Supabase loadSystemAuth notice:', err.message);
+        console.warn('⚠️ Supabase loadSystemAuth exception:', err.message);
       }
     }
   },
 
   async saveSystemAuth() {
     if (supabase) {
+      const payload = {
+        _users: store._users || {},
+        _sessions: store._sessions || {},
+        _calKeys: store._calKeys || {},
+        _shares: store._shares || {},
+        _pushSubscriptions: store._pushSubscriptions || {},
+        _vapid: store._vapid || vapidKeys
+      };
+
       try {
-        await supabase
+        const { error: upsertErr } = await supabase
           .from('user_sync_data')
           .upsert({
             user_id: '__system_auth__',
-            data: {
-              _users: store._users || {},
-              _sessions: store._sessions || {},
-              _calKeys: store._calKeys || {},
-              _shares: store._shares || {},
-              _pushSubscriptions: store._pushSubscriptions || {},
-              _vapid: store._vapid || vapidKeys
-            },
+            data: payload,
             version: 1,
             updated_at: new Date().toISOString()
           }, { onConflict: 'user_id' });
+
+        if (upsertErr) {
+          console.warn('⚠️ Supabase saveSystemAuth upsert error, trying fallback delete+insert:', upsertErr.message);
+          await supabase.from('user_sync_data').delete().eq('user_id', '__system_auth__');
+          const { error: insertErr } = await supabase.from('user_sync_data').insert({
+            user_id: '__system_auth__',
+            data: payload,
+            version: 1,
+            updated_at: new Date().toISOString()
+          });
+          if (insertErr) {
+            console.error('❌ Supabase saveSystemAuth fallback insert error:', insertErr.message);
+          } else {
+            console.log('✅ Supabase saveSystemAuth saved via fallback insert');
+          }
+        }
       } catch (err) {
-        console.warn('⚠️ Supabase saveSystemAuth error:', err.message);
+        console.error('❌ Supabase saveSystemAuth exception:', err.message);
       }
     }
   }
@@ -1128,6 +1164,35 @@ const server = http.createServer(async (req, res) => {
   // ─── API: System Health & Cloud Connection Status (GET /api/health) ───
   if (pathname === '/api/health' && req.method === 'GET') {
     res.setHeader('Cache-Control', 'no-store');
+
+    let supabaseDiagnostics = {
+      connected: Boolean(supabase),
+      table_status: 'not_configured',
+      persisted_users: Object.keys(store._users || {}),
+      persisted_users_count: Object.keys(store._users || {}).length,
+      error: null
+    };
+
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('user_sync_data')
+          .select('user_id, updated_at')
+          .limit(10);
+        if (error) {
+          supabaseDiagnostics.table_status = 'error';
+          supabaseDiagnostics.error = error.message;
+        } else {
+          supabaseDiagnostics.table_status = 'ok';
+          supabaseDiagnostics.records_in_table = data ? data.length : 0;
+          supabaseDiagnostics.sample_user_ids = data ? data.map(r => r.user_id) : [];
+        }
+      } catch (err) {
+        supabaseDiagnostics.table_status = 'exception';
+        supabaseDiagnostics.error = err.message;
+      }
+    }
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       status: 'healthy',
@@ -1136,16 +1201,15 @@ const server = http.createServer(async (req, res) => {
         provider: r2Client ? 'cloudflare_r2' : 'local_ephemeral_fallback',
         r2_connected: Boolean(r2Client),
         bucket: R2_BUCKET_NAME || null,
-        publicDomain: R2_PUBLIC_DOMAIN || null,
-        warning: !r2Client && IS_PRODUCTION ? '⚠️ Cloudflare R2 is NOT configured. Uploads stored on ephemeral disk will be lost on container redeploy!' : null
+        publicDomain: R2_PUBLIC_DOMAIN || null
       },
       database: {
         provider: supabase ? 'supabase_postgresql' : 'local_ephemeral_fallback',
-        supabase_connected: Boolean(supabase),
-        warning: !supabase && IS_PRODUCTION ? '⚠️ Supabase PostgreSQL is NOT configured. User data stored in sync_store.json will be lost on container redeploy!' : null
+        ...supabaseDiagnostics
       },
       push_notifications: {
-        enabled: Boolean(webpush && vapidKeys.publicKey)
+        enabled: Boolean(webpush && vapidKeys.publicKey),
+        active_vapid_key: vapidKeys.publicKey ? vapidKeys.publicKey.substring(0, 12) + '...' : null
       },
       timestamp: new Date().toISOString()
     }, null, 2));
