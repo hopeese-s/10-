@@ -132,6 +132,21 @@ let vapidKeys = {
   privateKey: process.env.VAPID_PRIVATE_KEY || ''
 };
 
+function configureWebPush() {
+  if (webpush && vapidKeys && vapidKeys.publicKey && vapidKeys.privateKey) {
+    try {
+      webpush.setVapidDetails(
+        process.env.VAPID_SUBJECT || 'mailto:admin@e-calendar.app',
+        vapidKeys.publicKey,
+        vapidKeys.privateKey
+      );
+      console.log('✅ Web Push Notification Service active (Key: ' + vapidKeys.publicKey.substring(0, 10) + '...)');
+    } catch (e) {
+      console.warn('⚠️ Web Push configuration failed:', e.message);
+    }
+  }
+}
+
 if (!vapidKeys.publicKey || !vapidKeys.privateKey) {
   if (store._vapid && store._vapid.publicKey && store._vapid.privateKey) {
     vapidKeys = store._vapid;
@@ -142,18 +157,7 @@ if (!vapidKeys.publicKey || !vapidKeys.privateKey) {
   }
 }
 
-if (webpush && vapidKeys.publicKey && vapidKeys.privateKey) {
-  try {
-    webpush.setVapidDetails(
-      process.env.VAPID_SUBJECT || 'mailto:admin@e-calendar.app',
-      vapidKeys.publicKey,
-      vapidKeys.privateKey
-    );
-    console.log('✅ Web Push Notification Service active');
-  } catch (e) {
-    console.warn('⚠️ Web Push configuration failed:', e.message);
-  }
-}
+configureWebPush();
 
 // Async save to avoid blocking
 let saveQueue = Promise.resolve();
@@ -313,9 +317,10 @@ const dbAdapter = {
           store._calKeys = { ...store._calKeys, ...(data.data._calKeys || {}) };
           store._shares = { ...store._shares, ...(data.data._shares || {}) };
           store._pushSubscriptions = { ...store._pushSubscriptions, ...(data.data._pushSubscriptions || {}) };
-          if (data.data._vapid && data.data._vapid.publicKey) {
+          if (data.data._vapid && data.data._vapid.publicKey && data.data._vapid.privateKey) {
             vapidKeys = data.data._vapid;
             store._vapid = data.data._vapid;
+            configureWebPush();
           }
           console.log('✅ Loaded persistent User Accounts, Sessions, and System Config from Supabase');
         }
@@ -1222,16 +1227,35 @@ const server = http.createServer(async (req, res) => {
       });
 
       let sent = 0;
+      let lastErr = null;
       const sendPromises = subs.map(async (sub) => {
         try {
           await webpush.sendNotification(sub, payload);
           sent++;
         } catch (pushErr) {
-          console.warn('Push delivery error to endpoint:', pushErr.statusCode);
+          lastErr = pushErr.message || pushErr.statusCode || 'Gateway Error';
+          console.warn(`Push delivery notice (Status: ${pushErr.statusCode || 'err'}):`, pushErr.message || pushErr);
+          // Prune stale or expired subscriptions automatically
+          if (pushErr.statusCode === 410 || pushErr.statusCode === 404) {
+            if (supabase && sub.endpoint) {
+              supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint).catch(() => {});
+            }
+          }
         }
       });
 
       await Promise.allSettled(sendPromises);
+
+      if (sent === 0) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: false,
+          sent: 0,
+          totalDevices: subs.length,
+          error: 'ส่งไม่สำเร็จ (Token อาจหมดอายุ) กรุณากดปุ่ม "เปิดบนเครื่องนี้" เพื่อรีเฟรชการเชื่อมต่อ'
+        }));
+        return;
+      }
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, sent, totalDevices: subs.length }));

@@ -138,6 +138,14 @@ const PushClient = (() => {
         return { ok: false, error: 'ไม่พบ PushManager บนเบราว์เซอร์นี้' };
       }
 
+      // Unsubscribe stale subscription to ensure alignment with active server VAPID key
+      try {
+        const oldSub = await pushManager.getSubscription();
+        if (oldSub) {
+          await oldSub.unsubscribe();
+        }
+      } catch (_) {}
+
       const subscription = await pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: applicationServerKey
