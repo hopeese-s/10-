@@ -51,8 +51,8 @@ if (hasR2) {
 
 // ─── Supabase PostgreSQL Database Adapter ─────────────────────
 let supabase = null;
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
+const SUPABASE_URL = process.env.SUPABASE_URL ? process.env.SUPABASE_URL.replace(/['"]/g, '').trim().replace(/\/$/, '') : null;
+const SUPABASE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || '').replace(/['"]/g, '').trim();
 const hasSupabase = Boolean(SUPABASE_URL && SUPABASE_KEY);
 
 if (hasSupabase) {
