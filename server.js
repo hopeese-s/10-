@@ -248,16 +248,19 @@ function generateIcsCalendar(userId, includeRoutines = false, includeStudy = tru
   });
   } // end if (includeClass)
 
-  // Add default routine events (deduplicated against curriculum classes)
-  const curriculumClassCodes = new Set(curriculum.map(c => c.code));
+  // Add default routine events (respecting category filters and deduplicating against curriculum)
   DEFAULT_BME_ROUTINE_EVENTS.forEach(ev => {
-    // Skip routine class events if the same class is already in the curriculum
-    if (ev.isClass) {
+    if (ev.isClass || ev.type === 'class') {
+      if (!includeClass) return;
       const matchingCourse = curriculum.find(c => {
         const dayMap = { MO: 'monday', TU: 'tuesday', WE: 'wednesday', TH: 'thursday', FR: 'friday', SA: 'saturday', SU: 'sunday' };
         return dayMap[ev.day] === c.day && c.start === ev.start;
       });
       if (matchingCourse) return; // Skip duplicate class event
+    } else if (ev.isStudyBlock || ev.type === 'study') {
+      if (!includeStudy) return;
+    } else {
+      if (!includeRoutines) return;
     }
     events.push({ ...ev });
   });

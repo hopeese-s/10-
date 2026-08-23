@@ -228,6 +228,11 @@
         return;
       }
 
+      function escHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      }
+
       // Check file type
       const isPdf = type === 'pdf' || (type === 'local' && (url.startsWith('data:application/pdf') || url.endsWith('.pdf'))) || url.includes('.pdf');
       const isImage = type === 'image' || (type === 'local' && url.startsWith('data:image/')) || url.match(/\.(png|jpe?g|gif|webp|svg)$/i);
@@ -237,7 +242,7 @@
         loadingEl.style.display = 'none';
         contentEl.innerHTML = `
           <div style="display:flex;flex-direction:column;align-items:center;padding:20px;max-width:100%">
-            <img src="${url}" alt="${title}" style="max-width:100%;height:auto;max-height:85vh;object-fit:contain;border-radius:var(--r-m);box-shadow:var(--shadow-3)" />
+            <img src="${escHtml(url)}" alt="${escHtml(title)}" style="max-width:100%;height:auto;max-height:85vh;object-fit:contain;border-radius:var(--r-m);box-shadow:var(--shadow-3)" />
           </div>
         `;
         return;
@@ -250,11 +255,11 @@
         contentEl.innerHTML = `
           <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:65vh;gap:20px;text-align:center;padding:24px">
             <div style="font-size:54px">🚀</div>
-            <div style="font-size:18px;font-weight:700;color:var(--label)">${title}</div>
-            <div style="font-size:12.5px;color:var(--label-3);background:var(--bg-1);padding:10px 18px;border-radius:var(--r-m);border:1px solid var(--sep);word-break:break-all;max-width:600px">${url}</div>
+            <div style="font-size:18px;font-weight:700;color:var(--label)">${escHtml(title)}</div>
+            <div style="font-size:12.5px;color:var(--label-3);background:var(--bg-1);padding:10px 18px;border-radius:var(--r-m);border:1px solid var(--sep);word-break:break-all;max-width:600px">${escHtml(url)}</div>
             <div style="display:flex;gap:12px;margin-top:8px">
               <button class="back-btn-main" onclick="window.location.href='./'">🔙 กลับหน้าหลัก</button>
-              <a href="${url}" target="_blank" rel="noopener noreferrer" style="background:var(--accent);color:#fff;font-weight:700;padding:8px 20px;border-radius:var(--r-pill);text-decoration:none;display:inline-flex;align-items:center;gap:6px">เปิดเว็บไซต์ต้นทาง ↗</a>
+              <a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer" style="background:var(--accent);color:#fff;font-weight:700;padding:8px 20px;border-radius:var(--r-pill);text-decoration:none;display:inline-flex;align-items:center;gap:6px">เปิดเว็บไซต์ต้นทาง ↗</a>
             </div>
           </div>
         `;

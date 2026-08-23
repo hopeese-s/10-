@@ -424,17 +424,9 @@
       localStorage.setItem('sd-study-folders', JSON.stringify(state.studyFolders));
     }
 
-    // Links: merge cloud links with DEFAULT_STUDY_LINKS so defaults are never lost
+    // Links: take cloud version if non-empty, else keep local
     if (cloudData.studyLinks && Array.isArray(cloudData.studyLinks) && cloudData.studyLinks.length > 0) {
-      const cloudIds   = new Set(cloudData.studyLinks.map(l => l.id));
-      const defaultIds = new Set(DEFAULT_STUDY_LINKS.map(l => l.id));
-      // Defaults not in cloud (new defaults added since last sync)
-      const missingDefaults = DEFAULT_STUDY_LINKS.filter(l => !cloudIds.has(l.id));
-      // Custom links from cloud (user-added)
-      const cloudCustom = cloudData.studyLinks.filter(l => !defaultIds.has(l.id));
-      // Cloud versions of defaults
-      const cloudDefaults = cloudData.studyLinks.filter(l => defaultIds.has(l.id));
-      state.studyLinks = [...cloudDefaults, ...missingDefaults, ...cloudCustom];
+      state.studyLinks = cloudData.studyLinks;
       localStorage.setItem('sd-study-links', JSON.stringify(state.studyLinks));
     }
 
@@ -1071,7 +1063,12 @@
     let done = 0, total = 0;
     DAY_ORDER.forEach(key => {
       const day = ROUTINES[key];
-      const studyBlocks = day.blocks.filter(b => b.isStudyBlock);
+      const customExtra = state.customBlocks[key] || [];
+      const overrideIds = new Set(customExtra.filter(b => b._override).map(b => b.id));
+      const baseBlocks = (day ? day.blocks : []).filter(b => !overrideIds.has(b.id));
+      const allBlocks = [...baseBlocks, ...customExtra];
+      const studyBlocks = allBlocks.filter(b => b.isStudyBlock || b.tag === 'study');
+
       const checkKey = getCheckKey(key);
       const checks = state.checklist[checkKey] || {};
       total += studyBlocks.length;
@@ -1563,14 +1560,39 @@
       const descInp = document.getElementById('course-edit-desc-inp');
 
       course.room = roomInp?.value.trim() || course.room;
-      course.schedule = schedInp?.value.trim() || course.schedule;
+      const schedStr = schedInp?.value.trim() || course.schedule;
+      course.schedule = schedStr;
       course.classroomUrl = crInp?.value.trim() || '';
       course.driveUrl = drInp?.value.trim() || '';
       course.desc = descInp?.value.trim() || course.desc;
 
+      // Parse day & start/end times from schedule string
+      const dayThaiMap = {
+        'จันทร์': 'monday', 'จ.': 'monday', 'จ ': 'monday', 'mon': 'monday',
+        'อังคาร': 'tuesday', 'อ.': 'tuesday', 'อ ': 'tuesday', 'tue': 'tuesday',
+        'พุธ': 'wednesday', 'พ.': 'wednesday', 'พ ': 'wednesday', 'wed': 'wednesday',
+        'พฤหัส': 'thursday', 'พฤหัสบดี': 'thursday', 'พฤ.': 'thursday', 'พฤ ': 'thursday', 'thu': 'thursday',
+        'ศุกร์': 'friday', 'ศ.': 'friday', 'ศ ': 'friday', 'fri': 'friday',
+        'เสาร์': 'saturday', 'ส.': 'saturday', 'ส ': 'saturday', 'sat': 'saturday',
+        'อาทิตย์': 'sunday', 'อา.': 'sunday', 'อา ': 'sunday', 'sun': 'sunday'
+      };
+      const timeMatch = schedStr.match(/(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})/);
+      if (timeMatch) {
+        course.start = timeMatch[1].padStart(5, '0');
+        course.end = timeMatch[2].padStart(5, '0');
+      }
+      for (const [thDay, enKey] of Object.entries(dayThaiMap)) {
+        if (schedStr.toLowerCase().includes(thDay.toLowerCase())) {
+          course.day = enKey;
+          break;
+        }
+      }
+
       saveCurriculum();
       renderCurriculumView();
       renderTimeline(state.currentDay);
+      if (state.currentDashboardView === 'schedule') renderSchedule();
+      if (state.currentDashboardView === 'week') renderWeek();
       showToast(`บันทึกข้อมูลวิชา ${course.code} เรียบร้อยแล้ว`, 'success');
       closeModal('course-modal');
     };
@@ -1879,11 +1901,14 @@
 
     // Delete document
     container.querySelectorAll('.btn-del-doc').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const id = btn.dataset.id;
         if (confirm('คุณต้องการลบเอกสารนี้หรือไม่?')) {
           state.studyLinks = state.studyLinks.filter(l => l.id !== id);
+          if (window.LocalFileDB) {
+            try { await LocalFileDB.deleteFile(id); } catch (_) {}
+          }
           saveStudyLinks();
           renderStudyView();
           showToast('ลบเอกสารเรียบร้อย', 'info');
@@ -1903,10 +1928,13 @@
 
     // Delete link button
     container.querySelectorAll('.delete-link-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const id = btn.dataset.id;
         state.studyLinks = state.studyLinks.filter(l => l.id !== id);
+        if (window.LocalFileDB) {
+          try { await LocalFileDB.deleteFile(id); } catch (_) {}
+        }
         saveStudyLinks();
         renderStudyView();
         showToast('🗑️ ลบเอกสารแล้ว', 'info');
@@ -1999,8 +2027,10 @@
       };
     }
 
-    document.getElementById('folder-modal-close')?.addEventListener('click', () => closeModal('folder-modal'));
-    document.getElementById('folder-cancel-btn')?.addEventListener('click', () => closeModal('folder-modal'));
+    const folderCloseBtn = document.getElementById('folder-modal-close');
+    if (folderCloseBtn) folderCloseBtn.onclick = () => closeModal('folder-modal');
+    const folderCancelBtn = document.getElementById('folder-cancel-btn');
+    if (folderCancelBtn) folderCancelBtn.onclick = () => closeModal('folder-modal');
 
     modal.classList.add('open');
     document.body.style.overflow = 'hidden';
@@ -2024,7 +2054,9 @@
 
     function refreshCalendarUrls() {
       const includeRoutines = optRoutines ? optRoutines.checked : false;
-      const { httpsUrl, webcalUrl } = CloudSync.getCalendarFeedUrl(includeRoutines);
+      const includeStudy = optStudy ? optStudy.checked : true;
+      const includeClass = optClass ? optClass.checked : true;
+      const { httpsUrl, webcalUrl } = CloudSync.getCalendarFeedUrl(includeRoutines, includeStudy, includeClass);
 
       if (urlInput) urlInput.value = webcalUrl;
       if (appleBtn) appleBtn.href = webcalUrl;
@@ -2036,9 +2068,9 @@
       }
     }
 
-    if (optRoutines) {
-      optRoutines.onchange = refreshCalendarUrls;
-    }
+    if (optRoutines) optRoutines.onchange = refreshCalendarUrls;
+    if (optStudy) optStudy.onchange = refreshCalendarUrls;
+    if (optClass) optClass.onchange = refreshCalendarUrls;
     refreshCalendarUrls();
 
     document.getElementById('cal-copy-url-btn').onclick = () => {
@@ -2464,8 +2496,10 @@
       });
     }
 
-    document.getElementById('move-modal-close')?.addEventListener('click', () => closeModal('move-file-modal'));
-    document.getElementById('move-cancel-btn')?.addEventListener('click', () => closeModal('move-file-modal'));
+    const moveCloseBtn = document.getElementById('move-modal-close');
+    if (moveCloseBtn) moveCloseBtn.onclick = () => closeModal('move-file-modal');
+    const moveCancelBtn = document.getElementById('move-cancel-btn');
+    if (moveCancelBtn) moveCancelBtn.onclick = () => closeModal('move-file-modal');
 
     modal.classList.add('open');
     document.body.style.overflow = 'hidden';
@@ -2686,8 +2720,10 @@
       };
     }
 
-    document.getElementById('resource-modal-close')?.addEventListener('click', () => closeModal('resource-modal'));
-    document.getElementById('res-cancel-btn')?.addEventListener('click', () => closeModal('resource-modal'));
+    const resCloseBtn = document.getElementById('resource-modal-close');
+    if (resCloseBtn) resCloseBtn.onclick = () => closeModal('resource-modal');
+    const resCancelBtn = document.getElementById('res-cancel-btn');
+    if (resCancelBtn) resCancelBtn.onclick = () => closeModal('resource-modal');
 
     modal.classList.add('open');
     document.body.style.overflow = 'hidden';
@@ -3577,7 +3613,7 @@
 
   function saveEdit() {
     if (!state.editingBlock) return;
-    const { dayKey, blockId } = state.editingBlock;
+    const { dayKey, blockId, block } = state.editingBlock;
     const modal = document.getElementById('edit-modal');
     const title    = modal.querySelector('#edit-title')?.value || '';
     const subtitle = modal.querySelector('#edit-subtitle')?.value || '';
@@ -3587,20 +3623,25 @@
     const selectedTag = modal.querySelector('.tag-option.selected')?.dataset.tag || 'break';
 
     const day = ROUTINES[dayKey];
-    const isBase = day.blocks.some(b => b.id === blockId);
+    const isBaseRoutine = day && day.blocks.some(b => b.id === blockId);
+    const isLiveClass = blockId.startsWith('live-class-');
     if (!state.customBlocks[dayKey]) state.customBlocks[dayKey] = [];
 
-    if (isBase) {
+    if (isBaseRoutine || isLiveClass) {
       const override = state.customBlocks[dayKey].find(b => b.id === blockId);
       if (override) {
         Object.assign(override, { title, subtitle, start, end, notes, tag: selectedTag });
       } else {
-        const base = day.blocks.find(b => b.id === blockId);
-        state.customBlocks[dayKey].push({ ...base, title, subtitle, start, end, notes, tag: selectedTag, _override: true });
+        const base = isBaseRoutine ? day.blocks.find(b => b.id === blockId) : block;
+        state.customBlocks[dayKey].push({ ...(base || {}), id: blockId, title, subtitle, start, end, notes, tag: selectedTag, _override: true });
       }
     } else {
       const custom = state.customBlocks[dayKey].find(b => b.id === blockId);
-      if (custom) Object.assign(custom, { title, subtitle, start, end, notes, tag: selectedTag });
+      if (custom) {
+        Object.assign(custom, { title, subtitle, start, end, notes, tag: selectedTag });
+      } else {
+        state.customBlocks[dayKey].push({ ...(block || {}), id: blockId, title, subtitle, start, end, notes, tag: selectedTag });
+      }
     }
 
     saveCustomBlocks();
@@ -3614,8 +3655,12 @@
     const { dayKey, blockId } = state.editingBlock;
     if (!state.customBlocks[dayKey]) state.customBlocks[dayKey] = [];
     const day = ROUTINES[dayKey];
-    const isBase = day.blocks.some(b => b.id === blockId);
-    if (isBase) { showToast('ไม่สามารถลบตารางหลักได้', 'warning'); return; }
+    const isBaseRoutine = day && day.blocks.some(b => b.id === blockId);
+    const isLiveClass = blockId.startsWith('live-class-');
+    if (isBaseRoutine || isLiveClass) {
+      showToast('ไม่สามารถลบวิชาหลักจากตารางวันได้ (กรุณาแก้ไขในหน้า Curriculum)', 'warning');
+      return;
+    }
     state.customBlocks[dayKey] = state.customBlocks[dayKey].filter(b => b.id !== blockId);
     saveCustomBlocks();
     closeModal('edit-modal');
