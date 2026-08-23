@@ -2000,6 +2000,453 @@ function buildFoodRouletteFlex(food) {
   };
 }
 
+function buildUserProfileFlex(user, taskCount = 0, noteCount = 0, webCalUrl = '') {
+  return {
+    type: 'flex',
+    altText: `👤 ข้อมูลโปรไฟล์ E-Calendar: ${user.displayName || user.username}`,
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#0F172A',
+        paddingAll: '16px',
+        contents: [
+          { type: 'text', text: 'E-CALENDAR USER PROFILE', color: '#94A3B8', size: 'xxs', weight: 'bold' },
+          { type: 'text', text: `👤 ${user.displayName || user.username}`, color: '#ffffff', size: 'lg', weight: 'bold' },
+          { type: 'text', text: `@${user.username} • ภาควิชา BME มหิดล`, color: '#38BDF8', size: 'xs', margin: 'xs' }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '16px',
+        spacing: 'sm',
+        contents: [
+          {
+            type: 'box',
+            layout: 'horizontal',
+            backgroundColor: '#F0FDF4',
+            cornerRadius: 'md',
+            paddingAll: '10px',
+            contents: [
+              { type: 'text', text: '🟢 สถานะระบบ:', size: 'xs', color: '#166534', flex: 2 },
+              { type: 'text', text: 'Cloud Synced 100%', size: 'xs', weight: 'bold', color: '#15803D', flex: 3, align: 'end' }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            backgroundColor: '#FEF2F2',
+            cornerRadius: 'md',
+            paddingAll: '10px',
+            contents: [
+              { type: 'text', text: '📝 การบ้านที่ค้างอยู่:', size: 'xs', color: '#991B1B', flex: 2 },
+              { type: 'text', text: `${taskCount} รายการ`, size: 'xs', weight: 'bold', color: '#DC2626', flex: 3, align: 'end' }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            backgroundColor: '#FEF9C3',
+            cornerRadius: 'md',
+            paddingAll: '10px',
+            contents: [
+              { type: 'text', text: '📌 โน้ตที่บันทึกไว้:', size: 'xs', color: '#854D0E', flex: 2 },
+              { type: 'text', text: `${noteCount} โน้ต`, size: 'xs', weight: 'bold', color: '#CA8A04', flex: 3, align: 'end' }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            backgroundColor: '#EFF6FF',
+            cornerRadius: 'md',
+            paddingAll: '10px',
+            contents: [
+              { type: 'text', text: '🔔 การแจ้งเตือน:', size: 'xs', color: '#1E40AF', flex: 2 },
+              { type: 'text', text: 'LINE + Web Push เปิดใช้งาน', size: 'xs', weight: 'bold', color: '#2563EB', flex: 3, align: 'end' }
+            ]
+          }
+        ]
+      },
+      footer: {
+        type: 'box',
+        layout: 'horizontal',
+        spacing: 'sm',
+        contents: [
+          {
+            type: 'button',
+            action: { type: 'uri', label: '🌐 เปิดเว็บ Dashboard', uri: APP_BASE_URL },
+            style: 'primary',
+            color: '#0F172A',
+            height: 'sm'
+          },
+          {
+            type: 'button',
+            action: { type: 'message', label: '📝 จัดการงาน', text: 'งานค้าง' },
+            style: 'secondary',
+            height: 'sm'
+          }
+        ]
+      }
+    }
+  };
+}
+
+function buildDetailedExamScheduleFlex() {
+  const examSubjects = [
+    { code: 'SCPY161', name: 'General Physics I', date: '28 ก.ย. 2026', time: '09:00 - 12:00', room: 'L-01', type: 'ปรนัย 40 ข้อ + อัตนัย 4 ข้อ', daysLeft: 35 },
+    { code: 'SCMA101', name: 'Calculus I', date: '30 ก.ย. 2026', time: '13:00 - 16:00', room: 'L2-002', type: 'อัตนัยแสดงวิธีทำล้วน', daysLeft: 37 },
+    { code: 'SCCH161', name: 'General Chemistry', date: '02 ต.ค. 2026', time: '09:00 - 12:00', room: 'SC1-152', type: 'ปรนัย 60 ข้อ', daysLeft: 39 },
+    { code: 'EGBI122', name: 'Computer Programming', date: '05 ต.ค. 2026', time: '09:00 - 12:00', room: 'Lab Com 1', type: 'เขียนโค้ดปฏิบัติการบนเครื่อง', daysLeft: 42 },
+    { code: 'LAEN182', name: 'English for Communication', date: '07 ต.ค. 2026', time: '13:30 - 15:30', room: 'L-02', type: 'Reading & Grammar Test', daysLeft: 44 }
+  ];
+
+  const cards = examSubjects.map(sub => ({
+    type: 'box',
+    layout: 'vertical',
+    backgroundColor: '#FEF2F2',
+    cornerRadius: 'md',
+    paddingAll: '10px',
+    margin: 'xs',
+    contents: [
+      {
+        type: 'box',
+        layout: 'horizontal',
+        contents: [
+          { type: 'text', text: `🎯 ${sub.code}`, weight: 'bold', size: 'xs', color: '#991B1B', flex: 3 },
+          { type: 'text', text: `อีก ${sub.daysLeft} วัน`, weight: 'bold', size: 'xs', color: '#DC2626', flex: 2, align: 'end' }
+        ]
+      },
+      { type: 'text', text: sub.name, size: 'xs', weight: 'bold', color: '#1F2937', margin: 'xs', wrap: true },
+      {
+        type: 'box',
+        layout: 'horizontal',
+        margin: 'xs',
+        contents: [
+          { type: 'text', text: `📅 ${sub.date} (${sub.time})`, size: 'xxs', color: '#6B7280', flex: 3 },
+          { type: 'text', text: `📍 ห้อง ${sub.room}`, size: 'xxs', weight: 'bold', color: '#DC2626', flex: 2, align: 'end' }
+        ]
+      },
+      { type: 'text', text: `💡 รูปแบบ: ${sub.type}`, size: 'xxs', color: '#B91C1C', margin: 'xs', wrap: true }
+    ]
+  }));
+
+  return {
+    type: 'flex',
+    altText: '🗓️ ตารางสอบกลางภาคแบบละเอียดทุกรายวิชา (Midterm Exam)',
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#B91C1C',
+        paddingAll: '16px',
+        contents: [
+          { type: 'text', text: 'OFFICIAL MIDTERM EXAM SCHEDULE', color: '#ffffff', size: 'xxs', weight: 'bold' },
+          { type: 'text', text: '🗓️ ตารางสอบกลางภาครายวิชา', color: '#ffffff', size: 'md', weight: 'bold' },
+          { type: 'text', text: 'ภาคการศึกษาที่ 1 • คณะวิศวกรรมศาสตร์ BME', color: '#ffffff', size: 'xs', margin: 'xs' }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '12px',
+        contents: cards
+      },
+      footer: {
+        type: 'box',
+        layout: 'horizontal',
+        spacing: 'sm',
+        contents: [
+          { type: 'button', action: { type: 'message', label: '⏳ D-Day Countdown', text: 'สอบ' }, style: 'primary', color: '#B91C1C', height: 'sm' },
+          { type: 'button', action: { type: 'message', label: '📚 คลาสรูมชีท', text: 'คลาสรูม' }, style: 'secondary', height: 'sm' }
+        ]
+      }
+    }
+  };
+}
+
+function buildCampusServicesFlex() {
+  return {
+    type: 'flex',
+    altText: '🚌 บริการวิทยาเขตมหิดล ศาลายา (รถราง / รถบัส / เบอร์ฉุกเฉิน)',
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#0284C7',
+        paddingAll: '16px',
+        contents: [
+          { type: 'text', text: 'MAHIDOL SALAYA CAMPUS GUIDE', color: '#ffffff', size: 'xxs', weight: 'bold' },
+          { type: 'text', text: '🚌 บริการ ม.มหิดล & เบอร์ฉุกเฉิน', color: '#ffffff', size: 'md', weight: 'bold' }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '14px',
+        spacing: 'sm',
+        contents: [
+          {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#F0F9FF',
+            cornerRadius: 'md',
+            paddingAll: '10px',
+            contents: [
+              { type: 'text', text: '🚍 รถรางฟรีภายใน ม. (Salaya Tram):', weight: 'bold', size: 'xs', color: '#0369A1' },
+              { type: 'text', text: '• สาย 1 (เขียว) — วิ่งวนรอบ ม. ผ่านทุกคณะ\n• สาย 2 (น้ำเงิน) — วิ่งโซนหอพักใน & MLC\n• สาย 3 (แดง) — ศูนย์การแพทย์ & คณะแพทย์\n• สาย 4 (เหลือง) — ประตู 5 & คณะวิศวะ\n(วิ่งทุก 10-15 นาที ตั้งแต่ 06:30 - 20:00 น.)', size: 'xxs', color: '#0C4A6E', wrap: true, margin: 'xs' }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#EFF6FF',
+            cornerRadius: 'md',
+            paddingAll: '10px',
+            contents: [
+              { type: 'text', text: '🚆 Salaya Link Bus (ไป BTS บางหว้า):', weight: 'bold', size: 'xs', color: '#1D4ED8' },
+              { type: 'text', text: '• ค่าโดยสาร 30 บาท\n• จุดขึ้นรถ: หน้าวิทยาลัยดุริยางคศิลป์\n• รอบเช้า: 06:00 - 08:30 / รอบเย็น: 16:30 - 18:30', size: 'xxs', color: '#1E3A8A', wrap: true, margin: 'xs' }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#FEF2F2',
+            cornerRadius: 'md',
+            paddingAll: '10px',
+            contents: [
+              { type: 'text', text: '🚨 เบอร์โทรฉุกเฉิน 24 ชม.:', weight: 'bold', size: 'xs', color: '#B91C1C' },
+              { type: 'text', text: '• รปภ. กลาง มหิดล: 02-849-6111\n• หน่วยพยาบาล/ห้องพยาบาล: 02-849-4528\n• ศูนย์การแพทย์กาญจนาภิเษก: 02-849-6600', size: 'xxs', color: '#991B1B', wrap: true, margin: 'xs' }
+            ]
+          }
+        ]
+      },
+      footer: {
+        type: 'box',
+        layout: 'horizontal',
+        spacing: 'sm',
+        contents: [
+          {
+            type: 'button',
+            action: { type: 'uri', label: '🗺️ แผนที่ มหิดล', uri: 'https://maps.google.com/?q=Mahidol+University+Salaya' },
+            style: 'primary',
+            color: '#0284C7',
+            height: 'sm'
+          },
+          {
+            type: 'button',
+            action: { type: 'message', label: '🍽️ สุ่มของกิน', text: 'กินไรดี' },
+            style: 'secondary',
+            height: 'sm'
+          }
+        ]
+      }
+    }
+  };
+}
+
+function buildLibraryStudyLoungeFlex() {
+  return {
+    type: 'flex',
+    altText: '📖 พิกัดห้องสมุด & ที่นั่งอ่านหนังสือ มหิดล ศาลายา',
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#6D28D9',
+        paddingAll: '16px',
+        contents: [
+          { type: 'text', text: 'STUDY SPACES & LIBRARIES', color: '#ffffff', size: 'xxs', weight: 'bold' },
+          { type: 'text', text: '📖 พิกัดหอสมุด & Co-Working', color: '#ffffff', size: 'md', weight: 'bold' }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '14px',
+        spacing: 'sm',
+        contents: [
+          {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#F5F3FF',
+            cornerRadius: 'md',
+            paddingAll: '10px',
+            contents: [
+              { type: 'text', text: '🏛️ หอสมุดกลาง สัญญา ธรรมศักดิ์:', weight: 'bold', size: 'xs', color: '#5B21B6' },
+              { type: 'text', text: '• จันทร์ - ศุกร์: 08:00 - 21:00 น.\n• เสาร์ - อาทิตย์: 09:00 - 19:00 น.\n• ไฮไลท์: มีห้องประชุมกลุ่ม, เก้าอี้นุ่ม, ปลั๊กไฟทุกโต๊ะ, Wi-Fi เร็วมาก', size: 'xxs', color: '#4C1D95', wrap: true, margin: 'xs' }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#F8FAFC',
+            cornerRadius: 'md',
+            paddingAll: '10px',
+            contents: [
+              { type: 'text', text: '🔬 ห้องสมุดคณะวิทยาศาสตร์ (SC Library):', weight: 'bold', size: 'xs', color: '#334155' },
+              { type: 'text', text: '• จันทร์ - ศุกร์: 08:30 - 18:30 น.\n• ไฮไลท์: คนไม่เยอะ เงียบสงบ เหมาะกับการทำโจทย์ฟิสิกส์/แคลคูลัส', size: 'xxs', color: '#1E293B', wrap: true, margin: 'xs' }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#ECFDF5',
+            cornerRadius: 'md',
+            paddingAll: '10px',
+            contents: [
+              { type: 'text', text: '💡 MLC & Co-Working 24 ชม. (ช่วงสอบ):', weight: 'bold', size: 'xs', color: '#047857' },
+              { type: 'text', text: '• อาคารศูนย์การเรียนรู้มหิดล (MLC ชั้น 1-2)\n• True Lab @ อาคารบัณฑิตวิทยาลัย\n• ใต้ตึกหอพักนักศึกษา (มีโต๊ะและไฟสว่าง)', size: 'xxs', color: '#064E3B', wrap: true, margin: 'xs' }
+            ]
+          }
+        ]
+      },
+      footer: {
+        type: 'box',
+        layout: 'horizontal',
+        spacing: 'sm',
+        contents: [
+          { type: 'button', action: { type: 'message', label: '🕒 หาเวลาว่างวันนี้', text: 'เวลาว่าง' }, style: 'primary', color: '#6D28D9', height: 'sm' },
+          { type: 'button', action: { type: 'message', label: '📅 ดูตารางวันนี้', text: 'ตารางวันนี้' }, style: 'secondary', height: 'sm' }
+        ]
+      }
+    }
+  };
+}
+
+function buildGpaTargetSimulatorFlex() {
+  return {
+    type: 'flex',
+    altText: '🎯 วางแผนเป้าหมาย GPA & เกรดเฉลี่ย (GPA Target Simulator)',
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#D97706',
+        paddingAll: '16px',
+        contents: [
+          { type: 'text', text: 'GPA TARGET & ACADEMIC PLANNER', color: '#ffffff', size: 'xxs', weight: 'bold' },
+          { type: 'text', text: '🎯 แผนพิชิตเป้าหมาย GPAX 3.50+', color: '#ffffff', size: 'md', weight: 'bold' },
+          { type: 'text', text: 'เกียรตินิยมอันดับ 1 • คณะวิศวกรรมศาสตร์', color: '#ffffff', size: 'xs', margin: 'xs' }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '14px',
+        spacing: 'sm',
+        contents: [
+          {
+            type: 'box',
+            layout: 'horizontal',
+            backgroundColor: '#FEF3C7',
+            cornerRadius: 'md',
+            paddingAll: '10px',
+            contents: [
+              { type: 'text', text: '🏆 เกณฑ์เป้าหมาย:', size: 'xs', color: '#92400E', flex: 2 },
+              { type: 'text', text: 'A ≥ 4 วิชา / B+ ≥ 2 วิชา', size: 'xs', weight: 'bold', color: '#B45309', flex: 3, align: 'end' }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#F8FAFC',
+            cornerRadius: 'md',
+            paddingAll: '10px',
+            contents: [
+              { type: 'text', text: '📌 แผนการเก็บเกรดแนะนำรายวิชา:', weight: 'bold', size: 'xs', color: '#1E293B' },
+              { type: 'text', text: '• SCPY161 (Physics 3 นก.): เป้าเกรด A หรือ B+\n• SCMA101 (Calculus 3 นก.): เป้าเกรด A หรือ B+\n• SCCH161 (Chemistry 3 นก.): เป้าเกรด A หรือ B+\n• EGBI122 (ComProg 3 นก.): เป้าเกรด A\n• LAEN182 (English 3 นก.): เป้าเกรด A\n• แล็ปปฏิบัติการ (1 นก. x 3 วิชา): เป้าเกรด A ล้วน', size: 'xxs', color: '#475569', wrap: true, margin: 'xs' }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#ECFDF5',
+            cornerRadius: 'md',
+            paddingAll: '8px',
+            contents: [
+              { type: 'text', text: '💡 ทิป: ทำการบ้านและเก็บคะแนนเก็บให้ครบ 100% จะช่วยเซฟเกรดช่วงสอบได้มากที่สุด!', size: 'xxs', color: '#065F46', wrap: true }
+            ]
+          }
+        ]
+      },
+      footer: {
+        type: 'box',
+        layout: 'horizontal',
+        spacing: 'sm',
+        contents: [
+          { type: 'button', action: { type: 'message', label: '📊 สรุปหน่วยกิต', text: 'หน่วยกิต' }, style: 'primary', color: '#D97706', height: 'sm' },
+          { type: 'button', action: { type: 'message', label: '🗓️ ตารางสอบ', text: 'ตารางสอบ' }, style: 'secondary', height: 'sm' }
+        ]
+      }
+    }
+  };
+}
+
+function buildStudyFocusRoutineFlex() {
+  return {
+    type: 'flex',
+    altText: '🍅 เทคนิคอ่านหนังสือ & บล็อกโฟกัสรายวัน (Study Focus Routine)',
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#334155',
+        paddingAll: '16px',
+        contents: [
+          { type: 'text', text: 'DEEP WORK & STUDY ROUTINE', color: '#94A3B8', size: 'xxs', weight: 'bold' },
+          { type: 'text', text: '🍅 เทคนิคอ่านหนังสือ & บล็อกโฟกัส', color: '#ffffff', size: 'md', weight: 'bold' }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '14px',
+        spacing: 'sm',
+        contents: [
+          {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#F1F5F9',
+            cornerRadius: 'md',
+            paddingAll: '10px',
+            contents: [
+              { type: 'text', text: '⏳ เทคนิค Pomodoro (25/5):', weight: 'bold', size: 'xs', color: '#0F172A' },
+              { type: 'text', text: '• อ่าน/ทำโจทย์เข้มข้น 25 นาที (ปิดแจ้งเตือนมือถือ)\n• พักสายตา ดื่มน้ำ ยืดเส้น 5 นาที\n• ทำครบ 4 รอบ พักยาว 20-30 นาที', size: 'xxs', color: '#334155', wrap: true, margin: 'xs' }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#FFF7ED',
+            cornerRadius: 'md',
+            paddingAll: '10px',
+            contents: [
+              { type: 'text', text: '🌅 บล็อกเวลาทบทวนแนะนำ:', weight: 'bold', size: 'xs', color: '#9A3412' },
+              { type: 'text', text: '• 07:30 - 08:30: ทบทวนโน้ตสรุปวิชาที่จะเรียนวันนี้\n• 17:00 - 18:30: เคลียร์การบ้านประจำวันให้เสร็จทันที\n• 20:00 - 22:00: ทำโจทย์ข้อสอบเก่า (Deep Focus)', size: 'xxs', color: '#7C2D12', wrap: true, margin: 'xs' }
+            ]
+          }
+        ]
+      },
+      footer: {
+        type: 'box',
+        layout: 'horizontal',
+        spacing: 'sm',
+        contents: [
+          { type: 'button', action: { type: 'message', label: '📝 จัดการการบ้าน', text: 'งานค้าง' }, style: 'primary', color: '#334155', height: 'sm' },
+          { type: 'button', action: { type: 'message', label: '🕒 หาเวลาว่าง', text: 'เวลาว่าง' }, style: 'secondary', height: 'sm' }
+        ]
+      }
+    }
+  };
+}
+
 function buildHelpMenuFlex() {
   return {
     type: 'flex',
@@ -2118,11 +2565,81 @@ function buildHelpMenuFlex() {
           header: {
             type: 'box',
             layout: 'vertical',
+            backgroundColor: '#B91C1C',
+            paddingAll: '14px',
+            contents: [
+              { type: 'text', text: 'EXAM & ACADEMIC PLANNER', color: '#ffffff', size: 'xxs', weight: 'bold' },
+              { type: 'text', text: '🎯 4. ตารางสอบ & เป้าเกรด', color: '#ffffff', size: 'md', weight: 'bold' }
+            ]
+          },
+          body: {
+            type: 'box',
+            layout: 'vertical',
+            paddingAll: '14px',
+            spacing: 'sm',
+            contents: [
+              { type: 'text', text: '🗓️ "ตารางสอบ" — ตารางสอบกลางภาคทุกวิชา', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '⏳ "สอบ" — นับถอยหลัง D-Day วันสอบ', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '🎯 "เป้าเกรด" / "เกรด" — แผนพิชิต GPA 3.50+', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '📊 "หน่วยกิต" — สรุปหน่วยกิตเทอมนี้', size: 'xs', color: '#1F2937', wrap: true }
+            ]
+          },
+          footer: {
+            type: 'box',
+            layout: 'horizontal',
+            spacing: 'sm',
+            contents: [
+              { type: 'button', action: { type: 'message', label: '🗓️ ตารางสอบ', text: 'ตารางสอบ' }, style: 'primary', color: '#B91C1C', height: 'sm' },
+              { type: 'button', action: { type: 'message', label: '🎯 เป้าเกรด', text: 'เป้าเกรด' }, style: 'secondary', height: 'sm' }
+            ]
+          }
+        },
+        {
+          type: 'bubble',
+          size: 'kilo',
+          header: {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#0284C7',
+            paddingAll: '14px',
+            contents: [
+              { type: 'text', text: 'CAMPUS & STUDY SPACES', color: '#ffffff', size: 'xxs', weight: 'bold' },
+              { type: 'text', text: '🏫 5. รถราง, หอสมุด & ฉุกเฉิน', color: '#ffffff', size: 'md', weight: 'bold' }
+            ]
+          },
+          body: {
+            type: 'box',
+            layout: 'vertical',
+            paddingAll: '14px',
+            spacing: 'sm',
+            contents: [
+              { type: 'text', text: '🚍 "รถราง" — สายรถรางฟรี & Salaya Link', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '📖 "ห้องสมุด" — เวลาเปิดหอสมุด & Co-Working', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '🚨 "ฉุกเฉิน" — เบอร์ รปภ. 24 ชม. & ห้องพยาบาล', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '🍅 "โฟกัส" — เทคนิค Pomodoro & อ่านหนังสือ', size: 'xs', color: '#1F2937', wrap: true }
+            ]
+          },
+          footer: {
+            type: 'box',
+            layout: 'horizontal',
+            spacing: 'sm',
+            contents: [
+              { type: 'button', action: { type: 'message', label: '🚍 รถราง มหิดล', text: 'รถราง' }, style: 'primary', color: '#0284C7', height: 'sm' },
+              { type: 'button', action: { type: 'message', label: '📖 ห้องสมุด', text: 'ห้องสมุด' }, style: 'secondary', height: 'sm' }
+            ]
+          }
+        },
+        {
+          type: 'bubble',
+          size: 'kilo',
+          header: {
+            type: 'box',
+            layout: 'vertical',
             backgroundColor: '#7C3AED',
             paddingAll: '14px',
             contents: [
               { type: 'text', text: 'PLANNING & LIFESTYLE', color: '#ffffff', size: 'xxs', weight: 'bold' },
-              { type: 'text', text: '⏳ 4. วางแผน & ไลฟ์สไตล์', color: '#ffffff', size: 'md', weight: 'bold' }
+              { type: 'text', text: '🍽️ 6. วางแผนเวลา & ของกิน', color: '#ffffff', size: 'md', weight: 'bold' }
             ]
           },
           body: {
@@ -2132,9 +2649,9 @@ function buildHelpMenuFlex() {
             spacing: 'sm',
             contents: [
               { type: 'text', text: '🕒 "เวลาว่าง" — คำนวณช่วงว่างระหว่างคาบ', size: 'xs', color: '#1F2937', wrap: true },
-              { type: 'text', text: '📊 "หน่วยกิต" — สรุปหน่วยกิตเทอมนี้', size: 'xs', color: '#1F2937', wrap: true },
-              { type: 'text', text: '⏳ "สอบ" — นับถอยหลังวันสอบ D-Day', size: 'xs', color: '#1F2937', wrap: true },
-              { type: 'text', text: '🍽️ "กินไรดี" — สุ่มเมนู/ร้านเด็ดแถวมหิดล!', size: 'xs', color: '#1F2937', wrap: true }
+              { type: 'text', text: '🍽️ "กินไรดี" — สุ่มเมนู/ร้านเด็ดแถวมหิดล!', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '🌅 "สรุปเช้า" — ภาพรวมวิชาและการบ้านวันนี้', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '👤 "โปรไฟล์" — ดูสถานะบัญชี & Cloud Sync', size: 'xs', color: '#1F2937', wrap: true }
             ]
           },
           footer: {
@@ -3221,13 +3738,53 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // ─── 12. Command: D-Day / สอบ / วันสอบ / นับถอยหลัง ───
-      if (/^(สอบ|วันสอบ|dday|นับถอยหลัง|exam|ตารางสอบ)/i.test(text)) {
+      // ─── 12. Command: โปรไฟล์ / profile / สถานะ / me / บัญชี ───
+      if (/^(โปรไฟล์|profile|สถานะ|me|บัญชี|ข้อมูลฉัน|my profile)/i.test(text)) {
+        const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+        const tasks = userData.tasks || userData.todos || [];
+        const pendingCount = tasks.filter(t => !t.done).length;
+        const noteCount = (userData.quickNotes || []).length;
+        await sendLineReply(replyToken, [buildUserProfileFlex(targetUser, pendingCount, noteCount)]);
+        return;
+      }
+
+      // ─── 13. Command: ตารางสอบรายวิชา (Detailed Exam Schedule) ───
+      if (/^(ตารางสอบ|สอบวิชาไรบ้าง|ตารางสอบกลางภาค|สอบกลางภาค|วันสอบวิชา)/i.test(text)) {
+        await sendLineReply(replyToken, [buildDetailedExamScheduleFlex()]);
+        return;
+      }
+
+      // ─── 14. Command: D-Day / สอบ / วันสอบ / นับถอยหลัง ───
+      if (/^(สอบ|วันสอบ|dday|นับถอยหลัง|exam)/i.test(text)) {
         await sendLineReply(replyToken, [buildDDayCountdownFlex()]);
         return;
       }
 
-      // ─── 13. Command: สรุปเช้า / เช้านี้ / สรุปวัน / briefing ───
+      // ─── 15. Command: รถราง / บริการ ม.มหิดล / เบอร์ฉุกเฉิน ───
+      if (/^(รถราง|tram|รถศาลายา|ฉุกเฉิน|เบอร์โทร|transit|emergency|รถบัส|salaya link)/i.test(text)) {
+        await sendLineReply(replyToken, [buildCampusServicesFlex()]);
+        return;
+      }
+
+      // ─── 16. Command: ห้องสมุด / Co-Working / ที่อ่านหนังสือ ───
+      if (/^(ห้องสมุด|library|co-working|coworking|ที่อ่านหนังสือ|mlc|หอสมุด)/i.test(text)) {
+        await sendLineReply(replyToken, [buildLibraryStudyLoungeFlex()]);
+        return;
+      }
+
+      // ─── 17. Command: เป้าเกรด / GPA Simulator / เกรดเฉลี่ย ───
+      if (/^(เป้าเกรด|เกรด|gpa|คำนวณเกรด|เกรดเฉลี่ย|gpax)/i.test(text)) {
+        await sendLineReply(replyToken, [buildGpaTargetSimulatorFlex()]);
+        return;
+      }
+
+      // ─── 18. Command: โฟกัส / Pomodoro / เทคนิคอ่านหนังสือ ───
+      if (/^(โฟกัส|pomodoro|เทคนิคอ่านหนังสือ|อ่านหนังสือ|focus|routine|บล็อกอ่าน)/i.test(text)) {
+        await sendLineReply(replyToken, [buildStudyFocusRoutineFlex()]);
+        return;
+      }
+
+      // ─── 19. Command: สรุปเช้า / เช้านี้ / สรุปวัน / briefing ───
       if (/^(สรุปเช้า|เช้านี้|สรุปวัน|morning|briefing|สรุปวันนี้)/i.test(text)) {
         const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
         const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
@@ -3251,14 +3808,14 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // ─── 14. Command: Course Finder (ค้นหารายละเอียดวิชา / ห้องเรียน) ───
+      // ─── 20. Command: Course Finder (ค้นหารายละเอียดวิชา / ห้องเรียน) ───
       const courseMatch = findCourseMatch(text, (await dbAdapter.getUserData(linkedUserId))?.curriculum);
       if (courseMatch && (text.startsWith('วิชา') || text.startsWith('ห้อง') || text.length <= 10 || /^(sc|eg|la)/i.test(text))) {
         await sendLineReply(replyToken, [buildCourseProfileFlex(courseMatch)]);
         return;
       }
 
-      // ─── 15. Command: ตารางวันนี้ / วันนี้ / today ───
+      // ─── 21. Command: ตารางวันนี้ / วันนี้ / today ───
       if (/^(ตารางวันนี้|วันนี้|today|schedule|เรียนไร|มีเรียนมั้ย)/i.test(text)) {
         const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
         const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
@@ -3280,7 +3837,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // ─── 16. Command: ตารางพรุ่งนี้ / พรุ่งนี้ / tomorrow ───
+      // ─── 22. Command: ตารางพรุ่งนี้ / พรุ่งนี้ / tomorrow ───
       if (/^(ตารางพรุ่งนี้|พรุ่งนี้|tomorrow|พรุ่งนี้เรียนไร)/i.test(text)) {
         const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
         now.setDate(now.getDate() + 1);
@@ -3303,7 +3860,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // ─── 17. Command: งานค้าง / การบ้าน / todo / deadline ───
+      // ─── 23. Command: งานค้าง / การบ้าน / todo / deadline ───
       if (/^(งานค้าง|การบ้าน|todo|deadline|งาน|ส่งงานไรบ้าง)/i.test(text)) {
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
         const tasks = userData.tasks || userData.todos || [];
@@ -3322,7 +3879,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // ─── 18. Command: ทดสอบ / test ───
+      // ─── 24. Command: ทดสอบ / test ───
       if (/^(ทดสอบ|test)/i.test(text)) {
         await sendLineReply(replyToken, [
           buildClassReminderFlex({
@@ -3337,7 +3894,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // ─── 19. Command: ยกเลิกการผูก / unlink ───
+      // ─── 25. Command: ยกเลิกการผูก / unlink ───
       if (/^(ยกเลิกการผูก|unlink|logout)/i.test(text)) {
         if (store._lineUsers && store._lineUsers[lineUserId]) {
           const oldUid = store._lineUsers[lineUserId];
