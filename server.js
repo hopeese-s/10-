@@ -246,6 +246,7 @@ function generateIcsCalendar(userId, includeRoutines = false, includeStudy = tru
       isClass: true
     });
   });
+  } // end if (includeClass)
 
   // Add default routine events (deduplicated against curriculum classes)
   const curriculumClassCodes = new Set(curriculum.map(c => c.code));
@@ -280,6 +281,7 @@ function generateIcsCalendar(userId, includeRoutines = false, includeStudy = tru
       });
     });
   });
+  } // end if (includeStudy)
 
   // Deduplicate events by title+day+start
   const seen = new Set();
