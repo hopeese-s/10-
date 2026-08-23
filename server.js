@@ -718,7 +718,10 @@ function generateIcsCalendar(userId, includeRoutines = false, includeStudy = tru
 
 // ─── LINE Messaging API Client & Flex Message Builders ────────
 async function sendLineReply(replyToken, messages) {
-  if (!hasLine || !replyToken) return false;
+  if (!hasLine || !replyToken) {
+    console.warn('⚠️ Cannot send LINE reply: hasLine =', hasLine, 'replyToken =', Boolean(replyToken));
+    return false;
+  }
   try {
     const msgs = (Array.isArray(messages) ? messages : [messages]).map(m => typeof m === 'string' ? { type: 'text', text: m } : m);
     const res = await fetch('https://api.line.me/v2/bot/message/reply', {
@@ -731,7 +734,9 @@ async function sendLineReply(replyToken, messages) {
     });
     if (!res.ok) {
       const errText = await res.text();
-      console.warn('⚠️ LINE Reply Error:', res.status, errText);
+      console.error(`❌ LINE Reply Error (HTTP ${res.status}):`, errText);
+    } else {
+      console.log('✅ LINE reply delivered successfully');
     }
     return res.ok;
   } catch (e) {
@@ -741,7 +746,10 @@ async function sendLineReply(replyToken, messages) {
 }
 
 async function sendLinePush(toUserId, messages) {
-  if (!hasLine || !toUserId) return false;
+  if (!hasLine || !toUserId) {
+    console.warn('⚠️ Cannot send LINE push: hasLine =', hasLine, 'toUserId =', Boolean(toUserId));
+    return false;
+  }
   try {
     const msgs = (Array.isArray(messages) ? messages : [messages]).map(m => typeof m === 'string' ? { type: 'text', text: m } : m);
     const res = await fetch('https://api.line.me/v2/bot/message/push', {
@@ -754,7 +762,7 @@ async function sendLinePush(toUserId, messages) {
     });
     if (!res.ok) {
       const errText = await res.text();
-      console.warn('⚠️ LINE Push Error:', res.status, errText);
+      console.error(`❌ LINE Push Error (HTTP ${res.status}):`, errText);
     }
     return res.ok;
   } catch (e) {
@@ -1683,7 +1691,7 @@ const server = http.createServer(async (req, res) => {
 
   // ─── Helper: Parse JSON Body with size limit ───
   function parseJsonBody(callback) {
-    let body = '';
+    let chunks = [];
     let size = 0;
     let aborted = false;
     req.on('data', chunk => {
@@ -1691,18 +1699,20 @@ const server = http.createServer(async (req, res) => {
       if (size > MAX_BODY_SIZE) {
         aborted = true;
         req.destroy();
-        callback(new Error('Body too large'), null, '');
+        callback(new Error('Body too large'), null, Buffer.alloc(0));
         return;
       }
-      body += chunk;
+      chunks.push(chunk);
     });
     req.on('end', () => {
       if (aborted) return;
+      const rawBuffer = Buffer.concat(chunks);
+      const rawString = rawBuffer.toString('utf8');
       try {
-        const parsed = JSON.parse(body || '{}');
-        callback(null, parsed, body);
+        const parsed = JSON.parse(rawString || '{}');
+        callback(null, parsed, rawBuffer);
       } catch (e) {
-        callback(e, null, body);
+        callback(e, null, rawBuffer);
       }
     });
   }
@@ -2653,6 +2663,7 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/line/webhook' && req.method === 'POST') {
     parseJsonBody(async (err, data, rawBody) => {
       if (err) {
+        console.error('❌ LINE Webhook parse error:', err.message);
         res.writeHead(400);
         res.end('Bad Request');
         return;
@@ -2661,9 +2672,9 @@ const server = http.createServer(async (req, res) => {
       // Signature Verification
       if (LINE_CHANNEL_SECRET) {
         const signature = req.headers['x-line-signature'];
-        const hash = crypto.createHmac('SHA256', LINE_CHANNEL_SECRET).update(rawBody || '').digest('base64');
+        const hash = crypto.createHmac('SHA256', LINE_CHANNEL_SECRET).update(rawBody || Buffer.alloc(0)).digest('base64');
         if (hash !== signature) {
-          console.warn('⚠️ LINE Webhook signature mismatch');
+          console.warn('⚠️ LINE Webhook signature mismatch! Header:', signature, 'Computed:', hash);
           res.writeHead(403);
           res.end('Invalid signature');
           return;
@@ -2671,11 +2682,14 @@ const server = http.createServer(async (req, res) => {
       }
 
       const events = (data && data.events) || [];
+      console.log(`📩 LINE Webhook received ${events.length} event(s)`);
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ status: 'ok' }));
 
       for (const event of events) {
         try {
+          console.log(`⚡ Processing LINE event: [${event.type}] from [${event.source && event.source.userId}]`);
           await handleLineEvent(event);
         } catch (eventErr) {
           console.error('❌ LINE handleLineEvent error:', eventErr);
