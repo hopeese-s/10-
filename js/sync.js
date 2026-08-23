@@ -408,21 +408,26 @@ const CloudSync = (function () {
     const authBtn = document.getElementById('auth-user-btn');
     const modalBadge = document.getElementById('modal-sync-status');
 
-    let displayUserText = currentUser ? (currentUser.role === 'admin' ? `👑 ${currentUser.displayName}` : `👤 ${currentUser.displayName}`) : '👤 บัญชีผู้ใช้';
+    let userIcon = currentUser ? (currentUser.role === 'admin' ? '👑' : '👤') : '👤';
+    let userTip = currentUser ? `บัญชี: ${currentUser.displayName} (@${currentUser.username})` : 'บัญชีผู้ใช้งาน (คลิกเพื่อเข้าสู่ระบบ)';
 
     if (authBtn) {
-      authBtn.innerHTML = displayUserText;
+      authBtn.innerHTML = userIcon;
+      authBtn.title = userTip;
     }
 
     const states = {
-      local:   { icon: '☁️', label: currentUser ? currentUser.displayName : 'Sync Key', tip: 'คลิกเพื่อตั้งค่า Cloud Sync', badge: '⚪ ข้อมูลในเครื่องนี้เท่านั้น' },
-      syncing: { icon: '🔄', label: 'Syncing…', tip: 'กำลังซิงค์ข้อมูล…', badge: '🔄 กำลังซิงค์ข้อมูล…' },
-      synced:  { icon: '☁️', label: currentUser ? currentUser.displayName : 'Synced', tip: `เชื่อมต่อ Cloud แล้ว (${currentUser ? currentUser.username : syncKey})`, badge: `✅ เชื่อมต่อ Cloud แล้ว (${currentUser ? 'บัญชี: ' + currentUser.displayName : 'Key: ' + syncKey})` },
-      error:   { icon: '⚠️', label: 'Offline', tip: 'ออฟไลน์ชั่วคราว — จะซิงค์ใหม่อัตโนมัติเมื่อออนไลน์', badge: '⚠️ ออฟไลน์ (บันทึกลงเครื่องแล้ว)' },
+      local:   { icon: '☁️', tip: 'คลิกเพื่อตั้งค่า Cloud Sync', badge: '⚪ ข้อมูลในเครื่องนี้เท่านั้น' },
+      syncing: { icon: '🔄', tip: 'กำลังซิงค์ข้อมูล…', badge: '🔄 กำลังซิงค์ข้อมูล…' },
+      synced:  { icon: '☁️', tip: `เชื่อมต่อ Cloud แล้ว (${currentUser ? currentUser.displayName : syncKey})`, badge: `✅ เชื่อมต่อ Cloud แล้ว (${currentUser ? 'บัญชี: ' + currentUser.displayName : 'Key: ' + syncKey})` },
+      error:   { icon: '⚠️', tip: 'ออฟไลน์ชั่วคราว — จะซิงค์ใหม่อัตโนมัติเมื่อออนไลน์', badge: '⚠️ ออฟไลน์ (บันทึกลงเครื่องแล้ว)' },
     };
 
     const s = states[syncStatus] || states.local;
-    if (btn) { btn.innerHTML = `${s.icon} ${s.label}`; btn.title = s.tip; }
+    if (btn) {
+      btn.innerHTML = s.icon;
+      btn.title = s.tip;
+    }
     if (modalBadge) {
       modalBadge.textContent = s.badge;
       modalBadge.className   = syncStatus === 'synced' ? 'status-badge home' : syncStatus === 'syncing' ? 'status-badge dorm' : 'status-badge';
