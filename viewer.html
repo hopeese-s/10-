@@ -286,33 +286,75 @@
           modePageBtn.style.color = '';
           modePageBtn.style.fontWeight = '600';
 
+          // Create placeholders and use IntersectionObserver for lazy loading
+          const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+              if (entry.isIntersecting) {
+                const wrapper = entry.target;
+                if (wrapper.dataset.loaded !== 'true') {
+                  wrapper.dataset.loaded = 'true';
+                  renderSinglePage(parseInt(wrapper.dataset.pageIndex, 10), wrapper);
+                }
+              }
+            });
+          }, { rootMargin: '100% 0px' });
+
           for (let i = 1; i <= numPages; i++) {
-            const page = await pdfDoc.getPage(i);
-            const viewport = page.getViewport({ scale: currentScale });
-            const outputScale = window.devicePixelRatio || 1;
-
-            const canvas = document.createElement('canvas');
-            canvas.width = Math.floor(viewport.width * outputScale);
-            canvas.height = Math.floor(viewport.height * outputScale);
-            canvas.style.width = Math.floor(viewport.width) + 'px';
-            canvas.style.height = Math.floor(viewport.height) + 'px';
-            canvas.style.display = 'block';
-
-            const ctx = canvas.getContext('2d');
-            const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null;
-
-            await page.render({ canvasContext: ctx, transform, viewport }).promise;
-
             const wrapper = document.createElement('div');
             wrapper.className = 'pdf-page-wrapper';
-            wrapper.appendChild(canvas);
-
-            const label = document.createElement('div');
-            label.style.cssText = 'text-align:center;font-size:11px;color:var(--label-3);padding:6px 0;background:var(--bg-2);border-top:1px solid var(--sep)';
-            label.textContent = `หน้า ${i} / ${numPages}`;
-            wrapper.appendChild(label);
-
+            wrapper.style.minHeight = '800px';
+            wrapper.style.width = '100%';
+            wrapper.style.maxWidth = '800px';
+            wrapper.style.display = 'flex';
+            wrapper.style.flexDirection = 'column';
+            wrapper.style.justifyContent = 'center';
+            wrapper.style.alignItems = 'center';
+            wrapper.style.background = '#fff';
+            wrapper.dataset.pageIndex = i;
+            wrapper.dataset.loaded = 'false';
+            
+            wrapper.innerHTML = `
+              <div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--label-3);font-size:14px;font-weight:600;">
+                กำลังโหลดหน้า ${i}...
+              </div>
+              <div style="width:100%;text-align:center;font-size:11px;color:var(--label-3);padding:6px 0;background:var(--bg-2);border-top:1px solid var(--sep)">
+                หน้า ${i} / ${numPages}
+              </div>
+            `;
+            
             contentEl.appendChild(wrapper);
+            observer.observe(wrapper);
+          }
+
+          async function renderSinglePage(pageNum, wrapper) {
+            try {
+              const page = await pdfDoc.getPage(pageNum);
+              const viewport = page.getViewport({ scale: currentScale });
+              const outputScale = window.devicePixelRatio || 1;
+
+              const canvas = document.createElement('canvas');
+              canvas.width = Math.floor(viewport.width * outputScale);
+              canvas.height = Math.floor(viewport.height * outputScale);
+              canvas.style.width = Math.floor(viewport.width) + 'px';
+              canvas.style.height = Math.floor(viewport.height) + 'px';
+              canvas.style.display = 'block';
+
+              const ctx = canvas.getContext('2d');
+              const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null;
+
+              await page.render({ canvasContext: ctx, transform, viewport }).promise;
+
+              wrapper.innerHTML = '';
+              wrapper.style.minHeight = 'auto';
+              wrapper.appendChild(canvas);
+              
+              const label = document.createElement('div');
+              label.style.cssText = 'text-align:center;font-size:11px;color:var(--label-3);padding:6px 0;background:var(--bg-2);border-top:1px solid var(--sep)';
+              label.textContent = `หน้า ${pageNum} / ${numPages}`;
+              wrapper.appendChild(label);
+            } catch (err) {
+              console.error('Error rendering page ' + pageNum, err);
+            }
           }
         } else {
           // Page mode
