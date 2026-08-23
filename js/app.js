@@ -2586,6 +2586,10 @@
     const modal = document.getElementById('push-modal');
     if (!modal) return;
 
+    modal.classList.add('open');
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+
     const statusHeading = document.getElementById('push-status-heading');
     const statusDesc = document.getElementById('push-status-desc');
     const statusIcon = document.getElementById('push-status-icon');
@@ -2666,11 +2670,17 @@
       };
     }
 
-    document.getElementById('push-modal-close').onclick = () => closeModal('push-modal');
-    document.getElementById('push-modal-cancel-btn').onclick = () => closeModal('push-modal');
+    const closeHandler = () => {
+      modal.classList.remove('open');
+      modal.style.display = '';
+      document.body.style.overflow = '';
+    };
 
-    modal.classList.add('open');
-    document.body.style.overflow = 'hidden';
+    document.getElementById('push-modal-close').onclick = closeHandler;
+    document.getElementById('push-modal-cancel-btn').onclick = closeHandler;
+    modal.onclick = (e) => {
+      if (e.target === modal) closeHandler();
+    };
   }
 
   // Check URL params on startup for shared bundle token
@@ -4221,28 +4231,8 @@
     });
 
     // Calendar & Auth & Push header buttons
-    document.getElementById('push-notify-btn')?.addEventListener('click', async () => {
-      if (window.PushClient) {
-        const status = PushClient.getStatus();
-        if (!status.subscribed) {
-          showToast('กำลังขออนุญาตเปิดการแจ้งเตือน...', 'info');
-          const res = await PushClient.subscribe();
-          if (res.ok) {
-            showToast('🔔 เปิดการแจ้งเตือนสำเร็จ!', 'success');
-            await PushClient.testNotification();
-            openPushModal();
-          } else if (res.isIOSPrompt) {
-            alert('📱 คำแนะนำสำหรับ iPhone / iPad:\n\n1. กดปุ่มแชร์ (Share) ที่แถบด้านล่างของ Safari\n2. เลือก "เพิ่มไปยังหน้าจอโฮม" (Add to Home Screen)\n3. เปิดแอป E-Calendar จากหน้าจอโฮม แล้วกดปุ่ม 🔔 อีกครั้งเพื่อเปิดการแจ้งเตือนครับ');
-          } else {
-            showToast(`❌ ${res.error || 'เปิดการแจ้งเตือนไม่สำเร็จ'}`, 'error');
-            openPushModal();
-          }
-        } else {
-          openPushModal();
-        }
-      } else {
-        showToast('เบราว์เซอร์ไม่รองรับการแจ้งเตือน', 'error');
-      }
+    document.getElementById('push-notify-btn')?.addEventListener('click', () => {
+      openPushModal();
     });
 
     document.getElementById('calendar-sync-btn')?.addEventListener('click', () => openCalendarModal());
