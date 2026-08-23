@@ -17,10 +17,14 @@ const CloudSync = (function () {
   const PUSH_DEBOUNCE_MS = 20;     // 20ms ultra-fast push
   const POLL_INTERVAL_MS = 1500;   // Poll every 1.5 seconds for multi-device sync
 
-  let currentUser  = null;
   let authToken    = localStorage.getItem('sd-auth-token') || '';
-  let syncKey      = localStorage.getItem('sd-sync-key') || '1';
-  let syncStatus   = 'local';
+  let currentUser  = null;
+  try {
+    const savedUser = localStorage.getItem('sd-current-user');
+    if (savedUser && authToken) currentUser = JSON.parse(savedUser);
+  } catch (_) {}
+  let syncKey      = localStorage.getItem('sd-sync-key') || (currentUser ? currentUser.id : '1');
+  let syncStatus   = currentUser ? 'synced' : 'local';
   let lastSyncTime = parseInt(localStorage.getItem('sd-last-sync-time') || '0', 10);
   let rememberMe   = localStorage.getItem('sd-remember-me') === 'true';
 
@@ -53,6 +57,7 @@ const CloudSync = (function () {
         authToken = data.token;
         currentUser = data.user;
         localStorage.setItem('sd-auth-token', authToken);
+        localStorage.setItem('sd-current-user', JSON.stringify(currentUser));
         setSyncKey(currentUser.id);
         updateUIStatus();
         return { ok: true, user: currentUser };
@@ -76,6 +81,7 @@ const CloudSync = (function () {
         authToken = data.token;
         currentUser = data.user;
         localStorage.setItem('sd-auth-token', authToken);
+        localStorage.setItem('sd-current-user', JSON.stringify(currentUser));
         setSyncKey(currentUser.id);
         updateUIStatus();
         return { ok: true, user: currentUser };
@@ -96,6 +102,7 @@ const CloudSync = (function () {
       if (res.ok) {
         const data = await res.json();
         currentUser = data.user;
+        localStorage.setItem('sd-current-user', JSON.stringify(currentUser));
         setSyncKey(currentUser.id);
         updateUIStatus();
         return currentUser;
@@ -104,14 +111,14 @@ const CloudSync = (function () {
         authToken = '';
         currentUser = null;
         localStorage.removeItem('sd-auth-token');
+        localStorage.removeItem('sd-current-user');
         updateUIStatus();
         return null;
       }
     } catch (_) {
-      // Network error — if rememberMe is on, keep the token and try again later
-      if (rememberMe && authToken) {
-        // Keep the token, will retry on next check
-        return null;
+      // Network error — if we already have currentUser from localStorage, keep it
+      if (currentUser) {
+        return currentUser;
       }
       return null;
     }
@@ -138,6 +145,7 @@ const CloudSync = (function () {
     authToken = '';
     currentUser = null;
     localStorage.removeItem('sd-auth-token');
+    localStorage.removeItem('sd-current-user');
     setSyncKey('1');
     updateUIStatus();
   }

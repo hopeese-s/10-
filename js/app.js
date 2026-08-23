@@ -66,6 +66,7 @@
       } catch (_) { return false; }
     }
   };
+  window.LocalFileDB = LocalFileDB;
 
   // ─── State ───────────────────────────────────────────────
   const state = {
@@ -291,8 +292,13 @@
     // Check share route FIRST — before any cloud sync (prevent personal data leak)
     const isShareRoute = await checkPublicShareRoute();
 
+    // Verify authentication on startup if auth token exists
+    if (!isShareRoute && window.CloudSync) {
+      await CloudSync.checkAuth();
+    }
+
     // Cloud Sync initial smart sync — ONLY for logged-in/authenticated users, NOT share-link visitors
-    const isLoggedIn = window.CloudSync && CloudSync.getCurrentUser();
+    const isLoggedIn = window.CloudSync && !!CloudSync.getCurrentUser();
     if (!isShareRoute && window.CloudSync && CloudSync.getSyncKey() && CloudSync.getSyncKey() !== '1') {
       const pullRes = await CloudSync.pullFromCloud();
       if (pullRes && pullRes.ok && pullRes.data) {
