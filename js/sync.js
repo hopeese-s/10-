@@ -437,6 +437,52 @@ const CloudSync = (function () {
     }
   }
 
+  // ─── LINE Front-end Framework (LIFF) Integration ────────────
+  async function initLiffAuth() {
+    if (typeof window === 'undefined') return;
+    try {
+      const configRes = await fetch(`${BASE_URL}/api/liff/config`);
+      if (!configRes.ok) return;
+      const config = await configRes.json();
+      if (!config || !config.liffId || !window.liff) return;
+
+      await window.liff.init({ liffId: config.liffId });
+      console.log('💚 LINE LIFF SDK initialized successfully');
+
+      if (window.liff.isLoggedIn()) {
+        const profile = await window.liff.getProfile();
+        if (profile && profile.userId) {
+          console.log('👤 LIFF Profile detected:', profile.displayName);
+          // Auto-authenticate with backend
+          const authRes = await fetch(`${BASE_URL}/api/liff/auth`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              lineUserId: profile.userId,
+              displayName: profile.displayName,
+              pictureUrl: profile.pictureUrl
+            })
+          });
+          const authData = await authRes.json();
+          if (authRes.ok && authData.success && authData.token) {
+            authToken = authData.token;
+            currentUser = authData.user;
+            localStorage.setItem('sd-auth-token', authToken);
+            localStorage.setItem('sd-current-user', JSON.stringify(currentUser));
+            setSyncKey(currentUser.id);
+            updateUIStatus();
+            console.log('✨ Auto-authenticated via LINE LIFF as:', currentUser.displayName);
+            if (window.App && typeof window.App.onCloudSyncUpdated === 'function') {
+              window.App.onCloudSyncUpdated();
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ LIFF initialization notice:', err.message);
+    }
+  }
+
   function _sanitize(data) {
     return {
       version:      data.version      || 0,
@@ -456,6 +502,7 @@ const CloudSync = (function () {
     login,
     checkAuth,
     logout,
+    initLiffAuth,
     getPublicHub,
     createShareBundle,
     fetchShareBundle,
@@ -472,5 +519,14 @@ const CloudSync = (function () {
     getRememberMe
   };
 })();
+
+// Auto-run LIFF init on page load
+if (typeof window !== 'undefined') {
+  window.addEventListener('DOMContentLoaded', () => {
+    if (window.CloudSync && typeof window.CloudSync.initLiffAuth === 'function') {
+      window.CloudSync.initLiffAuth();
+    }
+  });
+}
 
 window.CloudSync = CloudSync;

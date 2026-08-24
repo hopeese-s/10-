@@ -98,15 +98,25 @@ try {
   webpush = require('web-push');
 } catch (_) {}
 
-// ─── LINE Messaging API Setup ─────────────────────────────────
+// ─── LINE Messaging API & LIFF Setup ─────────────────────────
 const LINE_CHANNEL_ACCESS_TOKEN = (process.env.LINE_CHANNEL_ACCESS_TOKEN || '').replace(/['"]/g, '').trim();
 const LINE_CHANNEL_SECRET = (process.env.LINE_CHANNEL_SECRET || '').replace(/['"]/g, '').trim();
+const LINE_LIFF_ID = (process.env.LINE_LIFF_ID || '').replace(/['"]/g, '').trim();
 const hasLine = Boolean(LINE_CHANNEL_ACCESS_TOKEN && LINE_CHANNEL_SECRET);
 
 if (hasLine) {
   console.log('✅ LINE Messaging API configured for Push & Webhook');
 } else {
   console.log('ℹ️ LINE Messaging API not configured (LINE_CHANNEL_ACCESS_TOKEN or LINE_CHANNEL_SECRET missing)');
+}
+
+// ─── Google Gemini AI Client Setup ────────────────────────────
+const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || '').replace(/['"]/g, '').trim();
+const hasGemini = Boolean(GEMINI_API_KEY);
+if (hasGemini) {
+  console.log('✨ Google Gemini AI configured for Multimodal Vision, Audio & Smart NLP');
+} else {
+  console.log('ℹ️ Gemini API key not set (Natural Language fallback NLP will be used)');
 }
 
 // In-memory store + file persistence
@@ -777,6 +787,315 @@ async function sendLinePush(toUserId, messages) {
     console.error('❌ LINE sendLinePush exception:', e.message);
     return false;
   }
+}
+
+async function getLineMessageContent(messageId) {
+  if (!hasLine || !messageId) return null;
+  try {
+    const res = await fetch(`https://api-data.line.me/v2/bot/message/${messageId}/content`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`
+      }
+    });
+    if (!res.ok) {
+      console.warn(`⚠️ Failed to download LINE content ${messageId}: HTTP ${res.status}`);
+      return null;
+    }
+    const arrayBuffer = await res.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  } catch (err) {
+    console.warn('⚠️ Error downloading LINE message content:', err.message);
+    return null;
+  }
+}
+
+// ─── Open-Meteo Salaya Weather Integration (Zero Config & Free API) ────────
+let weatherCache = { data: null, timestamp: 0 };
+async function fetchSalayaWeather() {
+  const now = Date.now();
+  if (weatherCache.data && (now - weatherCache.timestamp) < 30 * 60 * 1000) {
+    return weatherCache.data;
+  }
+  try {
+    const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=13.79&longitude=100.32&current=temperature_2m,relative_humidity_2m,precipitation,weather_code&hourly=precipitation_probability&timezone=Asia%2FBangkok', {
+      headers: { 'User-Agent': 'ECalendar-App/2.0' }
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const current = json.current || {};
+    const hourly = json.hourly || {};
+    const currentHourIndex = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' })).getHours();
+    const rainProb = (hourly.precipitation_probability && hourly.precipitation_probability[currentHourIndex]) || 0;
+
+    const weatherCode = current.weather_code || 0;
+    let weatherText = 'ท้องฟ้าแจ่มใส ☀️';
+    if (weatherCode >= 1 && weatherCode <= 3) weatherText = 'มีเมฆเป็นส่วนมาก ⛅';
+    else if (weatherCode >= 51 && weatherCode <= 67) weatherText = 'มีฝนตกปรอยๆ 🌦️';
+    else if (weatherCode >= 80 && weatherCode <= 82) weatherText = 'ฝนตกปานกลาง 🌧️';
+    else if (weatherCode >= 95) weatherText = 'ฝนฟ้าคะนอง ⛈️';
+
+    const result = {
+      temp: current.temperature_2m ? `${Math.round(current.temperature_2m)}°C` : '32°C',
+      humidity: current.relative_humidity_2m ? `${current.relative_humidity_2m}%` : '70%',
+      rainProb: `${rainProb}%`,
+      isRainLikely: rainProb >= 40 || (current.precipitation && current.precipitation > 0),
+      summary: weatherText,
+      alert: rainProb >= 40 ? `🌧️ มีโอกาสฝนตก ${rainProb}% ในแถบศาลายา แนะนำพกร่มและเผื่อเวลาเดินทางครับ` : null
+    };
+
+    weatherCache = { data: result, timestamp: now };
+    return result;
+  } catch (err) {
+    console.warn('⚠️ Weather fetch warning:', err.message);
+    return null;
+  }
+}
+
+// ─── Google Gemini AI Client Helpers ─────────────────────────
+async function callGeminiApi(contents, systemInstruction = '') {
+  if (!hasGemini) return null;
+  try {
+    const payload = {
+      contents,
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 2048,
+        responseMimeType: 'application/json'
+      }
+    };
+    if (systemInstruction) {
+      payload.systemInstruction = {
+        parts: [{ text: systemInstruction }]
+      };
+    }
+
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.warn(`⚠️ Gemini API error (HTTP ${res.status}):`, errText);
+      return null;
+    }
+
+    const json = await res.json();
+    const candidate = json.candidates && json.candidates[0];
+    const textOut = candidate && candidate.content && candidate.content.parts && candidate.content.parts[0] && candidate.content.parts[0].text;
+    if (!textOut) return null;
+    return JSON.parse(textOut);
+  } catch (err) {
+    console.warn('⚠️ Gemini API call failed:', err.message);
+    return null;
+  }
+}
+
+async function extractScheduleWithGemini(userText) {
+  if (!hasGemini) return null;
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
+  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const todayDay = days[now.getDay()];
+
+  const prompt = `User message in Thai: "${userText}"
+Current Day: ${todayDay}, Date: ${now.toISOString().slice(0, 10)}. Reference Year: 2026.
+Extract schedule events, appointments, tasks, or notes. If multiple events are mentioned, extract all of them into the arrays.
+Return a JSON object matching this schema:
+{
+  "summary": "Short Thai summary",
+  "events": [
+    {
+      "title": "Title in Thai",
+      "day": "monday|tuesday|wednesday|thursday|friday|saturday|sunday",
+      "date": "YYYY-MM-DD",
+      "start": "HH:MM",
+      "end": "HH:MM",
+      "location": "Location if specified",
+      "notes": "Extra details"
+    }
+  ],
+  "tasks": [
+    {
+      "title": "Task title in Thai",
+      "dueDate": "Due date/time string"
+    }
+  ],
+  "notes": [
+    "Note text"
+  ]
+}`;
+
+  return await callGeminiApi([
+    {
+      parts: [{ text: prompt }]
+    }
+  ], 'You are an expert Thai NLP appointment extractor for college students. Always output valid JSON.');
+}
+
+async function analyzeImageWithGemini(imageBuffer, mimeType = 'image/jpeg') {
+  if (!hasGemini) return null;
+  const base64Data = imageBuffer.toString('base64');
+  const prompt = `Analyze this image (e.g. appointment card, doctor slip, seminar poster, exam schedule, timetable, classroom announcement).
+Extract all schedule events, appointments, tasks, or important dates found in the image.
+Current Reference Year: 2026.
+Return a JSON object matching this schema:
+{
+  "summary": "Short Thai description of the document",
+  "events": [
+    {
+      "title": "Title in Thai",
+      "day": "monday|tuesday|wednesday|thursday|friday|saturday|sunday",
+      "date": "YYYY-MM-DD",
+      "start": "HH:MM",
+      "end": "HH:MM",
+      "location": "Room or Place",
+      "notes": "Important details"
+    }
+  ],
+  "tasks": [
+    {
+      "title": "Task title in Thai",
+      "dueDate": "Due date / time string"
+    }
+  ]
+}`;
+
+  return await callGeminiApi([
+    {
+      parts: [
+        { text: prompt },
+        { inlineData: { mimeType, data: base64Data } }
+      ]
+    }
+  ], 'You are an intelligent schedule assistant for university students in Thailand. Always extract accurate Thai dates and 24-hour times.');
+}
+
+async function transcribeAudioWithGemini(audioBuffer, mimeType = 'audio/mp4') {
+  if (!hasGemini) return null;
+  const base64Data = audioBuffer.toString('base64');
+  const prompt = `Listen to this Thai voice audio carefully. Transcribe the user speech and extract any schedule events, appointments, tasks, or reminders.
+Current Reference Year: 2026.
+Return a JSON object matching this schema:
+{
+  "transcript": "Full Thai transcription",
+  "summary": "Short Thai summary",
+  "events": [
+    {
+      "title": "Title in Thai",
+      "day": "monday|tuesday|wednesday|thursday|friday|saturday|sunday",
+      "date": "YYYY-MM-DD",
+      "start": "HH:MM",
+      "end": "HH:MM",
+      "location": "Room or Place",
+      "notes": "Important details"
+    }
+  ],
+  "tasks": [
+    {
+      "title": "Task title in Thai",
+      "dueDate": "Due date / time string"
+    }
+  ],
+  "notes": [
+    "Quick note text"
+  ]
+}`;
+
+  return await callGeminiApi([
+    {
+      parts: [
+        { text: prompt },
+        { inlineData: { mimeType, data: base64Data } }
+      ]
+    }
+  ], 'You are an intelligent Thai voice assistant. Accurately transcribe Thai spoken appointments and return structured schedule JSON.');
+}
+
+// ─── Local Rule-Based NLP Appointment Parser (Fallback) ────────
+function parseThaiNaturalAppointment(text) {
+  if (!text) return null;
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
+  const daysMap = {
+    'อาทิตย์': 'sunday', 'จันทร์': 'monday', 'อังคาร': 'tuesday', 'พุธ': 'wednesday',
+    'พฤหัส': 'thursday', 'พฤหัสบดี': 'thursday', 'ศุกร์': 'friday', 'เสาร์': 'saturday'
+  };
+
+  let targetDay = null;
+  if (/พรุ่งนี้/i.test(text)) {
+    const d = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    targetDay = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][d.getDay()];
+  } else if (/วันนี้/i.test(text)) {
+    targetDay = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][now.getDay()];
+  } else {
+    for (const [thDay, engDay] of Object.entries(daysMap)) {
+      if (text.includes(thDay)) {
+        targetDay = engDay;
+        break;
+      }
+    }
+  }
+
+  // Extract time
+  let startTime = '09:00';
+  let endTime = '10:00';
+
+  const timeRangeMatch = text.match(/(\d{1,2}[:.]\d{2})\s*[-–ถึง]\s*(\d{1,2}[:.]\d{2})/);
+  const singleTimeMatch = text.match(/(\d{1,2}[:.]\d{2})\s*(น\.|นาฬิกา)?/);
+  const thaiWordTimeMatch = text.match(/(บ่าย\s*([1-5|โมง|สอง|สาม|สี่|ห้า]+)|([1-9]|1[0-2])\s*โมง(เช้า|เย็น)?|([1-5])\s*ทุ่ม|เที่ยง)/i);
+
+  if (timeRangeMatch) {
+    startTime = timeRangeMatch[1].replace('.', ':');
+    endTime = timeRangeMatch[2].replace('.', ':');
+  } else if (singleTimeMatch) {
+    startTime = singleTimeMatch[1].replace('.', ':');
+    const [h, m] = startTime.split(':').map(Number);
+    endTime = `${String((h + 1) % 24).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  } else if (thaiWordTimeMatch) {
+    const raw = thaiWordTimeMatch[0];
+    if (raw.includes('บ่าย')) {
+      const num = raw.includes('สอง') ? 2 : raw.includes('สาม') ? 3 : raw.includes('สี่') ? 4 : raw.includes('ห้า') ? 5 : (parseInt((raw.match(/\d+/) || [1])[0], 10));
+      startTime = `${12 + num}:00`;
+    } else if (raw.includes('ทุ่ม')) {
+      const num = parseInt((raw.match(/\d+/) || [1])[0], 10);
+      startTime = `${18 + num}:00`;
+    } else if (raw.includes('โมง')) {
+      const num = parseInt((raw.match(/\d+/) || [9])[0], 10);
+      startTime = `${String(num).padStart(2, '0')}:00`;
+    } else if (raw.includes('เที่ยง')) {
+      startTime = '12:00';
+    }
+    const [h, m] = startTime.split(':').map(Number);
+    endTime = `${String((h + 1) % 24).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+
+  // Extract location
+  let location = '';
+  const locMatch = text.match(/(ที่|ณ|ห้อง)\s*([a-zA-Z0-9ก-๙\-_\s]+?)(?=\s+(เวลา|ส่ง|กำหนด|$))/i);
+  if (locMatch) {
+    location = locMatch[2].trim();
+  }
+
+  // Clean title
+  let title = text
+    .replace(/^(นัด|นัดหมาย|มีตติ้ง|meeting|ประชุม|ซ้อม|ติว)\s*/i, '')
+    .replace(/(พรุ่งนี้|วันนี้|วัน[จันทร์|อังคาร|พุธ|พฤหัส|ศุกร์|เสาร์|อาทิตย์]+)/g, '')
+    .replace(/(\d{1,2}[:.]\d{2}\s*[-–ถึง]?\s*\d{0,2}[:.]?\d{0,2}\s*(น\.|นาฬิกา)?)/g, '')
+    .replace(/(บ่าย\s*([1-5|โมง|สอง|สาม|สี่|ห้า]+)|([1-9]|1[0-2])\s*โมง(เช้า|เย็น)?|([1-5])\s*ทุ่ม|เที่ยง)/g, '')
+    .replace(/(ที่|ณ|ห้อง)\s*([a-zA-Z0-9ก-๙\-_\s]+)/g, '')
+    .trim();
+
+  if (!title) title = 'นัดหมายใหม่';
+
+  return {
+    title,
+    day: targetDay || ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][now.getDay()],
+    start: startTime,
+    end: endTime,
+    location,
+    notes: ''
+  };
 }
 
 function buildScheduleFlex(dayTitle, dateStr, classesList, routineList) {
@@ -1471,12 +1790,78 @@ function buildDailyBriefingFlex(dayName, dateStr, classesList, pendingTasks, rou
   };
 }
 
-function buildClassReminderFlex(course, timeUntilStr = 'อีก 15 นาที', themeColor = null) {
+function buildClassReminderFlex(course, timeUntilStr = 'อีก 15 นาที', themeColor = null, weatherInfo = null, notiSettings = null) {
   const is30Min = timeUntilStr.includes('30');
   const headerBg = themeColor || (is30Min ? '#D97706' : '#DC2626');
-  const badgeText = is30Min ? '🔔 PRE-CLASS REMINDER (30 MIN)' : '⚡ URGENT: CLASS STARTING (15 MIN)';
-  const headerTitle = is30Min ? `⏰ เตรียมตัว! อีก ${timeUntilStr} จะเริ่มเรียน` : `🚀 คาบเรียนจะเริ่มในอีก ${timeUntilStr}!`;
+  const badgeText = is30Min ? '🔔 PRE-CLASS REMINDER (30 MIN)' : '⚡ URGENT: CLASS STARTING';
+  const headerTitle = `🚀 คาบเรียนจะเริ่มในอีก ${timeUntilStr}!`;
   const codeColor = is30Min ? '#D97706' : '#DC2626';
+
+  const bodyContents = [
+    {
+      type: 'text',
+      text: `${course.code}`,
+      size: 'xs',
+      weight: 'bold',
+      color: codeColor
+    },
+    {
+      type: 'text',
+      text: `${course.name}`,
+      size: 'md',
+      weight: 'bold',
+      color: '#111827',
+      wrap: true,
+      margin: 'xs'
+    },
+    {
+      type: 'box',
+      layout: 'vertical',
+      margin: 'md',
+      spacing: 'sm',
+      contents: [
+        {
+          type: 'box',
+          layout: 'horizontal',
+          contents: [
+            { type: 'text', text: '⏰ เวลา:', size: 'xs', color: '#6B7280', flex: 1 },
+            { type: 'text', text: `${course.start} - ${course.end} น.`, size: 'xs', weight: 'bold', color: '#1F2937', flex: 3 }
+          ]
+        },
+        {
+          type: 'box',
+          layout: 'horizontal',
+          contents: [
+            { type: 'text', text: '📍 สถานที่:', size: 'xs', color: '#6B7280', flex: 1 },
+            { type: 'text', text: course.room ? `ห้อง ${course.room}` : 'ออนไลน์ / ดูรายละเอียด', size: 'xs', weight: 'bold', color: '#1F2937', flex: 3 }
+          ]
+        }
+      ]
+    }
+  ];
+
+  if (weatherInfo && weatherInfo.alert) {
+    bodyContents.push({
+      type: 'box',
+      layout: 'horizontal',
+      backgroundColor: '#EFF6FF',
+      cornerRadius: 'md',
+      paddingAll: '8px',
+      margin: 'md',
+      contents: [
+        {
+          type: 'text',
+          text: weatherInfo.alert,
+          size: 'xxs',
+          color: '#1D4ED8',
+          wrap: true
+        }
+      ]
+    });
+  }
+
+  const mapUrl = `https://www.google.com/maps/search/?api=1&query=มหาวิทยาลัยมหิดล+ศาลายา+${encodeURIComponent(course.room || 'คณะวิศวกรรมศาสตร์')}`;
+  const liffUrl = LINE_LIFF_ID ? `https://liff.line.me/${LINE_LIFF_ID}` : APP_BASE_URL;
 
   return {
     type: 'flex',
@@ -1497,73 +1882,481 @@ function buildClassReminderFlex(course, timeUntilStr = 'อีก 15 นาท�
         type: 'box',
         layout: 'vertical',
         paddingAll: '16px',
+        contents: bodyContents
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        spacing: 'sm',
         contents: [
           {
-            type: 'text',
-            text: `${course.code}`,
-            size: 'xs',
-            weight: 'bold',
-            color: codeColor
-          },
-          {
-            type: 'text',
-            text: `${course.name}`,
-            size: 'md',
-            weight: 'bold',
-            color: '#111827',
-            wrap: true,
-            margin: 'xs'
-          },
-          {
             type: 'box',
-            layout: 'vertical',
-            margin: 'md',
+            layout: 'horizontal',
             spacing: 'sm',
             contents: [
               {
-                type: 'box',
-                layout: 'horizontal',
-                contents: [
-                  { type: 'text', text: '⏰ เวลา:', size: 'xs', color: '#6B7280', flex: 1 },
-                  { type: 'text', text: `${course.start} - ${course.end} น.`, size: 'xs', weight: 'bold', color: '#1F2937', flex: 3 }
-                ]
+                type: 'button',
+                action: {
+                  type: 'postback',
+                  label: '⏰ เลื่อน 15 นาที',
+                  data: `action=snooze&min=15&code=${encodeURIComponent(course.code)}`,
+                  displayText: 'ขอเลื่อนการแจ้งเตือน 15 นาทีครับ'
+                },
+                style: 'secondary',
+                height: 'sm'
               },
               {
-                type: 'box',
-                layout: 'horizontal',
-                contents: [
-                  { type: 'text', text: '📍 สถานที่:', size: 'xs', color: '#6B7280', flex: 1 },
-                  { type: 'text', text: course.room ? `ห้อง ${course.room}` : 'ออนไลน์ / ดูรายละเอียด', size: 'xs', weight: 'bold', color: '#1F2937', flex: 3 }
-                ]
+                type: 'button',
+                action: {
+                  type: 'uri',
+                  label: '📖 Classroom',
+                  uri: course.classroomUrl || APP_BASE_URL
+                },
+                style: 'primary',
+                color: headerBg,
+                height: 'sm'
+              }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            spacing: 'sm',
+            contents: [
+              {
+                type: 'button',
+                action: {
+                  type: 'uri',
+                  label: '📍 แผนที่/ตึกเรียน',
+                  uri: mapUrl
+                },
+                style: 'link',
+                height: 'sm',
+                color: '#2563EB'
+              },
+              {
+                type: 'button',
+                action: {
+                  type: 'uri',
+                  label: '📅 เปิด E-Calendar',
+                  uri: liffUrl
+                },
+                style: 'link',
+                height: 'sm',
+                color: '#C45A1B'
               }
             ]
           }
         ]
+      }
+    }
+  };
+}
+
+function buildDailyDigestFlex(type, data) {
+  const isMorning = type === 'morning';
+  const headerBg = isMorning ? '#EA580C' : '#4F46E5';
+  const title = isMorning ? `☀️ Morning Brief: ภาพรวมวันนี้` : `🌙 Evening Wrap-up: สรุปประจำวัน`;
+  const sub = isMorning ? `ตารางเรียน & สภาพอากาศประจำวัน (${data.dateStr})` : `ความคืบหน้า & ตารางเรียนวันพรุ่งนี้`;
+  const liffUrl = LINE_LIFF_ID ? `https://liff.line.me/${LINE_LIFF_ID}` : APP_BASE_URL;
+
+  const bodyContents = [];
+
+  if (isMorning) {
+    if (data.weather) {
+      bodyContents.push({
+        type: 'box',
+        layout: 'horizontal',
+        backgroundColor: '#FFF7ED',
+        cornerRadius: 'md',
+        paddingAll: '10px',
+        margin: 'xs',
+        contents: [
+          { type: 'text', text: `🌡️ ${data.weather.temp} | ${data.weather.summary}`, size: 'xs', weight: 'bold', color: '#9A3412', flex: 3 },
+          { type: 'text', text: `🌧️ ฝน ${data.weather.rainProb}`, size: 'xs', color: '#C2410C', align: 'end', flex: 1 }
+        ]
+      });
+      if (data.weather.alert) {
+        bodyContents.push({
+          type: 'text',
+          text: data.weather.alert,
+          size: 'xxs',
+          color: '#EA580C',
+          wrap: true,
+          margin: 'xs'
+        });
+      }
+    }
+
+    bodyContents.push({
+      type: 'text',
+      text: '🎓 คาบเรียนวันนี้',
+      weight: 'bold',
+      size: 'sm',
+      color: '#1F2937',
+      margin: 'md'
+    });
+
+    if (data.classes && data.classes.length > 0) {
+      data.classes.forEach(c => {
+        bodyContents.push({
+          type: 'box',
+          layout: 'horizontal',
+          margin: 'sm',
+          contents: [
+            { type: 'text', text: `${c.start}-${c.end}`, size: 'xs', color: '#EA580C', weight: 'bold', flex: 2 },
+            { type: 'text', text: `${c.code} (${c.room || '-'})`, size: 'xs', color: '#374151', flex: 4, wrap: true }
+          ]
+        });
+      });
+    } else {
+      bodyContents.push({
+        type: 'text',
+        text: '🎉 วันนี้ไม่มีวิชาเรียน พักผ่อนหรือทบทวนตามอัธยาศัย!',
+        size: 'xs',
+        color: '#10B981',
+        margin: 'xs'
+      });
+    }
+
+    if (data.tasks && data.tasks.length > 0) {
+      bodyContents.push({
+        type: 'separator',
+        margin: 'md'
+      });
+      bodyContents.push({
+        type: 'text',
+        text: `📝 งานที่ต้องทำ (${data.tasks.length} รายการ)`,
+        weight: 'bold',
+        size: 'sm',
+        color: '#1F2937',
+        margin: 'sm'
+      });
+      data.tasks.slice(0, 3).forEach((t, i) => {
+        bodyContents.push({
+          type: 'text',
+          text: `• ${t.title} ${t.dueDate ? `(ส่ง ${t.dueDate})` : ''}`,
+          size: 'xs',
+          color: '#4B5563',
+          wrap: true,
+          margin: 'xs'
+        });
+      });
+    }
+  } else {
+    // Evening Wrap-up
+    bodyContents.push({
+      type: 'text',
+      text: '🎉 ผลงานวันนี้:',
+      weight: 'bold',
+      size: 'sm',
+      color: '#1F2937'
+    });
+
+    if (data.completedTasks && data.completedTasks.length > 0) {
+      bodyContents.push({
+        type: 'text',
+        text: `✅ ทำงานเสร็จแล้ว ${data.completedTasks.length} รายการ เยี่ยมมากครับ!`,
+        size: 'xs',
+        color: '#10B981',
+        margin: 'xs'
+      });
+    } else {
+      bodyContents.push({
+        type: 'text',
+        text: `วันนี้พักผ่อนเต็มที่ พร้อมลุยต่อในวันพรุ่งนี้ ✨`,
+        size: 'xs',
+        color: '#6B7280',
+        margin: 'xs'
+      });
+    }
+
+    bodyContents.push({
+      type: 'separator',
+      margin: 'md'
+    });
+
+    bodyContents.push({
+      type: 'text',
+      text: '🌅 คาบแรกของวันพรุ่งนี้:',
+      weight: 'bold',
+      size: 'sm',
+      color: '#1F2937',
+      margin: 'sm'
+    });
+
+    if (data.tomorrowClasses && data.tomorrowClasses.length > 0) {
+      const firstClass = data.tomorrowClasses[0];
+      bodyContents.push({
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#EEF2FF',
+        cornerRadius: 'md',
+        paddingAll: '10px',
+        margin: 'xs',
+        contents: [
+          { type: 'text', text: `⏰ ${firstClass.start} - ${firstClass.end} น.`, size: 'xs', weight: 'bold', color: '#4F46E5' },
+          { type: 'text', text: `${firstClass.code} ${firstClass.name}`, size: 'xs', weight: 'bold', color: '#1F2937', wrap: true },
+          { type: 'text', text: `📍 ห้อง ${firstClass.room || '-'}`, size: 'xxs', color: '#6B7280' }
+        ]
+      });
+    } else {
+      bodyContents.push({
+        type: 'text',
+        text: '🌴 พรุ่งนี้ไม่มีคาบเรียน นอนตื่นสายได้!',
+        size: 'xs',
+        color: '#10B981',
+        margin: 'xs'
+      });
+    }
+  }
+
+  return {
+    type: 'flex',
+    altText: title,
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: headerBg,
+        paddingAll: '16px',
+        contents: [
+          { type: 'text', text: isMorning ? 'MORNING BRIEF' : 'EVENING WRAP-UP', color: '#ffffff', size: 'xxs', weight: 'bold' },
+          { type: 'text', text: title, color: '#ffffff', size: 'md', weight: 'bold', margin: 'xs' },
+          { type: 'text', text: sub, color: '#ffffff', size: 'xs' }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '16px',
+        contents: bodyContents
       },
       footer: {
         type: 'box',
-        layout: 'horizontal',
-        spacing: 'sm',
+        layout: 'vertical',
         contents: [
           {
             type: 'button',
             action: {
               type: 'uri',
-              label: '📖 เข้า Classroom',
-              uri: course.classroomUrl || APP_BASE_URL
+              label: '📅 เปิดดูตารางแบบเต็ม',
+              uri: liffUrl
             },
             style: 'primary',
             color: headerBg,
             height: 'sm'
+          }
+        ]
+      }
+    }
+  };
+}
+
+function buildNotiStatusFlex(notiSettings) {
+  const isEnabled = notiSettings && notiSettings.enabled === true;
+  const offsets = (notiSettings && Array.isArray(notiSettings.offsets) && notiSettings.offsets.length > 0)
+    ? notiSettings.offsets
+    : [15];
+  const offsetText = offsets.map(m => `${m} นาที`).join(', ');
+  const statusColor = isEnabled ? '#10B981' : '#6B7280';
+  const statusText = isEnabled ? '🟢 เปิดใช้งานอยู่ (Active)' : '🔴 ปิดอยู่ (Disabled)';
+
+  return {
+    type: 'flex',
+    altText: `⚙️ สถานะการแจ้งเตือน: ${statusText}`,
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#1E293B',
+        paddingAll: '16px',
+        contents: [
+          { type: 'text', text: 'NOTIFICATION SETTINGS', color: '#94A3B8', size: 'xxs', weight: 'bold' },
+          { type: 'text', text: '⚙️ การตั้งค่าแจ้งเตือนล่วงหน้า', color: '#FFFFFF', size: 'md', weight: 'bold', margin: 'xs' }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '16px',
+        spacing: 'sm',
+        contents: [
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: 'สถานะ:', size: 'xs', color: '#64748B', flex: 1 },
+              { type: 'text', text: statusText, size: 'xs', weight: 'bold', color: statusColor, flex: 2 }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: 'รอบแจ้งเตือน:', size: 'xs', color: '#64748B', flex: 1 },
+              { type: 'text', text: isEnabled ? `เตือนก่อน ${offsetText}` : '-', size: 'xs', weight: 'bold', color: '#0F172A', flex: 2 }
+            ]
+          },
+          {
+            type: 'separator',
+            margin: 'md'
+          },
+          {
+            type: 'text',
+            text: '💡 วิธีเปลี่ยนการตั้งค่า:\n• พิมพ์ /noti on เพื่อเปิดเตือน 15 นาที\n• พิมพ์ /noti 10 15 30 เพื่อเตือน 3 รอบ\n• พิมพ์ /noti cancel เพื่อปิดเตือน',
+            size: 'xxs',
+            color: '#64748B',
+            wrap: true,
+            margin: 'sm'
+          }
+        ]
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        spacing: 'sm',
+        contents: [
+          {
+            type: 'box',
+            layout: 'horizontal',
+            spacing: 'sm',
+            contents: [
+              {
+                type: 'button',
+                action: {
+                  type: 'postback',
+                  label: '🔔 เตือน 15 นาที',
+                  data: 'action=set_noti&offsets=15',
+                  displayText: '/noti 15'
+                },
+                style: 'secondary',
+                height: 'sm'
+              },
+              {
+                type: 'button',
+                action: {
+                  type: 'postback',
+                  label: '⚡ เตือน 3 รอบ',
+                  data: 'action=set_noti&offsets=10,15,30',
+                  displayText: '/noti 10 15 30'
+                },
+                style: 'primary',
+                color: '#C45A1B',
+                height: 'sm'
+              }
+            ]
           },
           {
             type: 'button',
             action: {
-              type: 'message',
-              label: '⚡ คาบต่อไป',
-              text: 'คาบต่อไป'
+              type: 'postback',
+              label: '🚫 ปิดการแจ้งเตือน',
+              data: 'action=cancel_noti',
+              displayText: '/noti cancel'
             },
-            style: 'secondary',
+            style: 'link',
+            color: '#EF4444',
+            height: 'sm'
+          }
+        ]
+      }
+    }
+  };
+}
+
+function buildAiEventCreatedFlex(events, summary = '', sourceLabel = 'AI Assistant') {
+  const liffUrl = LINE_LIFF_ID ? `https://liff.line.me/${LINE_LIFF_ID}` : APP_BASE_URL;
+  const dayNamesTH = {
+    monday: 'วันจันทร์', tuesday: 'วันอังคาร', wednesday: 'วันพุธ',
+    thursday: 'วันพฤหัสบดี', friday: 'วันศุกร์', saturday: 'วันเสาร์', sunday: 'วันอาทิตย์'
+  };
+
+  const bodyContents = [];
+  if (summary) {
+    bodyContents.push({
+      type: 'text',
+      text: summary,
+      size: 'xs',
+      color: '#4B5563',
+      wrap: true,
+      margin: 'xs'
+    });
+    bodyContents.push({ type: 'separator', margin: 'md' });
+  }
+
+  (events || []).forEach((ev) => {
+    bodyContents.push({
+      type: 'box',
+      layout: 'vertical',
+      backgroundColor: '#F8FAFC',
+      cornerRadius: 'md',
+      paddingAll: '10px',
+      margin: 'sm',
+      contents: [
+        {
+          type: 'box',
+          layout: 'horizontal',
+          contents: [
+            { type: 'text', text: `📅 ${dayNamesTH[ev.day] || ev.day || 'วันนัดหมาย'}`, size: 'xxs', color: '#C45A1B', weight: 'bold', flex: 2 },
+            { type: 'text', text: `⏰ ${ev.start} - ${ev.end} น.`, size: 'xxs', color: '#64748B', align: 'end', flex: 2 }
+          ]
+        },
+        {
+          type: 'text',
+          text: `📌 ${ev.title}`,
+          size: 'sm',
+          weight: 'bold',
+          color: '#0F172A',
+          wrap: true,
+          margin: 'xs'
+        },
+        ...(ev.location ? [
+          { type: 'text', text: `📍 สถานที่: ${ev.location}`, size: 'xxs', color: '#64748B', wrap: true }
+        ] : []),
+        ...(ev.notes ? [
+          { type: 'text', text: `📝 ${ev.notes}`, size: 'xxs', color: '#94A3B8', wrap: true }
+        ] : [])
+      ]
+    });
+  });
+
+  return {
+    type: 'flex',
+    altText: `✨ AI บันทึกลงตารางแล้ว: ${(events && events[0] && events[0].title) || 'นัดหมายใหม่'}`,
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#7C3AED',
+        paddingAll: '14px',
+        contents: [
+          { type: 'text', text: `🤖 ${sourceLabel.toUpperCase()} AUTO-SCHEDULE`, color: '#DDD6FE', size: 'xxs', weight: 'bold' },
+          { type: 'text', text: `✨ บันทึกเข้าตารางเรียบร้อยแล้ว!`, color: '#FFFFFF', size: 'md', weight: 'bold', margin: 'xs' }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '16px',
+        contents: bodyContents
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [
+          {
+            type: 'button',
+            action: {
+              type: 'uri',
+              label: '📅 เปิดดูในตาราง E-Calendar',
+              uri: liffUrl
+            },
+            style: 'primary',
+            color: '#7C3AED',
             height: 'sm'
           }
         ]
@@ -2694,7 +3487,7 @@ function buildHelpMenuFlex() {
   };
 }
 
-// ─── Automated Dual-Stage (30-Min & 15-Min) Pre-Class Reminder Scheduler (Every 60s) ───
+// ─── Automated Notification & Smart Context Scheduler Loop (Runs every 60s) ──────────
 const sentReminderKeys = new Set();
 
 setInterval(async () => {
@@ -2702,9 +3495,12 @@ setInterval(async () => {
     const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
     const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
     const currentDay = days[now.getDay()];
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    const currentHHMM = String(currentHour).padStart(2, '0') + ':' + String(currentMinute).padStart(2, '0');
     const todayDateStr = now.toISOString().slice(0, 10);
 
-    if (sentReminderKeys.size > 500) sentReminderKeys.clear();
+    if (sentReminderKeys.size > 800) sentReminderKeys.clear();
 
     const activeUserIds = new Set([
       '1',
@@ -2712,35 +3508,119 @@ setInterval(async () => {
       ...Object.values(store._lineUsers || {})
     ]);
 
-    // 2-Stage Milestones: 30 minutes before and 15 minutes before
-    const milestones = [
-      { minutes: 30, label: 'อีก 30 นาที', color: '#D97706', suffix: '_30m' },
-      { minutes: 15, label: 'อีก 15 นาที', color: '#DC2626', suffix: '_15m' }
-    ];
+    // Fetch real-time weather context (cached 30m)
+    let weatherInfo = null;
+    try {
+      weatherInfo = await fetchSalayaWeather();
+    } catch (_) {}
 
-    for (const milestone of milestones) {
-      const targetTime = new Date(now.getTime() + milestone.minutes * 60 * 1000);
-      const targetHHMM = String(targetTime.getHours()).padStart(2, '0') + ':' + String(targetTime.getMinutes()).padStart(2, '0');
-
+    // ─── 1. Daily Digest: Morning Brief (08:00) ───
+    if (currentHHMM === '08:00') {
       for (const userId of activeUserIds) {
         const userData = (await dbAdapter.getUserData(userId)) || {};
-        const userObj = Object.values(store._users || {}).find(u => u.id === userId || (u.username && u.username.toLowerCase() === userId.toLowerCase()));
-        const isWitchaya = userObj ? (userObj.username && userObj.username.toLowerCase() === 'witchaya') : (userId === '1' || userId === 'default');
-        const curriculum = userData.curriculum || (isWitchaya ? DEFAULT_BME_CURRICULUM : []);
+        const notiSettings = userData.notiSettings || { enabled: false, offsets: [15] };
+
+        if (notiSettings.enabled && notiSettings.morningBrief !== false) {
+          const morningKey = `morning_${todayDateStr}_${userId}`;
+          if (!sentReminderKeys.has(morningKey)) {
+            sentReminderKeys.add(morningKey);
+            const userObj = Object.values(store._users || {}).find(u => u.id === userId || (u.username && u.username.toLowerCase() === userId.toLowerCase()));
+            const isWitchaya = userObj ? (userObj.username && userObj.username.toLowerCase() === 'witchaya') : (userId === '1' || userId === 'default');
+            const curriculum = userData.curriculum || (isWitchaya ? DEFAULT_BME_CURRICULUM : []);
+            const todayClasses = curriculum.filter(c => c.day === currentDay).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
+            const pendingTasks = (userData.tasks || []).filter(t => !t.done);
+            const customAppointments = (userData.customBlocks && userData.customBlocks[currentDay]) || [];
+
+            const lineUserId = store._userLine && store._userLine[userId];
+            if (lineUserId && hasLine) {
+              await sendLinePush(lineUserId, [buildDailyDigestFlex('morning', {
+                userName: userObj ? userObj.displayName || userObj.username : 'นักศึกษา',
+                dateStr: todayDateStr,
+                classes: todayClasses,
+                tasks: pendingTasks,
+                appointments: customAppointments,
+                weather: weatherInfo
+              })]);
+            }
+          }
+        }
+      }
+    }
+
+    // ─── 2. Daily Digest: Evening Wrap-up (20:00) ───
+    if (currentHHMM === '20:00') {
+      for (const userId of activeUserIds) {
+        const userData = (await dbAdapter.getUserData(userId)) || {};
+        const notiSettings = userData.notiSettings || { enabled: false, offsets: [15] };
+
+        if (notiSettings.enabled && notiSettings.eveningWrapup !== false) {
+          const eveningKey = `evening_${todayDateStr}_${userId}`;
+          if (!sentReminderKeys.has(eveningKey)) {
+            sentReminderKeys.add(eveningKey);
+            const userObj = Object.values(store._users || {}).find(u => u.id === userId || (u.username && u.username.toLowerCase() === userId.toLowerCase()));
+            const isWitchaya = userObj ? (userObj.username && userObj.username.toLowerCase() === 'witchaya') : (userId === '1' || userId === 'default');
+            const curriculum = userData.curriculum || (isWitchaya ? DEFAULT_BME_CURRICULUM : []);
+            const tomorrowDay = days[(now.getDay() + 1) % 7];
+            const tomorrowClasses = curriculum.filter(c => c.day === tomorrowDay).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
+            const completedTasks = (userData.tasks || []).filter(t => t.done && t.completedAt && t.completedAt.startsWith(todayDateStr));
+            const remainingTasks = (userData.tasks || []).filter(t => !t.done);
+
+            const lineUserId = store._userLine && store._userLine[userId];
+            if (lineUserId && hasLine) {
+              await sendLinePush(lineUserId, [buildDailyDigestFlex('evening', {
+                userName: userObj ? userObj.displayName || userObj.username : 'นักศึกษา',
+                dateStr: todayDateStr,
+                completedTasks,
+                remainingTasks,
+                tomorrowClasses
+              })]);
+            }
+          }
+        }
+      }
+    }
+
+    // ─── 3. Pre-Class Multi-Stage Flexible Reminders (/noti) ───
+    for (const userId of activeUserIds) {
+      const userData = (await dbAdapter.getUserData(userId)) || {};
+      const notiSettings = userData.notiSettings || { enabled: false, offsets: [15] };
+
+      // Individual Per-User Setting (Default is OFF per user requirement!)
+      if (!notiSettings.enabled) continue;
+
+      // Check active Snooze
+      if (notiSettings.snoozeUntil && Date.now() < notiSettings.snoozeUntil) {
+        continue;
+      }
+
+      const userObj = Object.values(store._users || {}).find(u => u.id === userId || (u.username && u.username.toLowerCase() === userId.toLowerCase()));
+      const isWitchaya = userObj ? (userObj.username && userObj.username.toLowerCase() === 'witchaya') : (userId === '1' || userId === 'default');
+      const curriculum = userData.curriculum || (isWitchaya ? DEFAULT_BME_CURRICULUM : []);
+
+      const offsets = Array.isArray(notiSettings.offsets) && notiSettings.offsets.length > 0
+        ? notiSettings.offsets
+        : [15];
+
+      for (const offsetMin of offsets) {
+        const targetTime = new Date(now.getTime() + offsetMin * 60 * 1000);
+        const targetHHMM = String(targetTime.getHours()).padStart(2, '0') + ':' + String(targetTime.getMinutes()).padStart(2, '0');
 
         for (const course of curriculum) {
           if (course.day === currentDay && course.start === targetHHMM) {
-            const reminderKey = `${todayDateStr}_${userId}_${course.code}_${course.start}${milestone.suffix}`;
+            const reminderKey = `${todayDateStr}_${userId}_${course.code}_${course.start}_${offsetMin}m`;
             if (sentReminderKeys.has(reminderKey)) continue;
             sentReminderKeys.add(reminderKey);
 
-            console.log(`⏰ [Auto-Reminder] ${milestone.minutes}-min pre-class alert triggered for ${course.code} to user [${userId}]`);
+            const milestoneLabel = `อีก ${offsetMin} นาที`;
+            const milestoneColor = offsetMin <= 15 ? '#DC2626' : '#D97706';
+
+            console.log(`⏰ [Auto-Reminder] ${offsetMin}-min pre-class alert triggered for ${course.code} to user [${userId}]`);
 
             // 1. Send Web Push
             const subs = await dbAdapter.getPushSubscriptions(userId);
             if (subs && subs.length > 0 && webpush && vapidKeys.publicKey) {
               const pushPayload = JSON.stringify({
-                title: `⏰ ${milestone.label}เริ่มเรียน: ${course.code}`,
+                title: `⏰ อีก ${offsetMin} นาทีเริ่มเรียน: ${course.code}`,
                 body: `${course.name} (${course.start} - ${course.end} น.) ห้อง ${course.room || '-'}`,
                 icon: '/icons/icon-192.png',
                 badge: '/icons/icon-192.png',
@@ -2759,10 +3639,10 @@ setInterval(async () => {
               });
             }
 
-            // 2. Send LINE Push
+            // 2. Send LINE Push with Interactive Action Buttons & Weather Alert Context
             const lineUserId = store._userLine && store._userLine[userId];
             if (lineUserId && hasLine) {
-              await sendLinePush(lineUserId, [buildClassReminderFlex(course, milestone.label, milestone.color)]);
+              await sendLinePush(lineUserId, [buildClassReminderFlex(course, milestoneLabel, milestoneColor, weatherInfo, notiSettings)]);
             }
           }
         }
@@ -3585,6 +4465,222 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (event.type === 'postback') {
+      const dataStr = (event.postback && event.postback.data) || '';
+      const params = new URLSearchParams(dataStr);
+      const action = params.get('action');
+      const linkedUserId = (store._lineUsers && store._lineUsers[lineUserId]) || '1';
+      const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+
+      if (action === 'snooze') {
+        const min = parseInt(params.get('min') || '15', 10);
+        if (!userData.notiSettings) userData.notiSettings = { enabled: true, offsets: [15] };
+        userData.notiSettings.snoozeUntil = Date.now() + min * 60 * 1000;
+        await dbAdapter.saveUserData(linkedUserId, userData);
+        store[linkedUserId] = userData;
+        saveStore();
+        await sendLineReply(replyToken, `⏰ เลื่อนการแจ้งเตือนไปอีก ${min} นาทีเรียบร้อยแล้วครับ!`);
+        return;
+      }
+
+      if (action === 'set_noti') {
+        const offsetsStr = params.get('offsets') || '15';
+        const offsets = offsetsStr.split(',').map(Number).filter(n => !isNaN(n) && n > 0);
+        userData.notiSettings = {
+          ...(userData.notiSettings || {}),
+          enabled: true,
+          offsets: offsets.length > 0 ? offsets : [15]
+        };
+        await dbAdapter.saveUserData(linkedUserId, userData);
+        store[linkedUserId] = userData;
+        saveStore();
+        await sendLineReply(replyToken, [buildNotiStatusFlex(userData.notiSettings)]);
+        return;
+      }
+
+      if (action === 'cancel_noti') {
+        userData.notiSettings = {
+          ...(userData.notiSettings || {}),
+          enabled: false
+        };
+        await dbAdapter.saveUserData(linkedUserId, userData);
+        store[linkedUserId] = userData;
+        saveStore();
+        await sendLineReply(replyToken, [buildNotiStatusFlex(userData.notiSettings)]);
+        return;
+      }
+
+      if (action === 'done_task') {
+        const taskId = params.get('id');
+        const tasks = userData.tasks || [];
+        const found = tasks.find(t => t.id === taskId);
+        if (found) {
+          found.done = true;
+          found.completedAt = new Date().toISOString();
+          await dbAdapter.saveUserData(linkedUserId, userData);
+          store[linkedUserId] = userData;
+          saveStore();
+          const remaining = tasks.filter(t => !t.done).length;
+          await sendLineReply(replyToken, `🎉 ทำงาน "${found.title}" เสร็จแล้วเรียบร้อย! ✨\n(เหลืองานค้างอีก ${remaining} รายการ)`);
+        } else {
+          await sendLineReply(replyToken, '✅ บันทึกสถานะงานเรียบร้อยแล้วครับ');
+        }
+        return;
+      }
+      return;
+    }
+
+    // ─── Voice / Audio Message Handler (Gemini Voice-to-Schedule) ───
+    if (event.type === 'message' && event.message && event.message.type === 'audio') {
+      const linkedUserId = (store._lineUsers && store._lineUsers[lineUserId]) || '1';
+      const audioBuffer = await getLineMessageContent(event.message.id);
+      if (!audioBuffer) {
+        await sendLineReply(replyToken, '⚠️ ไม่สามารถดาวน์โหลดไฟล์เสียงจาก LINE ได้ กรุณาลองใหม่อีกครั้งครับ');
+        return;
+      }
+
+      if (!hasGemini) {
+        await sendLineReply(replyToken, '🎤 ได้รับข้อความเสียงแล้ว แต่ระบบ AI ถอดเสียงยังไม่ได้เปิดใช้งาน (ต้องการการตั้งค่า GEMINI_API_KEY บนเซิร์ฟเวอร์ครับ)');
+        return;
+      }
+
+      const aiResult = await transcribeAudioWithGemini(audioBuffer, 'audio/mp4');
+      if (!aiResult) {
+        await sendLineReply(replyToken, '⚠️ ขออภัยครับ AI ไม่สามารถถอดเสียงหรือสกัดข้อมูลนัดหมายจากคลิปนี้ได้ กรุณาลองพูดใหม่อีกครั้งครับ');
+        return;
+      }
+
+      const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+      if (!userData.customBlocks) userData.customBlocks = {};
+      if (!userData.tasks) userData.tasks = [];
+      if (!userData.quickNotes) userData.quickNotes = [];
+
+      const addedEvents = [];
+
+      if (Array.isArray(aiResult.events)) {
+        aiResult.events.forEach(ev => {
+          if (!ev.day || !ev.title) return;
+          const dayKey = ev.day.toLowerCase();
+          if (!userData.customBlocks[dayKey]) userData.customBlocks[dayKey] = [];
+          const newBlock = {
+            id: Date.now().toString() + Math.random().toString(36).substring(2, 5),
+            title: ev.title,
+            start: ev.start || '09:00',
+            end: ev.end || '10:00',
+            tag: 'study',
+            isStudyBlock: true,
+            notes: ev.notes || ev.location || ''
+          };
+          userData.customBlocks[dayKey].push(newBlock);
+          addedEvents.push({ ...ev, id: newBlock.id });
+        });
+      }
+
+      if (Array.isArray(aiResult.tasks)) {
+        aiResult.tasks.forEach(t => {
+          if (!t.title) return;
+          userData.tasks.push({
+            id: Date.now().toString(),
+            title: t.title,
+            dueDate: t.dueDate || '',
+            done: false,
+            createdAt: new Date().toISOString()
+          });
+        });
+      }
+
+      if (Array.isArray(aiResult.notes)) {
+        aiResult.notes.forEach(n => {
+          if (!n) return;
+          userData.quickNotes.push({
+            id: Date.now().toString(),
+            text: n,
+            createdAt: new Date().toISOString()
+          });
+        });
+      }
+
+      await dbAdapter.saveUserData(linkedUserId, userData);
+      store[linkedUserId] = userData;
+      saveStore();
+
+      if (addedEvents.length > 0) {
+        await sendLineReply(replyToken, [buildAiEventCreatedFlex(addedEvents, `🗣️ เสียงของคุณ: "${aiResult.transcript || ''}"`, 'Voice Assistant')]);
+      } else {
+        await sendLineReply(replyToken, `🗣️ ถอดเสียง: "${aiResult.transcript || ''}"\n\n✅ บันทึกข้อมูลเรียบร้อยแล้วครับ!`);
+      }
+      return;
+    }
+
+    // ─── Image Message Handler (Gemini Vision OCR to Calendar) ───
+    if (event.type === 'message' && event.message && event.message.type === 'image') {
+      const linkedUserId = (store._lineUsers && store._lineUsers[lineUserId]) || '1';
+      const imageBuffer = await getLineMessageContent(event.message.id);
+      if (!imageBuffer) {
+        await sendLineReply(replyToken, '⚠️ ไม่สามารถดาวน์โหลดรูปภาพจาก LINE ได้ กรุณาลองใหม่อีกครั้งครับ');
+        return;
+      }
+
+      if (!hasGemini) {
+        await sendLineReply(replyToken, '🖼️ ได้รับรูปภาพแล้ว แต่ระบบ AI สแกนภาพเป็นตารางงาน (Vision OCR) ต้องการการตั้งค่า GEMINI_API_KEY บนเซิร์ฟเวอร์ครับ');
+        return;
+      }
+
+      const aiResult = await analyzeImageWithGemini(imageBuffer, 'image/jpeg');
+      if (!aiResult) {
+        await sendLineReply(replyToken, '⚠️ ขออภัยครับ AI ไม่พบข้อมูลวันเวลาหรือนัดหมายในภาพนี้ กรุณาลองส่งภาพที่มีรายละเอียดวันเวลาชัดเจนอีกครั้งครับ');
+        return;
+      }
+
+      const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+      if (!userData.customBlocks) userData.customBlocks = {};
+      if (!userData.tasks) userData.tasks = [];
+
+      const addedEvents = [];
+      if (Array.isArray(aiResult.events)) {
+        aiResult.events.forEach(ev => {
+          if (!ev.day || !ev.title) return;
+          const dayKey = ev.day.toLowerCase();
+          if (!userData.customBlocks[dayKey]) userData.customBlocks[dayKey] = [];
+          const newBlock = {
+            id: Date.now().toString() + Math.random().toString(36).substring(2, 5),
+            title: ev.title,
+            start: ev.start || '09:00',
+            end: ev.end || '10:00',
+            tag: 'study',
+            isStudyBlock: true,
+            notes: ev.notes || ev.location || ''
+          };
+          userData.customBlocks[dayKey].push(newBlock);
+          addedEvents.push({ ...ev, id: newBlock.id });
+        });
+      }
+
+      if (Array.isArray(aiResult.tasks)) {
+        aiResult.tasks.forEach(t => {
+          if (!t.title) return;
+          userData.tasks.push({
+            id: Date.now().toString(),
+            title: t.title,
+            dueDate: t.dueDate || '',
+            done: false,
+            createdAt: new Date().toISOString()
+          });
+        });
+      }
+
+      await dbAdapter.saveUserData(linkedUserId, userData);
+      store[linkedUserId] = userData;
+      saveStore();
+
+      if (addedEvents.length > 0) {
+        await sendLineReply(replyToken, [buildAiEventCreatedFlex(addedEvents, aiResult.summary || 'สแกนเอกสารและบันทึกลงตารางแล้ว', 'Image OCR Vision')]);
+      } else {
+        await sendLineReply(replyToken, `📄 สรุปจากภาพ: ${aiResult.summary || 'ตรวจพบข้อมูล'}\n\n✅ บันทึกรายการลงระบบเรียบร้อยแล้วครับ!`);
+      }
+      return;
+    }
+
     if (event.type === 'message' && event.message && event.message.type === 'text') {
       const text = event.message.text.trim();
 
@@ -3627,6 +4723,96 @@ const server = http.createServer(async (req, res) => {
       const isWitchaya = targetUsername === 'witchaya' || linkedUserId === '1';
       const defaultCurriculum = isWitchaya ? DEFAULT_BME_CURRICULUM : [];
       const defaultRoutines = isWitchaya ? DEFAULT_BME_ROUTINE_EVENTS : [];
+
+      // ─── 1.5 Notification Settings Command: /noti ... ───
+      const notiMatch = text.match(/^\/?noti\s*(.*)/i);
+      if (notiMatch) {
+        const arg = notiMatch[1].trim().toLowerCase();
+        const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+        if (!userData.notiSettings) userData.notiSettings = { enabled: false, offsets: [15] };
+
+        if (!arg || arg === 'on' || arg === 'เปิด') {
+          userData.notiSettings.enabled = true;
+          userData.notiSettings.offsets = [15];
+          await dbAdapter.saveUserData(linkedUserId, userData);
+          store[linkedUserId] = userData;
+          saveStore();
+          await sendLineReply(replyToken, [buildNotiStatusFlex(userData.notiSettings)]);
+          return;
+        }
+
+        if (arg === 'cancel' || arg === 'off' || arg === 'ปิด' || arg === 'ยกเลิก') {
+          userData.notiSettings.enabled = false;
+          await dbAdapter.saveUserData(linkedUserId, userData);
+          store[linkedUserId] = userData;
+          saveStore();
+          await sendLineReply(replyToken, [buildNotiStatusFlex(userData.notiSettings)]);
+          return;
+        }
+
+        if (arg === 'status' || arg === 'เช็ค' || arg === 'ดู' || arg === 'ตั้งค่า') {
+          await sendLineReply(replyToken, [buildNotiStatusFlex(userData.notiSettings)]);
+          return;
+        }
+
+        // Numbers parsing: e.g. /noti 10 15 30 or /noti 5 20
+        const numbers = arg.split(/\s+/).map(Number).filter(n => !isNaN(n) && n > 0 && n <= 180);
+        if (numbers.length > 0) {
+          userData.notiSettings.enabled = true;
+          userData.notiSettings.offsets = numbers.sort((a, b) => b - a);
+          await dbAdapter.saveUserData(linkedUserId, userData);
+          store[linkedUserId] = userData;
+          saveStore();
+          await sendLineReply(replyToken, [buildNotiStatusFlex(userData.notiSettings)]);
+          return;
+        }
+      }
+
+      // ─── 1.8 Natural Language Appointment / Meeting Creation (นัด... / มีตติ้ง... / ประชุม...) ───
+      const appointmentMatch = text.match(/^(นัด|นัดหมาย|มีตติ้ง|meeting|ประชุม|ซ้อม|ติว)\s*(.+)/i);
+      if (appointmentMatch || (hasGemini && text.length > 15 && (text.includes('พรุ่งนี้') || text.includes('วันจันทร์') || text.includes('วันอังคาร') || text.includes('วันพุธ') || text.includes('วันพฤหัส') || text.includes('วันศุกร์') || text.includes('วันเสาร์') || text.includes('วันอาทิตย์')))) {
+        let extracted = null;
+        if (hasGemini) {
+          extracted = await extractScheduleWithGemini(text);
+        }
+
+        if (!extracted || !extracted.events || extracted.events.length === 0) {
+          const fallbackParsed = parseThaiNaturalAppointment(text);
+          if (fallbackParsed) {
+            extracted = { events: [fallbackParsed] };
+          }
+        }
+
+        if (extracted && extracted.events && extracted.events.length > 0) {
+          const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+          if (!userData.customBlocks) userData.customBlocks = {};
+
+          const savedEvents = [];
+          extracted.events.forEach(ev => {
+            if (!ev.day || !ev.title) return;
+            const dayKey = ev.day.toLowerCase();
+            if (!userData.customBlocks[dayKey]) userData.customBlocks[dayKey] = [];
+            const newBlock = {
+              id: Date.now().toString() + Math.random().toString(36).substring(2, 5),
+              title: ev.title,
+              start: ev.start || '09:00',
+              end: ev.end || '10:00',
+              tag: 'study',
+              isStudyBlock: true,
+              notes: ev.notes || ev.location || ''
+            };
+            userData.customBlocks[dayKey].push(newBlock);
+            savedEvents.push({ ...ev, id: newBlock.id });
+          });
+
+          await dbAdapter.saveUserData(linkedUserId, userData);
+          store[linkedUserId] = userData;
+          saveStore();
+
+          await sendLineReply(replyToken, [buildAiEventCreatedFlex(savedEvents, extracted.summary || 'เพิ่มนัดหมายลงตารางเรียบร้อยแล้ว', 'Schedule Assistant')]);
+          return;
+        }
+      }
 
       // ─── 2. Command: โน้ตด่วน / Memo (+โน้ต <ข้อความ> / จดโน้ต <ข้อความ> / note <ข้อความ> / memo <ข้อความ>) ───
       const explicitNoteMatch = text.match(/^(\+โน้ต|จดโน้ต|เพิ่มโน้ต|\+note|note|memo|บันทึกโน้ต)\s*(.+)/i);
@@ -4226,6 +5412,62 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'ส่งข้อความเข้า LINE ไม่สำเร็จ ตรวจสอบ Channel Access Token' }));
       }
+    });
+    return;
+  }
+
+  // ─── API: LIFF Configuration (GET /api/liff/config) ───
+  if (pathname === '/api/liff/config' && req.method === 'GET') {
+    res.setHeader('Cache-Control', 'no-store');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      liffId: LINE_LIFF_ID || '',
+      hasLine
+    }));
+    return;
+  }
+
+  // ─── API: LIFF Auto-Auth & Account Linking (POST /api/liff/auth) ───
+  if (pathname === '/api/liff/auth' && req.method === 'POST') {
+    parseJsonBody(async (err, data) => {
+      if (err || !data || !data.lineUserId) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Missing lineUserId' }));
+        return;
+      }
+
+      const { lineUserId, displayName } = data;
+      const linkedUserId = (store._lineUsers && store._lineUsers[lineUserId]) || null;
+      let targetUser = linkedUserId ? Object.values(store._users || {}).find(u => u.id === linkedUserId) : null;
+
+      if (!targetUser) {
+        // If not explicitly linked, resolve to witchaya or default user
+        targetUser = store._users['witchaya'] || Object.values(store._users || {})[0] || { id: '1', username: 'student', displayName: displayName || 'นักศึกษา' };
+      }
+
+      // Create valid session token for client
+      const token = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      if (!store._sessions) store._sessions = {};
+      store._sessions[token] = {
+        username: targetUser.username || targetUser.id,
+        userId: targetUser.id,
+        expiresAt
+      };
+      await dbAdapter.saveSystemAuth();
+      saveStore();
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: true,
+        token,
+        user: {
+          id: targetUser.id,
+          username: targetUser.username,
+          displayName: targetUser.displayName || displayName || targetUser.username,
+          calendarKey: targetUser.calendarKey
+        }
+      }));
     });
     return;
   }
