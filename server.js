@@ -6387,7 +6387,7 @@ const server = http.createServer(async (req, res) => {
         const existing = (await dbAdapter.getUserData(key)) || {};
         let mergedFiles = { ...(existing.files || {}), ...(parsed.files || {}) };
 
-        // 1. Remove files explicitly marked as deleted
+        // 1. Remove files explicitly marked as deleted in deletedFileUrls tombstone list
         if (Array.isArray(parsed.deletedFileUrls) && parsed.deletedFileUrls.length > 0) {
           const delUrls = new Set(parsed.deletedFileUrls);
           Object.keys(mergedFiles).forEach(fId => {
@@ -6397,24 +6397,65 @@ const server = http.createServer(async (req, res) => {
           });
         }
 
-        // 2. If studyLinks is provided from client, purge files that are neither in studyLinks nor in parsed.files
+        // 2. Merge studyLinks: union of existing server studyLinks + new client studyLinks
+        //    (respecting tombstone deletedFileUrls — do NOT purge server files just because
+        //     the client's studyLinks list doesn't include them; they may have been uploaded
+        //     from another device that hasn't synced yet)
+        let mergedStudyLinks = Array.isArray(existing.studyLinks) ? [...existing.studyLinks] : [];
         if (Array.isArray(parsed.studyLinks)) {
-          const activeUrls = new Set(parsed.studyLinks.map(l => l.url));
-          const activeIds = new Set(parsed.studyLinks.map(l => l.id));
-          const newFileKeys = new Set(Object.keys(parsed.files || {}));
-          Object.keys(mergedFiles).forEach(fId => {
-            if (newFileKeys.has(fId)) return; // freshly uploaded
-            const f = mergedFiles[fId];
-            if (f && f.url && !activeUrls.has(f.url) && !activeIds.has(`file-${fId}`) && !activeIds.has(fId)) {
-              delete mergedFiles[fId];
+          const existingIds = new Set(mergedStudyLinks.map(l => l.id));
+          const existingUrls = new Set(mergedStudyLinks.map(l => l.url));
+          let delUrlsSet = new Set();
+          try { delUrlsSet = new Set(Array.isArray(parsed.deletedFileUrls) ? parsed.deletedFileUrls : []); } catch (_) {}
+
+          // Add new links from client that don't exist on server
+          parsed.studyLinks.forEach(l => {
+            if (!l) return;
+            if (delUrlsSet.has(l.url) || delUrlsSet.has(l.id)) return; // skip deleted
+            if (!existingIds.has(l.id) && !existingUrls.has(l.url)) {
+              mergedStudyLinks.push(l);
+              existingIds.add(l.id);
+              if (l.url) existingUrls.add(l.url);
+            } else {
+              // Update existing entry with newer version from client
+              const idx = mergedStudyLinks.findIndex(e => e.id === l.id || (l.url && e.url === l.url));
+              if (idx !== -1) mergedStudyLinks[idx] = l;
             }
           });
+
+          // Remove entries that are in tombstone (deletedFileUrls)
+          mergedStudyLinks = mergedStudyLinks.filter(l => {
+            if (!l) return false;
+            if (delUrlsSet.has(l.id) || delUrlsSet.has(l.url)) return false;
+            return true;
+          });
         }
+
+        // Ensure files in mergedFiles are represented in mergedStudyLinks
+        const existingLinkUrls = new Set(mergedStudyLinks.map(l => l.url));
+        Object.values(mergedFiles).forEach(f => {
+          if (!f || !f.url) return;
+          if (existingLinkUrls.has(f.url)) return; // already represented
+          const isPdf = f.name && f.name.toLowerCase().endsWith('.pdf');
+          const isImg = f.name && f.name.match(/\.(png|jpe?g|webp|gif)$/i);
+          mergedStudyLinks.unshift({
+            id: `file-${f.id || Date.now()}`,
+            title: f.name || 'เอกสารที่อัปโหลด',
+            sub: `Cloud Vault (${f.size ? (f.size / 1024).toFixed(1) + ' KB' : ''})`,
+            type: isPdf ? 'pdf' : isImg ? 'image' : 'file',
+            url: f.url,
+            desc: `บันทึกเมื่อ ${f.uploadedAt ? new Date(f.uploadedAt).toLocaleString('th-TH') : 'ก่อนหน้า'}`,
+            folderId: 'f-uploads',
+            createdAt: f.uploadedAt || new Date().toISOString()
+          });
+          existingLinkUrls.add(f.url);
+        });
 
         const merged = {
           ...existing,
           ...parsed,
           files: mergedFiles,
+          studyLinks: mergedStudyLinks,
           updatedAt: new Date().toISOString()
         };
         await dbAdapter.saveUserData(key, merged);
