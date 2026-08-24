@@ -1254,6 +1254,19 @@ function parseThaiNaturalAppointment(text) {
   };
 }
 
+function safeLineUri(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return APP_BASE_URL || 'https://e-calen.up.railway.app';
+  let trimmed = rawUrl.trim();
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://') && !trimmed.startsWith('line://') && !trimmed.startsWith('tel:')) {
+    trimmed = `${APP_BASE_URL || 'https://e-calen.up.railway.app'}${trimmed.startsWith('/') ? '' : '/'}${trimmed}`;
+  }
+  try {
+    return encodeURI(trimmed);
+  } catch (_) {
+    return trimmed;
+  }
+}
+
 function buildScheduleFlex(dayTitle, dateStr, classesList, routineList) {
   const contents = [];
   
@@ -1363,7 +1376,7 @@ function buildScheduleFlex(dayTitle, dateStr, classesList, routineList) {
             action: {
               type: 'uri',
               label: '🌐 เปิด E-Calendar Dashboard',
-              uri: APP_BASE_URL
+              uri: safeLineUri(APP_BASE_URL)
             },
             style: 'primary',
             color: '#C45A1B',
@@ -1447,7 +1460,7 @@ function buildCourseProfileFlex(course) {
       action: {
         type: 'uri',
         label: '📖 เข้า Google Classroom',
-        uri: course.classroomUrl
+        uri: safeLineUri(course.classroomUrl || 'https://classroom.google.com')
       },
       style: 'primary',
       color: '#10B981',
@@ -1460,7 +1473,7 @@ function buildCourseProfileFlex(course) {
     action: {
       type: 'uri',
       label: '🌐 เปิดดูชีท & เอกสาร',
-      uri: APP_BASE_URL
+      uri: safeLineUri(APP_BASE_URL)
     },
     style: 'secondary',
     height: 'sm'
@@ -1673,7 +1686,7 @@ function buildClassroomDirectoryFlex(curriculum, studyLinks) {
           action: {
             type: 'uri',
             label: '📖 เข้า Google Classroom',
-            uri: url
+            uri: safeLineUri(url)
           },
           style: 'primary',
           color: '#059669',
@@ -2026,8 +2039,11 @@ function buildClassReminderFlex(course, timeUntilStr = 'อีก 15 นาท�
     });
   }
 
-  const mapUrl = `https://www.google.com/maps/search/?api=1&query=มหาวิทยาลัยมหิดล+ศาลายา+${encodeURIComponent(course.room || 'คณะวิศวกรรมศาสตร์')}`;
+  const mapQuery = encodeURIComponent(`มหาวิทยาลัยมหิดล ศาลายา ${course.room || 'คณะวิศวกรรมศาสตร์'}`);
+  const mapUrl = `https://www.google.com/maps/search/?api=1&query=${mapQuery}`;
   const liffUrl = LINE_LIFF_ID ? `https://liff.line.me/${LINE_LIFF_ID}` : APP_BASE_URL;
+  const eCalenLink = liffUrl.includes('?') ? `${liffUrl}&view=dashboard&subview=timeline` : `${liffUrl}?view=dashboard&subview=timeline`;
+  const classroomLink = course.classroomUrl || 'https://classroom.google.com';
 
   return {
     type: 'flex',
@@ -2076,7 +2092,7 @@ function buildClassReminderFlex(course, timeUntilStr = 'อีก 15 นาท�
                 action: {
                   type: 'uri',
                   label: '📖 Classroom',
-                  uri: course.classroomUrl || 'https://classroom.google.com'
+                  uri: safeLineUri(classroomLink)
                 },
                 style: 'primary',
                 color: headerBg,
@@ -2094,7 +2110,7 @@ function buildClassReminderFlex(course, timeUntilStr = 'อีก 15 นาท�
                 action: {
                   type: 'uri',
                   label: '📍 แผนที่/ตึกเรียน',
-                  uri: mapUrl
+                  uri: safeLineUri(mapUrl)
                 },
                 style: 'link',
                 height: 'sm',
@@ -2105,7 +2121,7 @@ function buildClassReminderFlex(course, timeUntilStr = 'อีก 15 นาท�
                 action: {
                   type: 'uri',
                   label: '📅 เปิด E-Calendar',
-                  uri: liffUrl.includes('?') ? `${liffUrl}&view=dashboard&subview=timeline` : `${liffUrl}?view=dashboard&subview=timeline`
+                  uri: safeLineUri(eCalenLink)
                 },
                 style: 'link',
                 height: 'sm',
@@ -2308,7 +2324,7 @@ function buildDailyDigestFlex(type, data) {
             action: {
               type: 'uri',
               label: '📅 เปิดดูตารางแบบเต็ม',
-              uri: liffUrl
+              uri: safeLineUri(liffUrl)
             },
             style: 'primary',
             color: headerBg,
@@ -2519,7 +2535,7 @@ function buildAiEventCreatedFlex(events, summary = '', sourceLabel = 'AI Assista
             action: {
               type: 'uri',
               label: '📅 เปิดดูในตาราง E-Calendar',
-              uri: liffUrl
+              uri: safeLineUri(liffUrl)
             },
             style: 'primary',
             color: '#7C3AED',
@@ -2639,7 +2655,7 @@ function buildAiSolutionFlex(aiResult, fileRecord) {
         layout: 'horizontal',
         spacing: 'sm',
         contents: [
-          { type: 'button', action: { type: 'uri', label: '📂 ดูไฟล์บนเว็บ', uri: fileUrl }, style: 'primary', color: '#7C3AED', height: 'sm' },
+          { type: 'button', action: { type: 'uri', label: '📂 ดูไฟล์บนเว็บ', uri: safeLineUri(fileUrl) }, style: 'primary', color: '#7C3AED', height: 'sm' },
           { type: 'button', action: { type: 'message', label: '📅 ตารางวันนี้', text: 'ตารางวันนี้' }, style: 'secondary', height: 'sm' }
         ]
       }
@@ -2708,7 +2724,7 @@ function buildFileSavedFlex(fileRecord, aiSummary) {
         layout: 'horizontal',
         spacing: 'sm',
         contents: [
-          { type: 'button', action: { type: 'uri', label: '📖 เปิดดูไฟล์', uri: fileUrl }, style: 'primary', color: '#0284C7', height: 'sm' },
+          { type: 'button', action: { type: 'uri', label: '📖 เปิดดูไฟล์', uri: safeLineUri(fileUrl) }, style: 'primary', color: '#0284C7', height: 'sm' },
           { type: 'button', action: { type: 'message', label: '📝 งานค้าง', text: 'งานค้าง' }, style: 'secondary', height: 'sm' }
         ]
       }
@@ -2885,7 +2901,7 @@ function buildNextClassFlex(course, status, minutesDiff, upcomingCourse) {
         contents: [
           {
             type: 'button',
-            action: { type: 'uri', label: '📖 เข้า Classroom', uri: course.classroomUrl || 'https://classroom.google.com' },
+            action: { type: 'uri', label: '📖 เข้า Classroom', uri: safeLineUri(course.classroomUrl || 'https://classroom.google.com') },
             style: 'primary',
             color: '#10B981',
             height: 'sm'
@@ -3783,7 +3799,7 @@ function buildHelpMenuFlex() {
             spacing: 'sm',
             contents: [
               { type: 'button', action: { type: 'message', label: '💬 Sample Meeting', text: 'Meeting tomorrow 14:00' }, style: 'primary', color: '#7C3AED', height: 'sm' },
-              { type: 'button', action: { type: 'uri', label: '📅 Open E-Calen', uri: liffUrl }, style: 'secondary', height: 'sm' }
+              { type: 'button', action: { type: 'uri', label: '📅 Open E-Calen', uri: safeLineUri(liffUrl) }, style: 'secondary', height: 'sm' }
             ]
           }
         },
