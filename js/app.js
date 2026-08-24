@@ -785,11 +785,29 @@
     return `${dayKey}-${getDateKey(dayKey)}`;
   }
 
+  function isWitchayaUser() {
+    const currentUser = window.CloudSync ? CloudSync.getCurrentUser() : null;
+    if (currentUser && currentUser.username) {
+      return currentUser.username.toLowerCase() === 'witchaya';
+    }
+    const saved = localStorage.getItem('sd-current-user');
+    if (saved) {
+      try {
+        const u = JSON.parse(saved);
+        if (u && u.username && u.username.toLowerCase() === 'witchaya') return true;
+      } catch (_) {}
+    }
+    const syncKey = window.CloudSync ? CloudSync.getSyncKey() : (localStorage.getItem('sd-sync-key') || '');
+    if (syncKey && syncKey.toLowerCase() === 'witchaya') return true;
+    return false;
+  }
+
   // ─── Day Tabs (9th Verbatim) ──────────────────────────────
   function renderDayTabs() {
     const container = document.getElementById('day-tabs');
     if (!container) return;
     const todayKey = getDayKey(new Date().getDay());
+    const isWitchaya = isWitchayaUser();
     container.innerHTML = '';
     DAY_ORDER.forEach(key => {
       const day = ROUTINES[key];
@@ -798,10 +816,11 @@
       const btn = document.createElement('button');
       btn.className = `day-tab ${isActive ? 'active' : ''} ${isToday ? 'today' : ''}`;
       btn.dataset.day = key;
+      const statusHtml = isWitchaya ? `<span class="day-tab-status">${day.statusEmoji}</span>` : '';
       btn.innerHTML = `
         <span class="day-tab-short">${day.short}</span>
         <span class="day-tab-en">${day.labelEn.substring(0, 3)}</span>
-        <span class="day-tab-status">${day.statusEmoji}</span>
+        ${statusHtml}
       `;
       btn.addEventListener('click', () => selectDay(key));
       container.appendChild(btn);
@@ -821,18 +840,22 @@
     const day = ROUTINES[dayKey];
     if (!day) return;
 
+    const isWitchaya = isWitchayaUser();
+
+    // Base blocks: only Witchaya starts with default ROUTINES. Everyone else starts empty.
+    let baseBlocks = isWitchaya ? [...day.blocks] : [];
+
     // Build live class blocks from state.curriculum (override hardcoded ROUTINES class blocks)
     const liveCurriculum = (state.curriculum && state.curriculum.length > 0)
       ? state.curriculum
       : null;
 
-    let baseBlocks = day.blocks;
     if (liveCurriculum) {
       // Replace class blocks for this day with live curriculum data
       const dayClasses = liveCurriculum.filter(c => c.day === dayKey && c.start && c.end);
       if (dayClasses.length > 0) {
         // Remove old hardcoded class blocks for this day, keep non-class blocks
-        const nonClassBlocks = day.blocks.filter(b => !b.isClass);
+        const nonClassBlocks = baseBlocks.filter(b => !b.isClass);
         const liveClassBlocks = dayClasses.map(c => ({
           id: `live-class-${c.code}`,
           start: c.start,
@@ -858,18 +881,34 @@
     const checks = state.checklist[checkKey] || {};
     const subjects = state.subjects[checkKey] || {};
 
+    const statusBadgeHtml = isWitchaya ? `
+      <span class="status-badge ${day.status}">
+        ${day.statusEmoji} ${day.statusLabel}
+      </span>` : '';
+
+    let timelineHtml = '';
+    if (allBlocks.length === 0) {
+      timelineHtml = `
+        <div class="empty-timeline-state" style="text-align:center;padding:3.5rem 1.5rem;background:var(--bg-2);border-radius:var(--r-l);border:1px dashed var(--sep);margin-top:1rem;">
+          <div style="font-size:2.5rem;margin-bottom:0.75rem;">📅</div>
+          <div style="font-size:1.1rem;font-weight:700;color:var(--label);margin-bottom:0.25rem;">ยังไม่มีกิจกรรมในตารางวัน</div>
+          <div style="font-size:0.875rem;color:var(--label-3);margin-bottom:1.25rem;">คุณสามารถกดปุ่ม "＋ เพิ่มกิจกรรม" ด้านบนเพื่อเริ่มจัดตารางเรียนหรือกิจกรรมของคุณเองได้เลย</div>
+          <button class="add-btn" data-day="${dayKey}" id="empty-add-block-btn" style="margin:0 auto;display:inline-flex;">＋ เพิ่มกิจกรรม</button>
+        </div>`;
+    } else {
+      timelineHtml = allBlocks.map((block) => renderBlock(block, day, checks, subjects, dayKey)).join('');
+    }
+
     container.innerHTML = `
       <div class="stats-bar">
-        ${renderStatsBar(day, checks)}
+        ${renderStatsBar(day, checks, allBlocks)}
       </div>
       <div class="day-banner">
         <div class="day-banner-text">
           <h2>${day.labelEn} · ${day.label}</h2>
           <p>${formatDayDate(dayKey)}</p>
         </div>
-        <span class="status-badge ${day.status}">
-          ${day.statusEmoji} ${day.statusLabel}
-        </span>
+        ${statusBadgeHtml}
         <button class="add-btn" data-day="${dayKey}" id="add-block-btn">
           ＋ เพิ่มกิจกรรม
         </button>
@@ -880,7 +919,7 @@
           <div class="time-now-dot"></div>
           <div class="time-now-line"></div>
         </div>
-        ${allBlocks.map((block) => renderBlock(block, day, checks, subjects, dayKey)).join('')}
+        ${timelineHtml}
       </div>
     `;
 
@@ -1014,19 +1053,36 @@
   }
 
   // ─── Stats Bar (9th Verbatim) ────────────────────────────
-  function renderStatsBar(day, checks) {
-    const studyBlocks = day.blocks.filter(b => b.isStudyBlock);
+  function renderStatsBar(day, checks, allBlocks = []) {
+    const isWitchaya = isWitchayaUser();
+    const blocksToUse = (allBlocks && allBlocks.length > 0) ? allBlocks : (isWitchaya ? day.blocks : []);
+    const studyBlocks = blocksToUse.filter(b => b.isStudyBlock || b.tag === 'study');
     const totalStudyBlocks = studyBlocks.length;
     const doneBlocks = Object.values(checks).filter(Boolean).length;
     const pct = totalStudyBlocks > 0
       ? Math.round((doneBlocks / totalStudyBlocks) * 100)
-      : (day.studyMinutes === 0 ? 100 : 0);
+      : (isWitchaya && day.studyMinutes === 0 ? 100 : 0);
 
-    const sleepH = Math.floor(day.sleepMinutes / 60);
-    const sleepM = day.sleepMinutes % 60;
-    const studyH = Math.floor(day.studyMinutes / 60);
-    const studyM = day.studyMinutes % 60;
-    const studyLabel = day.studyMinutes === 0 ? 'พักผ่อน'
+    let sleepMinutes = 0;
+    let studyMinutes = 0;
+    if (isWitchaya && allBlocks.length === 0) {
+      sleepMinutes = day.sleepMinutes;
+      studyMinutes = day.studyMinutes;
+    } else {
+      blocksToUse.forEach(b => {
+        const dur = (timeToMinutes(b.end) - timeToMinutes(b.start));
+        if (dur > 0) {
+          if (b.tag === 'sleep') sleepMinutes += dur;
+          if (b.tag === 'study' || b.isStudyBlock) studyMinutes += dur;
+        }
+      });
+    }
+
+    const sleepH = Math.floor(sleepMinutes / 60);
+    const sleepM = sleepMinutes % 60;
+    const studyH = Math.floor(studyMinutes / 60);
+    const studyM = studyMinutes % 60;
+    const studyLabel = studyMinutes === 0 ? 'พักผ่อน'
       : `${studyH > 0 ? studyH + ' ชม.' : ''}${studyM > 0 ? ' ' + studyM + ' น.' : ''}`;
 
     const r = 20, circ = 2 * Math.PI * r;
@@ -1081,11 +1137,12 @@
 
   function calcWeeklyStreak() {
     let done = 0, total = 0;
+    const isWitchaya = isWitchayaUser();
     DAY_ORDER.forEach(key => {
       const day = ROUTINES[key];
       const customExtra = state.customBlocks[key] || [];
       const overrideIds = new Set(customExtra.filter(b => b._override).map(b => b.id));
-      const baseBlocks = (day ? day.blocks : []).filter(b => !overrideIds.has(b.id));
+      const baseBlocks = isWitchaya ? (day ? day.blocks : []).filter(b => !overrideIds.has(b.id)) : [];
       const allBlocks = [...baseBlocks, ...customExtra];
       const studyBlocks = allBlocks.filter(b => b.isStudyBlock || b.tag === 'study');
 
@@ -1150,11 +1207,12 @@
         const day = ROUTINES[state.currentDay];
         if (!day) return;
         
-        let baseBlocks = day.blocks;
+        const isWitchaya = isWitchayaUser();
+        let baseBlocks = isWitchaya ? [...day.blocks] : [];
         if (state.curriculum && state.curriculum.length > 0) {
           const dayClasses = state.curriculum.filter(c => c.day === state.currentDay && c.start && c.end);
           if (dayClasses.length > 0) {
-            const nonClassBlocks = day.blocks.filter(b => !b.isClass);
+            const nonClassBlocks = baseBlocks.filter(b => !b.isClass);
             const liveClassBlocks = dayClasses.map(c => ({
               id: `live-class-${c.code}`,
               start: c.start,
@@ -1194,7 +1252,7 @@
         }));
       }
     }
-    return CLASS_SCHEDULE[dayKey] || [];
+    return isWitchayaUser() ? (CLASS_SCHEDULE[dayKey] || []) : [];
   }
 
   // ─── Class Schedule (9th Verbatim) ───────────────────────
@@ -1205,6 +1263,30 @@
     const days = ['monday','tuesday','wednesday','thursday','friday'];
     const dayLabels = { monday:'จ. (Mon)', tuesday:'อ. (Tue)', wednesday:'พ. (Wed)', thursday:'พฤ. (Thu)', friday:'ศ. (Fri)' };
     const todayKey = getDayKey(new Date().getDay());
+    const isWitchaya = isWitchayaUser();
+
+    const allDaysClasses = days.map(d => ({ day: d, classes: getClassesForDay(d) }));
+    const hasAnyClasses = allDaysClasses.some(x => x.classes.length > 0);
+
+    if (!hasAnyClasses && !isWitchaya) {
+      container.innerHTML = `
+        <div class="schedule-header-row">
+          <h2>📆 ตารางเรียนประจำสัปดาห์</h2>
+        </div>
+        <div style="background:var(--bg-2);border-radius:var(--r-l);border:1px dashed var(--sep);padding:40px 20px;text-align:center;margin-top:12px;">
+          <div style="font-size:2.5rem;margin-bottom:12px">📆</div>
+          <h3 style="font-size:18px;font-weight:700;color:var(--label);margin-bottom:6px">ยังไม่มีตารางเรียนในระบบ</h3>
+          <p style="font-size:14px;color:var(--label-3);max-width:480px;margin:0 auto 20px">คุณสามารถเข้าไปที่แท็บ "หลักสูตร (Curriculum)" เพื่อเพิ่มรายวิชาและวันเวลาเรียนของคุณเองได้เลยครับ</p>
+          <button class="primary-btn" id="go-to-curriculum-btn" style="margin:0 auto;display:inline-flex;align-items:center;gap:8px">📖 ไปที่หน้าจัดการหลักสูตร</button>
+        </div>
+      `;
+      const btn = document.getElementById('go-to-curriculum-btn');
+      if (btn) btn.addEventListener('click', () => {
+        const curNav = document.querySelector('[data-view="curriculum"]');
+        if (curNav) curNav.click();
+      });
+      return;
+    }
 
     let classListHtml = '';
     days.forEach(d => {
@@ -1234,9 +1316,15 @@
         <span>${sc.shortName}</span>
       </div>`).join('');
 
+    const originalImageSection = isWitchaya ? `
+      <div class="schedule-image-section">
+        <img src="egmu-class-schedule-2026-1-program_B-BI.png" alt="ตารางเรียนต้นฉบับ" />
+        <div class="schedule-image-caption">📋 ตารางเรียนต้นฉบับ — 1st Year BME · Mahidol University · Semester 1/2026</div>
+      </div>` : '';
+
     container.innerHTML = `
       <div class="schedule-header-row">
-        <h2>📆 ตารางเรียน — ภาคเรียนที่ 1/2026 (Program B-BI)</h2>
+        <h2>📆 ตารางเรียน — ภาคเรียนที่ 1/2026 ${isWitchaya ? '(Program B-BI)' : ''}</h2>
       </div>
       <div style="background:var(--bg-2);border-radius:var(--r-l);border:1px solid var(--sep);padding:20px 24px;box-shadow:var(--shadow-1)">
         <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:20px">
@@ -1256,13 +1344,10 @@
               </div>`;
           }).join('')}
         </div>
-        ${classListHtml}
+        ${classListHtml || '<div style="text-align:center;padding:16px;color:var(--label-3);">ไม่มีวิชาเรียนที่ระบุ</div>'}
       </div>
       <div class="subject-legend">${legendItems}</div>
-      <div class="schedule-image-section">
-        <img src="egmu-class-schedule-2026-1-program_B-BI.png" alt="ตารางเรียนต้นฉบับ" />
-        <div class="schedule-image-caption">📋 ตารางเรียนต้นฉบับ — 1st Year BME · Mahidol University · Semester 1/2026</div>
-      </div>
+      ${originalImageSection}
     `;
   }
 
@@ -1271,6 +1356,7 @@
     const container = document.getElementById('view-week');
     if (!container) return;
     const todayKey = getDayKey(new Date().getDay());
+    const isWitchaya = isWitchayaUser();
     const weekStat = calcWeeklyStreak();
     const weekPct = weekStat.total > 0 ? Math.round(weekStat.done / weekStat.total * 100) : 0;
 
@@ -1278,14 +1364,19 @@
       const day = ROUTINES[key];
       const ck = getCheckKey(key);
       const checks = state.checklist[ck] || {};
-      const studyBlocks = day.blocks.filter(b => b.isStudyBlock);
+      const customExtra = state.customBlocks[key] || [];
+      const overrideIds = new Set(customExtra.filter(b => b._override).map(b => b.id));
+      const baseBlocks = isWitchaya ? (day ? day.blocks : []).filter(b => !overrideIds.has(b.id)) : [];
+      const allBlocks = [...baseBlocks, ...customExtra];
+      const studyBlocks = allBlocks.filter(b => b.isStudyBlock || b.tag === 'study');
       const done = Object.values(checks).filter(Boolean).length;
       const classes = getClassesForDay(key);
       const isToday = key === todayKey;
+      const statusEmojiHtml = isWitchaya ? `<div class="wdc-status">${day.statusEmoji}</div>` : '';
       return `
         <div class="week-day-card ${isToday ? 'today' : ''}" data-day="${key}">
           <div class="wdc-day">${day.short} <span style="font-size:10px;color:var(--label-3)">${day.labelEn.substring(0,3)}</span></div>
-          <div class="wdc-status">${day.statusEmoji}</div>
+          ${statusEmojiHtml}
           <div class="wdc-study">
             ${studyBlocks.length > 0 ? `📚 ${done}/${studyBlocks.length}` : '🌴 พัก'}
           </div>
@@ -1326,7 +1417,6 @@
     });
   }
 
-  
   // ─── View 2: Curriculum (Mahidol BME 2026-1) ─────────────
   function getCurriculumCourses() {
     if (state.curriculum && Array.isArray(state.curriculum) && state.curriculum.length > 0) {
@@ -1342,8 +1432,11 @@
         }
       } catch (_) {}
     }
-    state.curriculum = JSON.parse(JSON.stringify(DEFAULT_CURRICULUM));
-    return state.curriculum;
+    if (isWitchayaUser()) {
+      state.curriculum = JSON.parse(JSON.stringify(DEFAULT_CURRICULUM));
+      return state.curriculum;
+    }
+    return [];
   }
 
   function saveCurriculum() {
@@ -4184,7 +4277,8 @@
     const { dayKey, blockId } = state.editingBlock;
     if (!state.customBlocks[dayKey]) state.customBlocks[dayKey] = [];
     const day = ROUTINES[dayKey];
-    const isBaseRoutine = day && day.blocks.some(b => b.id === blockId);
+    const isWitchaya = isWitchayaUser();
+    const isBaseRoutine = isWitchaya && day && day.blocks.some(b => b.id === blockId);
     const isLiveClass = blockId.startsWith('live-class-');
     if (isBaseRoutine || isLiveClass) {
       showToast('ไม่สามารถลบวิชาหลักจากตารางวันได้ (กรุณาแก้ไขในหน้า Curriculum)', 'warning');

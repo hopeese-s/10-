@@ -566,9 +566,11 @@ function generateIcsCalendar(userId, includeRoutines = false, includeStudy = tru
     SU: '2026-08-23'
   };
 
+  const userObj = Object.values(store._users || {}).find(u => u.id === userId || (u.username && u.username.toLowerCase() === userId.toLowerCase()));
+  const isWitchaya = userObj ? (userObj.username && userObj.username.toLowerCase() === 'witchaya') : (userId === '1' || userId === 'default');
   const userCustom = store[userId] || {};
   const customBlocks = userCustom.customBlocks || {};
-  const curriculum = userCustom.curriculum || DEFAULT_BME_CURRICULUM;
+  const curriculum = userCustom.curriculum || (isWitchaya ? DEFAULT_BME_CURRICULUM : []);
 
   let ics = [];
   ics.push('BEGIN:VCALENDAR');
@@ -617,22 +619,24 @@ function generateIcsCalendar(userId, includeRoutines = false, includeStudy = tru
   });
   } // end if (includeClass)
 
-  // Add default routine events (respecting category filters and deduplicating against curriculum)
-  DEFAULT_BME_ROUTINE_EVENTS.forEach(ev => {
-    if (ev.isClass || ev.type === 'class') {
-      if (!includeClass) return;
-      const matchingCourse = curriculum.find(c => {
-        const dayMap = { MO: 'monday', TU: 'tuesday', WE: 'wednesday', TH: 'thursday', FR: 'friday', SA: 'saturday', SU: 'sunday' };
-        return dayMap[ev.day] === c.day && c.start === ev.start;
-      });
-      if (matchingCourse) return; // Skip duplicate class event
-    } else if (ev.isStudyBlock || ev.type === 'study') {
-      if (!includeStudy) return;
-    } else {
-      if (!includeRoutines) return;
-    }
-    events.push({ ...ev });
-  });
+  // Add default routine events for Witchaya only (respecting category filters and deduplicating against curriculum)
+  if (isWitchaya) {
+    DEFAULT_BME_ROUTINE_EVENTS.forEach(ev => {
+      if (ev.isClass || ev.type === 'class') {
+        if (!includeClass) return;
+        const matchingCourse = curriculum.find(c => {
+          const dayMap = { MO: 'monday', TU: 'tuesday', WE: 'wednesday', TH: 'thursday', FR: 'friday', SA: 'saturday', SU: 'sunday' };
+          return dayMap[ev.day] === c.day && c.start === ev.start;
+        });
+        if (matchingCourse) return; // Skip duplicate class event
+      } else if (ev.isStudyBlock || ev.type === 'study') {
+        if (!includeStudy) return;
+      } else {
+        if (!includeRoutines) return;
+      }
+      events.push({ ...ev });
+    });
+  }
 
   if (includeStudy) {
   // Add custom blocks from user's study data
@@ -2717,7 +2721,9 @@ setInterval(async () => {
 
       for (const userId of activeUserIds) {
         const userData = (await dbAdapter.getUserData(userId)) || {};
-        const curriculum = userData.curriculum || DEFAULT_BME_CURRICULUM;
+        const userObj = Object.values(store._users || {}).find(u => u.id === userId || (u.username && u.username.toLowerCase() === userId.toLowerCase()));
+        const isWitchaya = userObj ? (userObj.username && userObj.username.toLowerCase() === 'witchaya') : (userId === '1' || userId === 'default');
+        const curriculum = userData.curriculum || (isWitchaya ? DEFAULT_BME_CURRICULUM : []);
 
         for (const course of curriculum) {
           if (course.day === currentDay && course.start === targetHHMM) {
@@ -3108,16 +3114,17 @@ const server = http.createServer(async (req, res) => {
       store._users[username] = user;
       store._calKeys[calendarKey] = userId;
 
-      const masterTemplate = (await dbAdapter.getUserData('1')) || (await dbAdapter.getUserData('u_admin')) || store['1'] || {};
+      const isWitchaya = username.toLowerCase() === 'witchaya';
+      const masterTemplate = isWitchaya ? ((await dbAdapter.getUserData('1')) || (await dbAdapter.getUserData('u_admin')) || store['1'] || {}) : {};
       const initialUserData = {
         version: 1,
         updatedAt: new Date().toISOString(),
         checklist: {},
         subjects: {},
         customBlocks: {},
-        curriculum: masterTemplate.curriculum || DEFAULT_BME_CURRICULUM || [],
-        studyFolders: masterTemplate.studyFolders || [],
-        studyLinks: (masterTemplate.studyLinks || []).filter(l => l && l.isShared !== false),
+        curriculum: isWitchaya ? (masterTemplate.curriculum || DEFAULT_BME_CURRICULUM || []) : [],
+        studyFolders: isWitchaya ? (masterTemplate.studyFolders || []) : [],
+        studyLinks: isWitchaya ? ((masterTemplate.studyLinks || []).filter(l => l && l.isShared !== false)) : [],
         files: {}
       };
 
@@ -3518,6 +3525,10 @@ const server = http.createServer(async (req, res) => {
       // Check linked user
       const linkedUserId = (store._lineUsers && store._lineUsers[lineUserId]) || '1';
       const targetUser = Object.values(store._users || {}).find(u => u.id === linkedUserId) || { id: linkedUserId, displayName: 'นักศึกษา' };
+      const targetUsername = (targetUser && targetUser.username) ? targetUser.username.toLowerCase() : '';
+      const isWitchaya = targetUsername === 'witchaya' || linkedUserId === '1';
+      const defaultCurriculum = isWitchaya ? DEFAULT_BME_CURRICULUM : [];
+      const defaultRoutines = isWitchaya ? DEFAULT_BME_ROUTINE_EVENTS : [];
 
       // ─── 2. Command: +งาน / +การบ้าน / จด <ชื่องาน> <กำหนดส่ง> ───
       const addTaskMatch = text.match(/^(\+|เพิ่มงาน|เพิ่มการบ้าน|จด|การบ้านใหม่|task)\s*(.+)/i);
@@ -3582,7 +3593,7 @@ const server = http.createServer(async (req, res) => {
         const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
         const dayCode = days[now.getDay()];
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
-        const curriculum = userData.curriculum || DEFAULT_BME_CURRICULUM;
+        const curriculum = userData.curriculum || defaultCurriculum;
         const todayClasses = curriculum.filter(c => c.day === dayCode).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
 
         const classesWithMin = todayClasses.map(c => {
@@ -3662,7 +3673,7 @@ const server = http.createServer(async (req, res) => {
         const dateStr = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
 
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
-        const curriculum = userData.curriculum || DEFAULT_BME_CURRICULUM;
+        const curriculum = userData.curriculum || defaultCurriculum;
         const todayClasses = curriculum.filter(c => c.day === dayCode).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
 
         const freeSlots = [];
@@ -3688,7 +3699,7 @@ const server = http.createServer(async (req, res) => {
         }
 
         const dayMapCode = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
-        const todayRoutines = DEFAULT_BME_ROUTINE_EVENTS.filter(r => r.day === dayMapCode[dayCode]);
+        const todayRoutines = defaultRoutines.filter(r => r.day === dayMapCode[dayCode]);
 
         await sendLineReply(replyToken, [buildFreeTimeFlex(dayName, dateStr, freeSlots, todayRoutines)]);
         return;
@@ -3697,7 +3708,7 @@ const server = http.createServer(async (req, res) => {
       // ─── 7. Command: หน่วยกิต & สรุปเทอม (Credits Summary) ───
       if (/^(หน่วยกิต|สรุปเทอม|credits|credit|วิชาทั้งหมด)/i.test(text)) {
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
-        const curriculum = userData.curriculum || DEFAULT_BME_CURRICULUM;
+        const curriculum = userData.curriculum || defaultCurriculum;
         await sendLineReply(replyToken, [buildSemesterCreditsFlex(curriculum)]);
         return;
       }
@@ -3737,10 +3748,10 @@ const server = http.createServer(async (req, res) => {
           thursday: 'วันพฤหัสบดี', friday: 'วันศุกร์', saturday: 'วันเสาร์', sunday: 'วันอาทิตย์'
         };
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
-        const curriculum = userData.curriculum || DEFAULT_BME_CURRICULUM;
+        const curriculum = userData.curriculum || defaultCurriculum;
         const targetClasses = curriculum.filter(c => c.day === targetDayCode).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
         const dayMapCode = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
-        const targetRoutines = DEFAULT_BME_ROUTINE_EVENTS.filter(r => r.day === dayMapCode[targetDayCode]);
+        const targetRoutines = defaultRoutines.filter(r => r.day === dayMapCode[targetDayCode]);
 
         await sendLineReply(replyToken, [buildScheduleFlex(`${dayNamesTH[targetDayCode]}`, `ตารางเรียน`, targetClasses, targetRoutines)]);
         return;
@@ -3749,7 +3760,7 @@ const server = http.createServer(async (req, res) => {
       // ─── 10. Command: ตารางสัปดาห์ / สัปดาห์นี้ / week ───
       if (/^(ตารางสัปดาห์|สัปดาห์นี้|ทั้งสัปดาห์|ตารางทั้งหมด|week|all schedule)/i.test(text)) {
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
-        const curriculum = userData.curriculum || DEFAULT_BME_CURRICULUM;
+        const curriculum = userData.curriculum || defaultCurriculum;
         await sendLineReply(replyToken, [buildWeeklyScheduleFlex(curriculum)]);
         return;
       }
@@ -3757,8 +3768,8 @@ const server = http.createServer(async (req, res) => {
       // ─── 11. Command: คลาสรูม / classroom / ชีท / ลิงก์เรียน ───
       if (/^(คลาสรูม|classroom|ลิงก์เรียน|ลิงก์ห้องเรียน|ชีท|ชีทเรียน|google classroom)/i.test(text)) {
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
-        const curriculum = userData.curriculum || DEFAULT_BME_CURRICULUM;
-        const links = userData.studyLinks || DEFAULT_BME_STUDY_LINKS;
+        const curriculum = userData.curriculum || defaultCurriculum;
+        const links = userData.studyLinks || (isWitchaya ? DEFAULT_BME_STUDY_LINKS : []);
         await sendLineReply(replyToken, [buildClassroomDirectoryFlex(curriculum, links)]);
         return;
       }
@@ -3822,10 +3833,10 @@ const server = http.createServer(async (req, res) => {
         const dateStr = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
 
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
-        const curriculum = userData.curriculum || DEFAULT_BME_CURRICULUM;
+        const curriculum = userData.curriculum || defaultCurriculum;
         const todayClasses = curriculum.filter(c => c.day === dayCode).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
         const dayMapCode = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
-        const todayRoutines = DEFAULT_BME_ROUTINE_EVENTS.filter(r => r.day === dayMapCode[dayCode]);
+        const todayRoutines = defaultRoutines.filter(r => r.day === dayMapCode[dayCode]);
         const tasks = userData.tasks || userData.todos || [];
         const pendingTasks = tasks.filter(t => !t.done);
 
@@ -3834,7 +3845,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       // ─── 20. Command: Course Finder (ค้นหารายละเอียดวิชา / ห้องเรียน) ───
-      const courseMatch = findCourseMatch(text, (await dbAdapter.getUserData(linkedUserId))?.curriculum);
+      const courseMatch = findCourseMatch(text, (await dbAdapter.getUserData(linkedUserId))?.curriculum || defaultCurriculum);
       if (courseMatch && (text.startsWith('วิชา') || text.startsWith('ห้อง') || text.length <= 10 || /^(sc|eg|la)/i.test(text))) {
         await sendLineReply(replyToken, [buildCourseProfileFlex(courseMatch)]);
         return;
@@ -3853,10 +3864,10 @@ const server = http.createServer(async (req, res) => {
         const dateStr = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
 
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
-        const curriculum = userData.curriculum || DEFAULT_BME_CURRICULUM;
+        const curriculum = userData.curriculum || defaultCurriculum;
         const todayClasses = curriculum.filter(c => c.day === dayCode).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
         const dayMapCode = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
-        const todayRoutines = DEFAULT_BME_ROUTINE_EVENTS.filter(r => r.day === dayMapCode[dayCode]);
+        const todayRoutines = defaultRoutines.filter(r => r.day === dayMapCode[dayCode]);
 
         await sendLineReply(replyToken, [buildScheduleFlex(`${dayName}`, dateStr, todayClasses, todayRoutines)]);
         return;
@@ -3876,10 +3887,10 @@ const server = http.createServer(async (req, res) => {
         const dateStr = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
 
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
-        const curriculum = userData.curriculum || DEFAULT_BME_CURRICULUM;
+        const curriculum = userData.curriculum || defaultCurriculum;
         const tomorrowClasses = curriculum.filter(c => c.day === dayCode).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
         const dayMapCode = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
-        const tomorrowRoutines = DEFAULT_BME_ROUTINE_EVENTS.filter(r => r.day === dayMapCode[dayCode]);
+        const tomorrowRoutines = defaultRoutines.filter(r => r.day === dayMapCode[dayCode]);
 
         await sendLineReply(replyToken, [buildScheduleFlex(`${dayName} (พรุ่งนี้)`, dateStr, tomorrowClasses, tomorrowRoutines)]);
         return;
