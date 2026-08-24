@@ -238,12 +238,23 @@
       const isPdf = type === 'pdf' || (type === 'local' && (url.startsWith('data:application/pdf') || url.endsWith('.pdf'))) || url.includes('.pdf');
       const isImage = type === 'image' || (type === 'local' && url.startsWith('data:image/')) || url.match(/\.(png|jpe?g|gif|webp|svg)$/i);
 
+      // Resolve URL through same-origin /uploads/ or /api/proxy to prevent CORS & iframe blocking
+      let pdfSourceUrl = url;
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        const matchR2 = url.match(/\/([a-f0-9]{16}\.[a-z0-9]+)$/i) || url.match(/\/uploads\/([^\/\?#]+)$/i);
+        if (matchR2) {
+          pdfSourceUrl = `/uploads/${matchR2[1]}`;
+        } else if (!url.startsWith(window.location.origin)) {
+          pdfSourceUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
+        }
+      }
+
       if (isImage) {
         toolbar.style.display = 'none';
         loadingEl.style.display = 'none';
         contentEl.innerHTML = `
           <div style="display:flex;flex-direction:column;align-items:center;padding:20px;max-width:100%">
-            <img src="${escHtml(url)}" alt="${escHtml(title)}" style="max-width:100%;height:auto;max-height:85vh;object-fit:contain;border-radius:var(--r-m);box-shadow:var(--shadow-3)" />
+            <img src="${escHtml(pdfSourceUrl || url)}" alt="${escHtml(title)}" style="max-width:100%;height:auto;max-height:85vh;object-fit:contain;border-radius:var(--r-m);box-shadow:var(--shadow-3)" />
           </div>
         `;
         return;
@@ -267,16 +278,33 @@
         return;
       }
 
+      // Add Quick Action Buttons in toolbar
+      if (toolbar && !document.getElementById('viewer-quick-actions')) {
+        const actionGroup = document.createElement('div');
+        actionGroup.id = 'viewer-quick-actions';
+        actionGroup.style.cssText = 'display:flex;align-items:center;gap:6px;';
+        actionGroup.innerHTML = `
+          <a href="${escHtml(pdfSourceUrl || url)}" download="${escHtml(title)}.pdf" class="btn btn-secondary" style="padding:5px 12px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px;text-decoration:none;" title="ดาวน์โหลดไฟล์ PDF">📥 ดาวน์โหลด</a>
+          <a href="${escHtml(pdfSourceUrl || url)}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="padding:5px 12px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px;text-decoration:none;" title="เปิดในแท็บใหม่">↗️ แท็บใหม่</a>
+        `;
+        toolbar.appendChild(actionGroup);
+      }
+
       // PDF.js Viewer Engine (with iframe fallback)
       const fallbackToIframe = () => {
         loadingEl.style.display = 'none';
         contentEl.innerHTML = `
           <div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:16px;width:100%;height:100%">
-            <div style="font-weight:600;font-size:14px;color:var(--label-2)">เปิดเอกสาร PDF ผ่านโปรแกรมของเบราว์เซอร์</div>
-            <iframe src="${encodeURI(url)}" style="width:96vw;height:82vh;border:none;border-radius:var(--r-m);box-shadow:var(--shadow-2);background:#fff"></iframe>
+            <div style="display:flex;align-items:center;justify-content:space-between;width:96vw;max-width:1200px;flex-wrap:wrap;gap:10px;">
+              <div style="font-weight:600;font-size:14px;color:var(--label-2)">เปิดเอกสาร PDF ผ่านโปรแกรมของเบราว์เซอร์</div>
+              <div style="display:flex;gap:8px;">
+                <a href="${escHtml(pdfSourceUrl || url)}" download="${escHtml(title)}.pdf" class="btn btn-secondary" style="padding:6px 14px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;text-decoration:none;">📥 ดาวน์โหลด PDF</a>
+                <a href="${escHtml(pdfSourceUrl || url)}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="padding:6px 14px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:var(--accent);color:#fff;">↗️ เปิดในแท็บใหม่</a>
+              </div>
+            </div>
+            <iframe src="${escHtml(pdfSourceUrl || url)}" style="width:96vw;height:82vh;border:none;border-radius:var(--r-m);box-shadow:var(--shadow-2);background:#fff"></iframe>
           </div>
         `;
-        toolbar.style.display = 'none';
       };
 
       const script = document.createElement('script');
@@ -303,7 +331,7 @@
           const nextBtn = document.getElementById('viewer-next');
 
           const loadTask = pdfjsLib.getDocument({
-            url: url,
+            url: pdfSourceUrl || url,
             cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
             cMapPacked: true
           });

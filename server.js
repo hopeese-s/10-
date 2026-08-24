@@ -2888,16 +2888,8 @@ const server = http.createServer(async (req, res) => {
             ContentType: contentType
           }));
 
-          if (R2_PUBLIC_DOMAIN) {
-            fileUrl = `${R2_PUBLIC_DOMAIN.replace(/\/$/, '')}/${filename}`;
-          } else {
-            fileUrl = `https://${R2_BUCKET_NAME}.${R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${filename}`;
-          }
           uploadedToR2 = true;
-          console.log(`☁️ File uploaded to Cloudflare R2 (Direct CDN URL): ${fileUrl}`);
-
-          // Remove local file to save disk space on ephemeral Railway container
-          fs.unlink(filePath, () => {});
+          console.log(`☁️ File uploaded to Cloudflare R2: ${filename} (Served via /uploads/${filename})`);
         } catch (r2Err) {
           console.warn('⚠️ Cloudflare R2 upload failed, keeping local file URL fallback:', r2Err.message);
         }
@@ -2923,8 +2915,19 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // ─── API: Serve Uploaded Files (GET /uploads/:filename) ───
+  // ─── API: Serve Uploaded Files with R2 Stream Fallback (GET /uploads/:filename) ───
   if (pathname.startsWith('/uploads/')) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
     const filename = path.basename(pathname);
     const filePath = path.join(UPLOAD_DIR, filename);
     if (!filePath.startsWith(UPLOAD_DIR)) {
@@ -2932,18 +2935,110 @@ const server = http.createServer(async (req, res) => {
       res.end('Forbidden');
       return;
     }
-    fs.stat(filePath, (err, stats) => {
-      if (err || !stats.isFile()) {
-        res.writeHead(404);
-        res.end('Not Found');
+
+    const serveFile = async () => {
+      // 1. Try local disk
+      if (fs.existsSync(filePath)) {
+        const ext = path.extname(filePath).toLowerCase();
+        const contentType = MIME_TYPES[ext] || (ext === '.pdf' ? 'application/pdf' : 'application/octet-stream');
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', 'inline');
+        res.writeHead(200);
+        fs.createReadStream(filePath).pipe(res);
         return;
       }
-      const ext = path.extname(filePath).toLowerCase();
-      const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-      res.setHeader('Cache-Control', 'public, max-age=3600');
-      res.writeHead(200, { 'Content-Type': contentType });
-      fs.createReadStream(filePath).pipe(res);
-    });
+
+      // 2. Stream from Cloudflare R2
+      if (r2Client) {
+        try {
+          const { GetObjectCommand } = require('@aws-sdk/client-s3');
+          const r2Res = await r2Client.send(new GetObjectCommand({
+            Bucket: R2_BUCKET_NAME,
+            Key: filename
+          }));
+
+          const ext = path.extname(filename).toLowerCase();
+          const contentType = r2Res.ContentType || MIME_TYPES[ext] || (ext === '.pdf' ? 'application/pdf' : 'application/octet-stream');
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Content-Disposition', 'inline');
+          if (r2Res.ContentLength) res.setHeader('Content-Length', r2Res.ContentLength);
+          res.writeHead(200);
+          r2Res.Body.pipe(res);
+          return;
+        } catch (r2Err) {
+          console.warn(`⚠️ R2 GetObject failed for /uploads/${filename}:`, r2Err.message);
+        }
+      }
+
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('404 Not Found: File does not exist');
+    };
+
+    serveFile();
+    return;
+  }
+
+  // ─── API: Proxy Remote PDF / Document Assets (GET /api/proxy?url=...) ───
+  if (pathname === '/api/proxy' && req.method === 'GET') {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    const targetUrl = url.searchParams.get('url');
+    if (!targetUrl || !/^https?:\/\//i.test(targetUrl)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid or missing target URL parameter' }));
+      return;
+    }
+
+    try {
+      const parsedTarget = new URL(targetUrl);
+      const isHttps = parsedTarget.protocol === 'https:';
+      const client = isHttps ? https : http;
+
+      const proxyReq = client.get(targetUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      }, (proxyRes) => {
+        if (proxyRes.statusCode >= 300 && proxyRes.statusCode < 400 && proxyRes.headers.location) {
+          let nextUrl = proxyRes.headers.location;
+          if (!nextUrl.startsWith('http')) {
+            nextUrl = new URL(nextUrl, targetUrl).toString();
+          }
+          res.writeHead(302, { 'Location': `/api/proxy?url=${encodeURIComponent(nextUrl)}` });
+          res.end();
+          return;
+        }
+
+        const ext = path.extname(parsedTarget.pathname).toLowerCase();
+        const contentType = proxyRes.headers['content-type'] || MIME_TYPES[ext] || (ext === '.pdf' ? 'application/pdf' : 'application/octet-stream');
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', 'inline');
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        if (proxyRes.headers['content-length']) res.setHeader('Content-Length', proxyRes.headers['content-length']);
+        res.writeHead(proxyRes.statusCode || 200);
+        proxyRes.pipe(res);
+      });
+
+      proxyReq.on('error', (err) => {
+        console.warn('⚠️ Proxy request failed:', err.message);
+        res.writeHead(502, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Failed to fetch remote asset', message: err.message }));
+      });
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+    }
     return;
   }
 
@@ -3533,38 +3628,98 @@ const server = http.createServer(async (req, res) => {
       const defaultCurriculum = isWitchaya ? DEFAULT_BME_CURRICULUM : [];
       const defaultRoutines = isWitchaya ? DEFAULT_BME_ROUTINE_EVENTS : [];
 
-      // ─── 2. Command: +งาน / +การบ้าน / จด <ชื่องาน> <กำหนดส่ง> ───
-      const addTaskMatch = text.match(/^(\+|เพิ่มงาน|เพิ่มการบ้าน|จด|การบ้านใหม่|task)\s*(.+)/i);
-      if (addTaskMatch) {
-        const rawTaskText = addTaskMatch[2].trim();
-        if (rawTaskText) {
+      // ─── 2. Command: โน้ตด่วน / Memo (+โน้ต <ข้อความ> / จดโน้ต <ข้อความ> / note <ข้อความ> / memo <ข้อความ>) ───
+      const explicitNoteMatch = text.match(/^(\+โน้ต|จดโน้ต|เพิ่มโน้ต|\+note|note|memo|บันทึกโน้ต)\s*(.+)/i);
+      if (explicitNoteMatch) {
+        const noteText = explicitNoteMatch[2].trim();
+        if (noteText) {
           const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
-          if (!userData.tasks) userData.tasks = [];
-
-          // Parse optional due date if contains date keywords
-          let title = rawTaskText;
-          let dueDate = '';
-          const dateMatch = rawTaskText.match(/(กำหนดส่ง|ส่ง|ภายใน|ก่อน)\s*[:\-]?\s*(.+)$/i);
-          if (dateMatch) {
-            title = rawTaskText.slice(0, dateMatch.index).trim();
-            dueDate = dateMatch[2].trim();
-          }
-
-          const newTask = {
+          if (!userData.quickNotes) userData.quickNotes = [];
+          userData.quickNotes.push({
             id: Date.now().toString(),
-            title: title || rawTaskText,
-            dueDate: dueDate || '',
-            done: false,
+            text: noteText,
             createdAt: new Date().toISOString()
-          };
-
-          userData.tasks.push(newTask);
+          });
           await dbAdapter.saveUserData(linkedUserId, userData);
-
-          const pendingCount = userData.tasks.filter(t => !t.done).length;
-          await sendLineReply(replyToken, [buildTaskAddedFlex(newTask, pendingCount)]);
+          store[linkedUserId] = userData;
+          saveStore();
+          await sendLineReply(replyToken, [buildQuickNoteFlex(userData.quickNotes)]);
           return;
         }
+      }
+
+      // ─── 3. Command: +งาน / +การบ้าน / จดการบ้าน / task <ชื่องาน> <กำหนดส่ง> ───
+      const explicitTaskMatch = text.match(/^(\+งาน|\+การบ้าน|เพิ่มงาน|เพิ่มการบ้าน|จดงาน|จดการบ้าน|การบ้านใหม่|task|\+task)\s*(.+)/i);
+      // Fallback for generic "+" or "จด"
+      const genericMatch = !explicitNoteMatch && !explicitTaskMatch ? text.match(/^(\+|จด)\s*(.+)/i) : null;
+
+      let isTask = false;
+      let isNote = false;
+      let taskOrNoteText = '';
+
+      if (explicitTaskMatch) {
+        isTask = true;
+        taskOrNoteText = explicitTaskMatch[2].trim();
+      } else if (genericMatch) {
+        const payload = genericMatch[2].trim();
+        if (/^(โน้ต|note|memo)/i.test(payload)) {
+          isNote = true;
+          taskOrNoteText = payload.replace(/^(โน้ต|note|memo)\s*/i, '').trim();
+        } else if (/^(งาน|การบ้าน|task)/i.test(payload) || /(กำหนดส่ง|ส่ง|ภายใน|ก่อน|deadline|due)/i.test(payload)) {
+          isTask = true;
+          taskOrNoteText = payload.replace(/^(งาน|การบ้าน|task)\s*/i, '').trim();
+        } else {
+          // Default "+" is Task, Default "จด" without due date is Note
+          if (genericMatch[1] === '+') isTask = true;
+          else isNote = true;
+          taskOrNoteText = payload;
+        }
+      }
+
+      if (isNote && taskOrNoteText) {
+        const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+        if (!userData.quickNotes) userData.quickNotes = [];
+        userData.quickNotes.push({
+          id: Date.now().toString(),
+          text: taskOrNoteText,
+          createdAt: new Date().toISOString()
+        });
+        await dbAdapter.saveUserData(linkedUserId, userData);
+        store[linkedUserId] = userData;
+        saveStore();
+        await sendLineReply(replyToken, [buildQuickNoteFlex(userData.quickNotes)]);
+        return;
+      }
+
+      if (isTask && taskOrNoteText) {
+        const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+        if (!userData.tasks) userData.tasks = [];
+
+        // Parse optional due date if contains date keywords
+        let title = taskOrNoteText;
+        let dueDate = '';
+        const dateMatch = taskOrNoteText.match(/(กำหนดส่ง|ส่ง|ภายใน|ก่อน|deadline|due)\s*[:\-]?\s*(.+)$/i);
+        if (dateMatch) {
+          title = taskOrNoteText.slice(0, dateMatch.index).trim();
+          dueDate = dateMatch[2].trim();
+        }
+
+        const newTask = {
+          id: Date.now().toString(),
+          title: title || taskOrNoteText,
+          dueDate: dueDate || '',
+          done: false,
+          createdAt: new Date().toISOString()
+        };
+
+        userData.tasks.push(newTask);
+        await dbAdapter.saveUserData(linkedUserId, userData);
+        store[linkedUserId] = userData;
+        saveStore();
+
+        const pendingCount = userData.tasks.filter(t => !t.done).length;
+        await sendLineReply(replyToken, [buildTaskAddedFlex(newTask, pendingCount)]);
+        return;
       }
 
       // ─── 3. Command: เสร็จ / ทำเสร็จ / done <ลำดับ> ───
