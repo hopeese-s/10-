@@ -4089,7 +4089,10 @@ setInterval(async () => {
             sentReminderKeys.add(morningKey);
             const userObj = Object.values(store._users || {}).find(u => u.id === userId || (u.username && u.username.toLowerCase() === userId.toLowerCase()));
             const isWitchaya = userObj ? (userObj.username && userObj.username.toLowerCase() === 'witchaya') : (userId === '1' || userId === 'default');
-            const curriculum = (userData.curriculum && Array.isArray(userData.curriculum) && userData.curriculum.length > 0) ? userData.curriculum : DEFAULT_BME_CURRICULUM;
+            const isBmeUserObj = userObj ? userObj.isBme !== false : (userId === '1');
+            const curriculum = (userData.curriculum && Array.isArray(userData.curriculum) && userData.curriculum.length > 0)
+              ? userData.curriculum
+              : (isBmeUserObj ? DEFAULT_BME_CURRICULUM : []);
             const todayClasses = curriculum.filter(c => c.day === currentDay).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
             const pendingTasks = (userData.tasks || []).filter(t => !t.done);
             const customAppointments = (userData.customBlocks && userData.customBlocks[currentDay]) || [];
@@ -4121,7 +4124,10 @@ setInterval(async () => {
           if (!sentReminderKeys.has(eveningKey)) {
             sentReminderKeys.add(eveningKey);
             const userObj = Object.values(store._users || {}).find(u => u.id === userId || (u.username && u.username.toLowerCase() === userId.toLowerCase()));
-            const curriculum = (userData.curriculum && Array.isArray(userData.curriculum) && userData.curriculum.length > 0) ? userData.curriculum : DEFAULT_BME_CURRICULUM;
+            const isBmeUserObj = userObj ? userObj.isBme !== false : (userId === '1');
+            const curriculum = (userData.curriculum && Array.isArray(userData.curriculum) && userData.curriculum.length > 0)
+              ? userData.curriculum
+              : (isBmeUserObj ? DEFAULT_BME_CURRICULUM : []);
             const tomorrowDay = days[(now.getDay() + 1) % 7];
             const tomorrowClasses = curriculum.filter(c => c.day === tomorrowDay).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
             const completedTasks = (userData.tasks || []).filter(t => t.done && t.completedAt && t.completedAt.startsWith(todayDateStr));
@@ -4156,7 +4162,10 @@ setInterval(async () => {
       }
 
       const userObj = Object.values(store._users || {}).find(u => u.id === userId || (u.username && u.username.toLowerCase() === userId.toLowerCase()));
-      const curriculum = (userData.curriculum && Array.isArray(userData.curriculum) && userData.curriculum.length > 0) ? userData.curriculum : DEFAULT_BME_CURRICULUM;
+      const isBmeUserObj = userObj ? userObj.isBme !== false : (userId === '1');
+      const curriculum = (userData.curriculum && Array.isArray(userData.curriculum) && userData.curriculum.length > 0)
+        ? userData.curriculum
+        : (isBmeUserObj ? DEFAULT_BME_CURRICULUM : []);
 
       const offsets = Array.isArray(notiSettings.offsets) && notiSettings.offsets.length > 0
         ? notiSettings.offsets
@@ -5494,8 +5503,9 @@ const server = http.createServer(async (req, res) => {
       const targetUser = Object.values(store._users || {}).find(u => u.id === linkedUserId) || { id: linkedUserId, displayName: 'นักศึกษา' };
       const targetUsername = (targetUser && targetUser.username) ? targetUser.username.toLowerCase() : '';
       const isWitchaya = targetUsername === 'witchaya' || linkedUserId === '1';
-      const defaultCurriculum = DEFAULT_BME_CURRICULUM;
-      const defaultRoutines = DEFAULT_BME_ROUTINE_EVENTS;
+      const isBmeUser = targetUser && targetUser.isBme !== false;
+      const defaultCurriculum = isBmeUser ? DEFAULT_BME_CURRICULUM : [];
+      const defaultRoutines = isBmeUser ? [...DEFAULT_BME_ROUTINE_EVENTS, ...DEFAULT_BME_STUDY_BLOCKS] : [];
 
       // ─── 0. Command: เมนู / Menu / Help / วิธีใช้ / คู่มือ ───
       if (/^(help|menu|guide|manual|วิธีใช้|คู่มือ|เมนู|\?|คำสั่ง|ฟีเจอร์)$/i.test(text)) {
