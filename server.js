@@ -912,6 +912,8 @@ async function saveMediaFileToStorage(buffer, originalFilename, ext, contentType
     createdAt: new Date().toISOString()
   };
   ownerData.studyLinks.unshift(studyEntry);
+  ownerData.version = (parseInt(ownerData.version, 10) || 0) + 1;
+  ownerData.updatedAt = new Date().toISOString();
 
   await dbAdapter.saveUserData(ownerId, ownerData);
   store[ownerId] = ownerData;
@@ -2530,7 +2532,11 @@ function buildAiEventCreatedFlex(events, summary = '', sourceLabel = 'AI Assista
 }
 
 function buildAiSolutionFlex(aiResult, fileRecord) {
-  const fileUrl = fileRecord ? `${APP_BASE_URL}${fileRecord.url}` : APP_BASE_URL;
+  const isPdf = fileRecord && fileRecord.name && fileRecord.name.toLowerCase().endsWith('.pdf');
+  const rawFileUrl = fileRecord ? `${APP_BASE_URL}${fileRecord.url}` : APP_BASE_URL;
+  const fileUrl = (fileRecord && isPdf)
+    ? `${APP_BASE_URL}/viewer.html?url=${encodeURIComponent(rawFileUrl)}&title=${encodeURIComponent(fileRecord.name)}&type=pdf`
+    : rawFileUrl;
   const bodyContents = [];
 
   if (aiResult.summary || aiResult.solution || aiResult.text) {
@@ -2642,7 +2648,11 @@ function buildAiSolutionFlex(aiResult, fileRecord) {
 }
 
 function buildFileSavedFlex(fileRecord, aiSummary) {
-  const fileUrl = `${APP_BASE_URL}${fileRecord.url}`;
+  const isPdf = fileRecord && fileRecord.name && fileRecord.name.toLowerCase().endsWith('.pdf');
+  const rawFileUrl = `${APP_BASE_URL}${fileRecord.url}`;
+  const fileUrl = isPdf
+    ? `${APP_BASE_URL}/viewer.html?url=${encodeURIComponent(rawFileUrl)}&title=${encodeURIComponent(fileRecord.name)}&type=pdf`
+    : rawFileUrl;
   const sizeKb = fileRecord.size ? `${(fileRecord.size / 1024).toFixed(1)} KB` : '';
 
   return {
@@ -4253,17 +4263,37 @@ const server = http.createServer(async (req, res) => {
       if (!ownerData.files) ownerData.files = {};
       const fileRecord = {
         id: fileId,
-        name: url.searchParams.get('name') || 'file',
+        name: url.searchParams.get('name') || filename,
         url: fileUrl,
         size,
         uploadedToR2,
         uploadedAt: new Date().toISOString()
       };
       ownerData.files[fileId] = fileRecord;
+
+      if (!ownerData.studyLinks) ownerData.studyLinks = [];
+      const ext = path.extname(filename).toLowerCase();
+      const fileType = ext === '.pdf' ? 'pdf' : (['.png', '.jpg', '.jpeg', '.webp'].includes(ext)) ? 'image' : 'file';
+      const studyEntry = {
+        id: `file-${fileId}`,
+        title: url.searchParams.get('name') || filename,
+        sub: `Web Upload (${(size / 1024).toFixed(1)} KB)`,
+        type: fileType,
+        url: fileUrl,
+        desc: `อัปโหลดผ่านเว็บเมื่อ ${new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}`,
+        folderId: 'f-notes',
+        createdAt: new Date().toISOString()
+      };
+      ownerData.studyLinks.unshift(studyEntry);
+      ownerData.version = (parseInt(ownerData.version, 10) || 0) + 1;
+      ownerData.updatedAt = new Date().toISOString();
+
       await dbAdapter.saveUserData(ownerId, ownerData);
+      store[ownerId] = ownerData;
+      saveStore();
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, file: fileRecord }));
+      res.end(JSON.stringify({ success: true, file: fileRecord, studyLink: studyEntry }));
     });
     return;
   }

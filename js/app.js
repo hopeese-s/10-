@@ -297,9 +297,8 @@
       await CloudSync.checkAuth();
     }
 
-    // Cloud Sync initial smart sync — ONLY for logged-in/authenticated users, NOT share-link visitors
-    const isLoggedIn = window.CloudSync && !!CloudSync.getCurrentUser();
-    if (!isShareRoute && window.CloudSync && CloudSync.getSyncKey() && CloudSync.getSyncKey() !== '1') {
+    // Cloud Sync initial smart sync — ALWAYS pull latest data on startup/refresh
+    if (!isShareRoute && window.CloudSync && CloudSync.getSyncKey()) {
       const pullRes = await CloudSync.pullFromCloud();
       if (pullRes && pullRes.ok && pullRes.data) {
         syncSmartWithCloud(pullRes.data);
@@ -465,6 +464,29 @@
     // Links: take cloud version if non-empty, else keep local
     if (cloudData.studyLinks && Array.isArray(cloudData.studyLinks) && cloudData.studyLinks.length > 0) {
       state.studyLinks = cloudData.studyLinks;
+      localStorage.setItem('sd-study-links', JSON.stringify(state.studyLinks));
+    }
+
+    // Files: ensure any files in cloudData.files are represented in studyLinks
+    if (cloudData.files && typeof cloudData.files === 'object') {
+      const existingUrls = new Set((state.studyLinks || []).map(l => l.url));
+      Object.values(cloudData.files).forEach(f => {
+        if (f && f.url && !existingUrls.has(f.url)) {
+          const isPdf = f.name && f.name.toLowerCase().endsWith('.pdf');
+          const isImg = f.name && f.name.match(/\.(png|jpe?g|webp|gif)$/i);
+          state.studyLinks.unshift({
+            id: `file-${f.id || Date.now()}`,
+            title: f.name || 'เอกสารที่อัปโหลด',
+            sub: `Cloud Vault (${(f.size ? (f.size / 1024).toFixed(1) + ' KB' : '')})`,
+            type: isPdf ? 'pdf' : isImg ? 'image' : 'file',
+            url: f.url,
+            desc: `บันทึกเมื่อ ${f.uploadedAt ? new Date(f.uploadedAt).toLocaleString('th-TH') : 'ก่อนหน้า'}`,
+            folderId: 'f-notes',
+            createdAt: f.uploadedAt || new Date().toISOString()
+          });
+          existingUrls.add(f.url);
+        }
+      });
       localStorage.setItem('sd-study-links', JSON.stringify(state.studyLinks));
     }
 
