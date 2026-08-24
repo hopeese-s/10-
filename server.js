@@ -4593,6 +4593,20 @@ const server = http.createServer(async (req, res) => {
     const lineUserId = event.source && event.source.userId;
     const replyToken = event.replyToken;
 
+    if (lineUserId) {
+      if (!store._lineUsers) store._lineUsers = {};
+      if (!store._userLine) store._userLine = {};
+      if (!store._lineUsers[lineUserId]) {
+        store._lineUsers[lineUserId] = '1';
+      }
+      if (!store._userLine['1']) {
+        store._userLine['1'] = lineUserId;
+      }
+      if (store._users && store._users['witchaya'] && !store._userLine[store._users['witchaya'].id]) {
+        store._userLine[store._users['witchaya'].id] = lineUserId;
+      }
+    }
+
     if (event.type === 'follow') {
       const welcomeText = 
         `👋 สวัสดีครับ! ยินดีต้อนรับสู่ E-Calendar Bot 📚\n\n` +
@@ -4873,6 +4887,27 @@ const server = http.createServer(async (req, res) => {
       const isWitchaya = targetUsername === 'witchaya' || linkedUserId === '1';
       const defaultCurriculum = isWitchaya ? DEFAULT_BME_CURRICULUM : [];
       const defaultRoutines = isWitchaya ? DEFAULT_BME_ROUTINE_EVENTS : [];
+
+      // ─── 0. Command: เมนู / Menu / Help / วิธีใช้ / คู่มือ ───
+      if (/^(help|menu|guide|manual|วิธีใช้|คู่มือ|เมนู|\?|คำสั่ง|ฟีเจอร์)$/i.test(text)) {
+        const menuFlex = buildHelpMenuFlex();
+        menuFlex.quickReply = {
+          items: [
+            { type: 'action', action: { type: 'message', label: '⚡ คาบต่อไป', text: 'next' } },
+            { type: 'action', action: { type: 'message', label: '📅 ตารางวันนี้', text: 'today' } },
+            { type: 'action', action: { type: 'message', label: '📝 งานค้าง', text: 'tasks' } },
+            { type: 'action', action: { type: 'message', label: '🔔 /noti 15', text: '/noti 15' } },
+            { type: 'action', action: { type: 'message', label: '🕒 เวลาว่าง', text: 'freetime' } },
+            { type: 'action', action: { type: 'message', label: '🌤️ อากาศ', text: 'weather' } },
+            { type: 'action', action: { type: 'message', label: '🍽️ กินไรดี', text: 'food' } },
+            { type: 'action', action: { type: 'message', label: '📚 Classroom', text: 'classroom' } },
+            { type: 'action', action: { type: 'message', label: '🗓️ ตารางสอบ', text: 'exam' } },
+            { type: 'action', action: { type: 'message', label: '👤 โปรไฟล์', text: 'profile' } }
+          ]
+        };
+        await sendLineReply(replyToken, [menuFlex]);
+        return;
+      }
 
       // ─── 1.5 Notification Settings Command: /noti ... ───
       const notiMatch = text.match(/^\/?noti\s*(.*)/i);
@@ -5447,16 +5482,16 @@ const server = http.createServer(async (req, res) => {
         const menuFlex = buildHelpMenuFlex();
         menuFlex.quickReply = {
           items: [
-            { type: 'action', action: { type: 'message', label: '⚡ Next / คาบต่อไป', text: 'next' } },
-            { type: 'action', action: { type: 'message', label: '📅 Today / ตารางวันนี้', text: 'today' } },
-            { type: 'action', action: { type: 'message', label: '📝 Tasks / งานค้าง', text: 'tasks' } },
-            { type: 'action', action: { type: 'message', label: '🔔 /noti status', text: '/noti status' } },
-            { type: 'action', action: { type: 'message', label: '🕒 Free Time / เวลาว่าง', text: 'freetime' } },
-            { type: 'action', action: { type: 'message', label: '🌤️ Weather / อากาศ', text: 'weather' } },
-            { type: 'action', action: { type: 'message', label: '🍽️ Food / กินไรดี', text: 'food' } },
+            { type: 'action', action: { type: 'message', label: '⚡ คาบต่อไป', text: 'next' } },
+            { type: 'action', action: { type: 'message', label: '📅 ตารางวันนี้', text: 'today' } },
+            { type: 'action', action: { type: 'message', label: '📝 งานค้าง', text: 'tasks' } },
+            { type: 'action', action: { type: 'message', label: '🔔 /noti 15', text: '/noti 15' } },
+            { type: 'action', action: { type: 'message', label: '🕒 เวลาว่าง', text: 'freetime' } },
+            { type: 'action', action: { type: 'message', label: '🌤️ อากาศ', text: 'weather' } },
+            { type: 'action', action: { type: 'message', label: '🍽️ กินไรดี', text: 'food' } },
             { type: 'action', action: { type: 'message', label: '📚 Classroom', text: 'classroom' } },
-            { type: 'action', action: { type: 'message', label: '🗓️ Exams / สอบ', text: 'exam' } },
-            { type: 'action', action: { type: 'message', label: '👤 Profile', text: 'profile' } }
+            { type: 'action', action: { type: 'message', label: '🗓️ ตารางสอบ', text: 'exam' } },
+            { type: 'action', action: { type: 'message', label: '👤 โปรไฟล์', text: 'profile' } }
           ]
         };
         await sendLineReply(replyToken, [menuFlex]);
@@ -5520,7 +5555,11 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/line/status' && req.method === 'GET') {
     res.setHeader('Cache-Control', 'no-store');
     const ownerId = resolveOwnerId({});
-    const lineUserId = store._userLine && store._userLine[ownerId];
+    const lineUserId = (store._userLine && store._userLine[ownerId]) ||
+                       (store._userLine && store._userLine['1']) ||
+                       (store._users && store._users[ownerId] && store._userLine && store._userLine[store._users[ownerId].id]) ||
+                       (store._userLine && Object.values(store._userLine)[0]) ||
+                       (store._lineUsers && Object.keys(store._lineUsers)[0]);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       configured: hasLine,
@@ -5534,7 +5573,16 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/line/test' && req.method === 'POST') {
     parseJsonBody(async (err, data) => {
       const ownerId = resolveOwnerId(data);
-      const lineUserId = store._userLine && store._userLine[ownerId];
+      let lineUserId = (store._userLine && store._userLine[ownerId]) ||
+                       (store._userLine && store._userLine['1']) ||
+                       (store._users && store._users[ownerId] && store._userLine && store._userLine[store._users[ownerId].id]);
+
+      if (!lineUserId && store._userLine && Object.keys(store._userLine).length > 0) {
+        lineUserId = Object.values(store._userLine)[0];
+      }
+      if (!lineUserId && store._lineUsers && Object.keys(store._lineUsers).length > 0) {
+        lineUserId = Object.keys(store._lineUsers)[0];
+      }
 
       if (!hasLine) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -5544,7 +5592,7 @@ const server = http.createServer(async (req, res) => {
 
       if (!lineUserId) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'บัญชีนี้ยังไม่ได้ผูกกับ LINE Bot กรุณาเพิ่มเพื่อนใน LINE แล้วพิมพ์ /link ' + (store._users[ownerId] ? store._users[ownerId].username : ownerId) }));
+        res.end(JSON.stringify({ error: 'ยังไม่พบบัญชี LINE ที่ผูกกับระบบ กรุณาส่งข้อความหาบอทใน LINE สัก 1 ข้อความ (หรือพิมพ์ /link witchaya) แล้วลองใหม่อีกครั้งครับ' }));
         return;
       }
 
