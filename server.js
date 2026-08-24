@@ -828,7 +828,6 @@ async function fetchSalayaWeather() {
     const hourly = json.hourly || {};
     const currentHourIndex = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' })).getHours();
     const rainProb = (hourly.precipitation_probability && hourly.precipitation_probability[currentHourIndex]) || 0;
-
     const weatherCode = current.weather_code || 0;
     let weatherText = 'ท้องฟ้าแจ่มใส ☀️';
     if (weatherCode >= 1 && weatherCode <= 3) weatherText = 'มีเมฆเป็นส่วนมาก ⛅';
@@ -923,6 +922,30 @@ async function saveMediaFileToStorage(buffer, originalFilename, ext, contentType
 }
 
 // ─── Google Gemini AI Client Helpers ─────────────────────────
+function formatGeminiContents(contents) {
+  if (!Array.isArray(contents)) return contents;
+  return contents.map(c => {
+    if (!c || !Array.isArray(c.parts)) return c;
+    return {
+      ...c,
+      parts: c.parts.map(p => {
+        if (p.inlineData || p.inline_data) {
+          const raw = p.inlineData || p.inline_data;
+          const mime = raw.mimeType || raw.mime_type || 'image/jpeg';
+          const data = raw.data || '';
+          return {
+            inline_data: {
+              mime_type: mime,
+              data: data
+            }
+          };
+        }
+        return p;
+      })
+    };
+  });
+}
+
 async function callGeminiApi(contents, systemInstruction = '') {
   if (!hasGemini) return null;
   const models = [
@@ -935,17 +958,19 @@ async function callGeminiApi(contents, systemInstruction = '') {
     'gemini-1.5-flash-8b'
   ];
 
+  const formattedContents = formatGeminiContents(contents);
+
   for (const m of models) {
     // Attempt 1: with JSON responseMimeType
     // Attempt 2: with standard text response (fallback if JSON mode is unsupported on image/audio)
     for (const withJsonMode of [true, false]) {
       try {
         const payload = {
-          contents,
+          contents: formattedContents,
           generationConfig: {
             temperature: 0.2,
             maxOutputTokens: 2048,
-            ...(withJsonMode ? { responseMimeType: 'application/json' } : {})
+            ...(withJsonMode ? { responseMimeType: 'application/json', response_mime_type: 'application/json' } : {})
           }
         };
         if (systemInstruction) {
@@ -1067,38 +1092,38 @@ async function analyzeImageWithGemini(imageBuffer, mimeType = 'image/jpeg') {
   const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
   const todayDay = days[now.getDay()];
 
-  const prompt = `Analyze this image thoroughly. It may be:
-1. A math / physics / engineering calculation or problem: Solve it step-by-step and provide the final answer clearly in Thai.
-2. A course timetable / exam schedule / appointment card: Extract all events (start, end, day, date, room).
-3. A lecture slide, homework sheet, or document: Summarize the key concepts and list actionable tasks / deadlines.
-4. A general photo: Describe what is in the photo and provide helpful insights.
+  const prompt = `จงวิเคราะห์และอธิบายรูปภาพนี้อย่างละเอียดและเป็นประโยชน์ที่สุดสำหรับนักศึกษา:
+1. หากเป็นโจทย์คำนวณ / ฟิสิกส์ / คณิตศาสตร์ / วิศวกรรม / เคมี: แสดงวิธีทำทีละขั้นตอน (Step-by-step) อย่างละเอียด ชัดเจน พร้อมสรุปคำตอบสุดท้าย
+2. หากเป็นสไลด์เรียน / ชีท / เอกสาร / โน้ต: สรุปใจความสำคัญ ประเด็นหลัก และสูตรหรือทฤษฎีที่ปรากฏในภาพ
+3. หากเป็นตารางเรียน / กำหนดการ / วันสอบ: ดึงข้อมูลกิจกรรม (วัน, เวลา, สถานที่, หัวข้อ)
+4. หากเป็นรูปภาพทั่วไป: อธิบายสิ่งที่เห็นในภาพอย่างละเอียด ชัดเจน และน่าสนใจ
 
 Current Reference Time: ${todayDay}, ${now.toISOString().slice(0, 10)}. Year: 2026.
-Return a JSON object matching this schema:
+ตอบกลับเป็น JSON ตามโครงสร้างนี้:
 {
-  "type": "math_solution|schedule|task_list|summary|general",
-  "title": "Short descriptive Thai title",
-  "summary": "Clear Thai explanation or solution. If math/physics, include step-by-step solution and final answer in detail",
-  "solution": "Detailed math/calculation steps if applicable",
+  "type": "math_solution|lecture_notes|schedule|task_list|summary|general",
+  "title": "หัวข้อสรุปภาพภาษาไทยที่กระชับและตรงประเด็น (ความยาว 5-15 คำ)",
+  "summary": "คำอธิบายรายละเอียด หรือขั้นตอนวิธีทำคำนวณอย่างชัดเจนเป็นภาษาไทย",
+  "solution": "วิธีคำนวณหรือขั้นตอนเฉลยแบบละเอียด (ถ้ามี)",
   "events": [
     {
-      "title": "Title in Thai",
+      "title": "ชื่อวิชา/กิจกรรมภาษาไทย",
       "day": "monday|tuesday|wednesday|thursday|friday|saturday|sunday",
       "date": "YYYY-MM-DD",
       "start": "HH:MM",
       "end": "HH:MM",
-      "location": "Room or Place",
-      "notes": "Important details"
+      "location": "ห้องเรียน/สถานที่",
+      "notes": "หมายเหตุ"
     }
   ],
   "tasks": [
     {
-      "title": "Task title in Thai",
-      "dueDate": "Due date / time string"
+      "title": "การบ้านหรืองานที่ต้องทำภาษาไทย",
+      "dueDate": "กำหนดส่ง (ถ้ามี)"
     }
   ],
   "notes": [
-    "Important note or memo text"
+    "โน้ตหรือข้อควรจำ"
   ]
 }`;
 
@@ -1106,10 +1131,10 @@ Return a JSON object matching this schema:
     {
       parts: [
         { text: prompt },
-        { inlineData: { mimeType, data: base64Data } }
+        { inline_data: { mime_type: mimeType, data: base64Data } }
       ]
     }
-  ], 'You are an intelligent university AI assistant capable of solving math problems, extracting schedules, and analyzing images in Thai and English.');
+  ], 'คุณคือผู้ช่วย AI อัจฉริยะประจำ E-Calendar ทำหน้าที่ช่วยนักศึกษาเฉลยโจทย์คำนวณ สรุปบทเรียน และวิเคราะห์ภาพเป็นภาษาไทยอย่างละเอียด ถูกต้อง และเป็นมิตร');
 }
 
 async function transcribeAudioWithGemini(audioBuffer, mimeType = 'audio/mp4') {
