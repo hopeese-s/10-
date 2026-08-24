@@ -555,7 +555,7 @@ function formatIcsDateTime(dateStr, timeStr) {
 }
 
 // Generate RFC 5545 .ics Feed with real-time curriculum data
-function generateIcsCalendar(userId, includeRoutines = false, includeStudy = true, includeClass = true) {
+async function generateIcsCalendar(userId, includeRoutines = false, includeStudy = true, includeClass = true) {
   const baseDates = {
     MO: '2026-08-17',
     TU: '2026-08-18',
@@ -568,9 +568,11 @@ function generateIcsCalendar(userId, includeRoutines = false, includeStudy = tru
 
   const userObj = Object.values(store._users || {}).find(u => u.id === userId || (u.username && u.username.toLowerCase() === userId.toLowerCase()));
   const isWitchaya = userObj ? (userObj.username && userObj.username.toLowerCase() === 'witchaya') : (userId === '1' || userId === 'default');
-  const userCustom = store[userId] || {};
+  const userCustom = (await dbAdapter.getUserData(userId)) || store[userId] || {};
   const customBlocks = userCustom.customBlocks || {};
-  const curriculum = userCustom.curriculum || (isWitchaya ? DEFAULT_BME_CURRICULUM : []);
+  const curriculum = (userCustom.curriculum && Array.isArray(userCustom.curriculum) && userCustom.curriculum.length > 0)
+    ? userCustom.curriculum
+    : (isWitchaya ? DEFAULT_BME_CURRICULUM : []);
 
   let ics = [];
   ics.push('BEGIN:VCALENDAR');
@@ -599,19 +601,20 @@ function generateIcsCalendar(userId, includeRoutines = false, includeStudy = tru
   
   if (includeClass) {
   // Add curriculum classes with real room/schedule data
-  curriculum.forEach((course, idx) => {
-    if (!course.schedule || !course.day) return;
+  curriculum.forEach((course) => {
+    if (!course.schedule && (!course.start || !course.end)) return;
+    if (!course.day) return;
     const dayMap = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
-    const dayCode = dayMap[course.day] || course.day;
+    const dayCode = dayMap[course.day.toLowerCase()] || course.day.toUpperCase();
     if (!dayCode || !baseDates[dayCode]) return;
     
-    const [startTime, endTime] = (course.schedule.match(/(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/) || [null, course.start || '09:00', course.end || '10:00']).slice(1);
+    const [startTime, endTime] = (course.schedule ? course.schedule.match(/(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/) : null) || [null, course.start || '09:00', course.end || '10:00'].slice(1);
     
     events.push({
       day: dayCode,
       start: startTime || course.start || '09:00',
       end: endTime || course.end || '10:00',
-      title: `${course.code} ${course.name}`,
+      title: `${course.code || ''} ${course.name || ''}`.trim() || 'Class',
       sub: course.room ? `ห้อง ${course.room}` : '',
       type: 'class',
       isClass: true
@@ -620,7 +623,7 @@ function generateIcsCalendar(userId, includeRoutines = false, includeStudy = tru
   } // end if (includeClass)
 
   // Add default routine events for Witchaya only (respecting category filters and deduplicating against curriculum)
-  if (isWitchaya) {
+  if (isWitchaya && includeRoutines) {
     DEFAULT_BME_ROUTINE_EVENTS.forEach(ev => {
       if (ev.isClass || ev.type === 'class') {
         if (!includeClass) return;
@@ -642,18 +645,18 @@ function generateIcsCalendar(userId, includeRoutines = false, includeStudy = tru
   // Add custom blocks from user's study data
   Object.entries(customBlocks).forEach(([day, blocks]) => {
     const dayMap = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
-    const dayCode = dayMap[day];
+    const dayCode = dayMap[day.toLowerCase()];
     if (!dayCode || !Array.isArray(blocks)) return;
-    blocks.forEach((block, idx) => {
+    blocks.forEach((block) => {
       if (!block.start || !block.end) return;
       events.push({
         day: dayCode,
         start: block.start,
         end: block.end,
         title: block.title || 'Custom Block',
-        sub: block.notes || '',
-        type: 'study',
-        isStudyBlock: true
+        sub: block.notes || block.subtitle || '',
+        type: block.tag || 'study',
+        isStudyBlock: block.isStudyBlock || block.tag === 'study'
       });
     });
   });
@@ -4080,16 +4083,24 @@ const server = http.createServer(async (req, res) => {
 
     const cleanPath = pathname.replace('/api/calendar/', '');
     const parts = cleanPath.split('/');
-    const calKey = parts[0].replace('.ics', '').trim();
+    const calKey = parts[0].replace('.ics', '').replace(/\/feed$/, '').trim();
 
-    // Strict validation of calendar key token format
-    if (!calKey || !/^cal_[a-zA-Z0-9_-]+$/.test(calKey)) {
-      res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('400 Bad Request: Invalid calendar token format');
-      return;
+    // Find target user by calendarKey, username, or userId
+    let targetUserId = store._calKeys ? store._calKeys[calKey] : null;
+    if (!targetUserId) {
+      const userMatch = Object.values(store._users || {}).find(u => 
+        (u.calendarKey && u.calendarKey === calKey) || 
+        (u.username && u.username.toLowerCase() === calKey.toLowerCase()) || 
+        u.id === calKey
+      );
+      if (userMatch) targetUserId = userMatch.id;
     }
 
-    const targetUserId = store._calKeys[calKey];
+    if (!targetUserId && (calKey === 'default' || calKey === '1' || calKey.toLowerCase() === 'witchaya')) {
+      const witchayaUser = Object.values(store._users || {}).find(u => u.username && u.username.toLowerCase() === 'witchaya');
+      targetUserId = witchayaUser ? witchayaUser.id : '1';
+    }
+
     if (!targetUserId) {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('404 Not Found: Calendar subscription feed not found or invalid token');
@@ -4098,7 +4109,7 @@ const server = http.createServer(async (req, res) => {
 
     const includeStudy = url.searchParams.get('study') !== '0';
     const includeClass = url.searchParams.get('class') !== '0';
-    const icsContent = generateIcsCalendar(targetUserId, url.searchParams.get('routines') === '1', includeStudy, includeClass);
+    const icsContent = await generateIcsCalendar(targetUserId, url.searchParams.get('routines') === '1', includeStudy, includeClass);
 
     res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
     res.setHeader('Content-Disposition', 'inline; filename="bme-study-schedule.ics"');
@@ -4158,6 +4169,8 @@ const server = http.createServer(async (req, res) => {
           updatedAt: new Date().toISOString()
         };
         await dbAdapter.saveUserData(key, merged);
+        store[key] = merged;
+        saveStore();
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, key, updatedAt: merged.updatedAt }));
