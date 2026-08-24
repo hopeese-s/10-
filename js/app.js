@@ -1017,7 +1017,7 @@
 
     if (liveCurriculum) {
       // Replace class blocks for this day with live curriculum data
-      const dayClasses = liveCurriculum.filter(c => c.day === dayKey && c.start && c.end);
+      const dayClasses = liveCurriculum.filter(c => (c.day || '').toLowerCase() === dayKey.toLowerCase() && c.start && c.end);
       if (dayClasses.length > 0) {
         // Remove old hardcoded class blocks for this day, keep non-class blocks
         const nonClassBlocks = baseBlocks.filter(b => !b.isClass);
@@ -1025,7 +1025,7 @@
           id: `live-class-${c.code}`,
           start: c.start,
           end: c.end,
-          title: `${c.code} ${c.name}`,
+          title: (c.name && c.name.startsWith(c.code)) ? c.name : `${c.code} ${c.name || ''}`.trim(),
           subtitle: c.room ? c.room : '',
           tag: 'class',
           isClass: true,
@@ -1405,11 +1405,11 @@
   // Helper: Get classes for day (prefer live curriculum)
   function getClassesForDay(dayKey) {
     if (state.curriculum && Array.isArray(state.curriculum) && state.curriculum.length > 0) {
-      const live = state.curriculum.filter(c => c.day === dayKey && c.start && c.end);
+      const live = state.curriculum.filter(c => (c.day || '').toLowerCase() === dayKey.toLowerCase() && c.start && c.end);
       if (live.length > 0) {
         return live.map(c => ({
           code: c.code,
-          name: c.name,
+          name: (c.name && c.name.startsWith(c.code)) ? c.name : `${c.code} ${c.name || ''}`.trim(),
           type: c.type || 'บรรยาย',
           room: c.room || '',
           start: c.start,

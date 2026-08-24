@@ -29,6 +29,15 @@ const SUBJECT_COLORS = {
   SCCH161: { color: '#ef4444', bg: 'rgba(239,68,68,0.15)', emoji: '⚗️', shortName: 'GenChem' },
   SCPY111: { color: '#0ea5e9', bg: 'rgba(14,165,233,0.15)', emoji: '🔭', shortName: 'PhyLab' },
   SCCH169: { color: '#f97316', bg: 'rgba(249,115,22,0.15)', emoji: '🧪', shortName: 'ChemLab' },
+  // test4 Courses
+  SCBE101: { color: '#2563eb', bg: 'rgba(37,99,235,0.15)', emoji: '🧬', shortName: 'SCBE 101' },
+  PRPR102: { color: '#9333ea', bg: 'rgba(147,51,234,0.15)', emoji: '📖', shortName: 'PRPR 102' },
+  LAEN180: { color: '#db2777', bg: 'rgba(219,39,119,0.15)', emoji: '📝', shortName: 'LAEN 180' },
+  SCIN102: { color: '#16a34a', bg: 'rgba(22,163,74,0.15)', emoji: '🔬', shortName: 'SCIN 102' },
+  SCIN103: { color: '#eab308', bg: 'rgba(234,179,8,0.15)', emoji: '💡', shortName: 'SCIN 103' },
+  ACTIVITIES: { color: '#64748b', bg: 'rgba(100,116,139,0.15)', emoji: '🎯', shortName: 'Activities' },
+  SCGI103: { color: '#a855f7', bg: 'rgba(168,85,247,0.15)', emoji: '📊', shortName: 'SCGI 103' },
+  SCCH189: { color: '#0284c7', bg: 'rgba(2,132,199,0.15)', emoji: '🧪', shortName: 'ChemLab' },
 };
 
 // Class schedule data

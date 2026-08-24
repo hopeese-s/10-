@@ -214,36 +214,73 @@ function saveStore() {
 // ─── Unified Database Adapter (Supabase PostgreSQL + In-Memory Fallback) ───
 const dbAdapter = {
   async getUserData(userId) {
+    if (!userId) return null;
+    const uid = String(userId).trim();
+    const altUid = uid.startsWith('u_') ? uid.substring(2) : `u_${uid}`;
+    const isTest4 = uid === 'u_test4' || uid === 'test4' || altUid === 'u_test4' || altUid === 'test4';
+
     if (supabase) {
       try {
         const { data, error } = await supabase
           .from('user_sync_data')
           .select('*')
-          .eq('user_id', String(userId))
+          .in('user_id', [uid, altUid])
+          .order('updated_at', { ascending: false })
           .limit(1);
         if (!error && data && data.length > 0 && data[0].data) {
-          return {
+          const res = {
             ...data[0].data,
             version: data[0].version || data[0].data.version || 0,
             updatedAt: data[0].updated_at || data[0].data.updatedAt || new Date().toISOString()
           };
+          if (isTest4 && (!res.curriculum || !Array.isArray(res.curriculum) || res.curriculum.length === 0)) {
+            res.curriculum = typeof TEST4_CURRICULUM !== 'undefined' ? TEST4_CURRICULUM : [];
+            res.isBme = false;
+          }
+          return res;
         }
       } catch (err) {
         console.warn('⚠️ Supabase getUserData error:', err.message);
       }
     }
-    return store[userId] || null;
+
+    const localData = store[uid] || store[altUid] || null;
+    if (isTest4) {
+      if (!localData || !localData.curriculum || !Array.isArray(localData.curriculum) || localData.curriculum.length === 0) {
+        const t4Data = {
+          version: 2,
+          updatedAt: new Date().toISOString(),
+          isBme: false,
+          checklist: {},
+          subjects: {},
+          customBlocks: {},
+          curriculum: typeof TEST4_CURRICULUM !== 'undefined' ? TEST4_CURRICULUM : [],
+          studyFolders: [],
+          studyLinks: [],
+          files: {}
+        };
+        store[uid] = t4Data;
+        store[altUid] = t4Data;
+        return t4Data;
+      }
+    }
+    return localData;
   },
 
   async saveUserData(userId, payload) {
-    // 1. In-memory & local store update
-    store[userId] = payload;
+    if (!userId) return;
+    const uid = String(userId).trim();
+    const altUid = uid.startsWith('u_') ? uid.substring(2) : `u_${uid}`;
+
+    // 1. In-memory & local store update for both keys
+    store[uid] = payload;
+    store[altUid] = payload;
     saveStore();
 
     // 2. Persistent Supabase PostgreSQL write
     if (supabase) {
       const record = {
-        user_id: String(userId),
+        user_id: uid,
         data: payload,
         version: parseInt(payload.version, 10) || 0,
         updated_at: payload.updatedAt || new Date().toISOString()
@@ -256,7 +293,6 @@ const dbAdapter = {
 
         // If it failed because columns don't exist, try minimal record
         if (upsertErr && upsertErr.message && upsertErr.message.includes('column')) {
-          console.warn(`⚠️ Supabase missing columns for [${userId}], using minimal schema.`);
           delete record.version;
           delete record.updated_at;
           const retry = await supabase.from('user_sync_data').upsert(record, { onConflict: 'user_id' });
@@ -264,18 +300,12 @@ const dbAdapter = {
         }
 
         if (upsertErr) {
-          console.warn(`⚠️ Supabase saveUserData upsert notice for [${userId}]:`, upsertErr.message);
-          // Fallback: Delete existing and Insert
-          await supabase.from('user_sync_data').delete().eq('user_id', String(userId));
-          const { error: insertErr } = await supabase.from('user_sync_data').insert(record);
-          if (insertErr) {
-            console.error(`❌ Supabase saveUserData fallback insert error for [${userId}]:`, insertErr.message);
-          } else {
-            console.log(`✅ Supabase saveUserData saved via insert fallback for [${userId}]`);
-          }
+          console.warn(`⚠️ Supabase saveUserData upsert notice for [${uid}]:`, upsertErr.message);
+          await supabase.from('user_sync_data').delete().eq('user_id', uid);
+          await supabase.from('user_sync_data').insert(record);
         }
       } catch (err) {
-        console.error(`❌ Supabase saveUserData exception for [${userId}]:`, err.message);
+        console.error(`❌ Supabase saveUserData exception for [${uid}]:`, err.message);
       }
     }
   },
@@ -514,6 +544,26 @@ const DEFAULT_BME_CURRICULUM = [
   { code: 'SCCH169', name: 'Chemistry Laboratory', credits: '1 (0-3-1)', type: 'ปฏิบัติการ', room: 'L2-201', schedule: 'ศุกร์ 13:30 - 16:30', day: 'friday', start: '13:30', end: '16:30', classroomUrl: 'https://classroom.google.com', driveUrl: '', desc: 'ปฏิบัติการเคมี การไตเตรท การสังเคราะห์สาร และการทดสอบคุณสมบัติ' }
 ];
 
+// Special Timetable for test4
+const TEST4_CURRICULUM = [
+  // Monday
+  { code: 'SCBE101', name: 'SCBE 101', credits: '3 (3-0-6)', type: 'บรรยาย', room: 'L2-001 (SCME,SCCT)', schedule: 'จันทร์ 09:30 - 12:30', day: 'monday', start: '09:30', end: '12:30', classroomUrl: '', driveUrl: '', desc: 'SCBE 101 ห้อง L2-001 (SCME,SCCT)' },
+  { code: 'PRPR102', name: 'PRPR 102', credits: '2 (2-0-4)', type: 'บรรยาย', room: 'SC2-323 (SCME)', schedule: 'จันทร์ 13:30 - 15:30', day: 'monday', start: '13:30', end: '15:30', classroomUrl: '', driveUrl: '', desc: 'PRPR 102 ห้อง SC2-323 (SCME)' },
+  // Tuesday
+  { code: 'LAEN180', name: 'LAEN 180', credits: '2 (2-0-4)', type: 'บรรยาย', room: 'Sec 1 : SC2-323 (SCCT)', schedule: 'อังคาร 08:30 - 10:30', day: 'tuesday', start: '08:30', end: '10:30', classroomUrl: '', driveUrl: '', desc: 'LAEN 180 Sec 1 ห้อง SC2-323 (SCCT)' },
+  { code: 'SCIN102', name: 'SCIN 102', credits: '3 (3-0-6)', type: 'บรรยาย', room: 'SC1-158', schedule: 'อังคาร 10:30 - 13:30', day: 'tuesday', start: '10:30', end: '13:30', classroomUrl: '', driveUrl: '', desc: 'SCIN 102 ห้อง SC1-158' },
+  { code: 'SCBE102', name: 'LAB-SCBE 102 (เรียนรวม)', credits: '1 (0-3-1)', type: 'ปฏิบัติการ', room: 'เรียนรวม', schedule: 'อังคาร 13:30 - 16:30', day: 'tuesday', start: '13:30', end: '16:30', classroomUrl: '', driveUrl: '', desc: 'LAB-SCBE 102 (เรียนรวม)' },
+  // Wednesday
+  { code: 'SCIN103', name: 'SCIN 103', credits: '3 (3-0-6)', type: 'บรรยาย', room: 'SC1-158', schedule: 'พุธ 09:00 - 12:00', day: 'wednesday', start: '09:00', end: '12:00', classroomUrl: '', driveUrl: '', desc: 'SCIN 103 ห้อง SC1-158' },
+  { code: 'ACTIVITIES', name: 'Reserved for student activities & academic clinic', credits: '0 (0-3-0)', type: 'กิจกรรม', room: '-', schedule: 'พุธ 13:30 - 16:30', day: 'wednesday', start: '13:30', end: '16:30', classroomUrl: '', driveUrl: '', desc: 'Reserved for student activities & academic clinic' },
+  // Thursday
+  { code: 'SCGI103', name: 'SCGI 103', credits: '3 (3-0-6)', type: 'บรรยาย', room: 'SC2-314 (SCBE)', schedule: 'พฤหัสบดี 09:30 - 12:30', day: 'thursday', start: '09:30', end: '12:30', classroomUrl: '', driveUrl: '', desc: 'SCGI 103 ห้อง SC2-314 (SCBE)' },
+  { code: 'SCCH161', name: 'SCCH 161 (Section 1)', credits: '3 (3-0-6)', type: 'บรรยาย', room: 'SC1-152 (SCBM,SCME)', schedule: 'พฤหัสบดี 13:30 - 16:30', day: 'thursday', start: '13:30', end: '16:30', classroomUrl: '', driveUrl: '', desc: 'SCCH 161 Section 1 ห้อง SC1-152 (SCBM,SCME)' },
+  // Friday
+  { code: 'SCPY111', name: 'LAB-SCPY 111', credits: '1 (0-3-1)', type: 'ปฏิบัติการ', room: 'SCME,SCCT,EGCG,EGII,EGBI,ENNM', schedule: 'ศุกร์ 09:30 - 12:30', day: 'friday', start: '09:30', end: '12:30', classroomUrl: '', driveUrl: '', desc: 'LAB-SCPY 111 (SCME,SCCT,EGCG,EGII,EGBI,ENNM)' },
+  { code: 'SCCH189', name: 'LAB-SCCH 189', credits: '1 (0-3-1)', type: 'ปฏิบัติการ', room: 'SC1-152 (SCBM,SCME)', schedule: 'ศุกร์ 13:30 - 16:30', day: 'friday', start: '13:30', end: '16:30', classroomUrl: '', driveUrl: '', desc: 'LAB-SCCH 189 Lab brief (13:30-14:20/SC1-152) (SCBM,SCME)' }
+];
+
 const DEFAULT_BME_STUDY_LINKS = [
   { id: 'gc-1', title: 'SCCH161 General Chemistry', sub: 'EGBI/EGCG/EGII Year 1 - 1/2026', type: 'classroom', url: 'https://classroom.google.com/u/6/c/ODcwMjc5NzAyMjcy', desc: 'Google Classroom วิชาเคมีทั่วไป (SCCH161)', isShared: true },
   { id: 'gc-2', title: 'SCPY111/114/115-(2026-1) Physics Laboratory I', sub: 'EGBI, EGCG, EGII...', type: 'classroom', url: 'https://classroom.google.com/u/6/c/ODU1NzE4MDAyNzE5', desc: 'Google Classroom ปฏิบัติการฟิสิกส์ 1 (SCPY111)', isShared: true },
@@ -584,15 +634,19 @@ async function generateIcsCalendar(userId, includeRoutines = false, includeStudy
   const userCustom = (await dbAdapter.getUserData(userId)) || store[userId] || {};
   const customBlocks = userCustom.customBlocks || {};
   
-  // Determine if this user is a BME student
-  const isBme = userCustom.isBme !== undefined
-    ? !!userCustom.isBme
-    : (userObj ? userObj.isBme !== false : (userId === '1' || userId === 'default'));
+  const isTest4 = (userObj && userObj.username && userObj.username.toLowerCase() === 'test4') || userId === 'u_test4' || userId === 'test4';
 
-  // User curriculum: use their custom curriculum if set, or if BME and unset fallback to DEFAULT_BME_CURRICULUM, or empty [] for non-BME
+  // Determine if this user is a BME student
+  const isBme = isTest4 ? false : (userCustom.isBme !== undefined
+    ? !!userCustom.isBme
+    : (userObj ? userObj.isBme !== false : (userId === '1' || userId === 'default')));
+
+  // User curriculum: use their custom curriculum if set, or if test4 fallback to TEST4_CURRICULUM, or if BME fallback to DEFAULT_BME_CURRICULUM
   let curriculum = [];
-  if (userCustom.curriculum && Array.isArray(userCustom.curriculum)) {
+  if (userCustom.curriculum && Array.isArray(userCustom.curriculum) && userCustom.curriculum.length > 0) {
     curriculum = userCustom.curriculum;
+  } else if (isTest4) {
+    curriculum = TEST4_CURRICULUM;
   } else if (isBme) {
     curriculum = DEFAULT_BME_CURRICULUM;
   }
@@ -5511,11 +5565,17 @@ const server = http.createServer(async (req, res) => {
 
       // Check linked user
       const linkedUserId = (store._lineUsers && store._lineUsers[lineUserId]) || '1';
-      const targetUser = Object.values(store._users || {}).find(u => u.id === linkedUserId) || { id: linkedUserId, displayName: 'นักศึกษา' };
+      let targetUser = Object.values(store._users || {}).find(u => u.id === linkedUserId || (u.username && u.username.toLowerCase() === String(linkedUserId).toLowerCase()));
+      if (!targetUser && (linkedUserId === 'u_test4' || linkedUserId === 'test4')) {
+        targetUser = { id: 'u_test4', username: 'test4', displayName: 'test4', role: 'student', isBme: false };
+      } else if (!targetUser) {
+        targetUser = { id: linkedUserId, displayName: 'นักศึกษา' };
+      }
       const targetUsername = (targetUser && targetUser.username) ? targetUser.username.toLowerCase() : '';
       const isWitchaya = targetUsername === 'witchaya' || linkedUserId === '1';
-      const isBmeUser = targetUser && targetUser.isBme !== false;
-      const defaultCurriculum = isBmeUser ? DEFAULT_BME_CURRICULUM : [];
+      const isTest4 = targetUsername === 'test4' || linkedUserId === 'u_test4' || linkedUserId === 'test4';
+      const isBmeUser = isTest4 ? false : (targetUser && targetUser.isBme !== false);
+      const defaultCurriculum = isTest4 ? TEST4_CURRICULUM : (isBmeUser ? DEFAULT_BME_CURRICULUM : []);
       const defaultRoutines = isBmeUser ? [...DEFAULT_BME_ROUTINE_EVENTS, ...DEFAULT_BME_STUDY_BLOCKS] : [];
 
       // ─── 0. Command: เมนู / Menu / Help / วิธีใช้ / คู่มือ ───
