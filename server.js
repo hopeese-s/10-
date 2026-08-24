@@ -524,37 +524,41 @@ const DEFAULT_BME_STUDY_LINKS = [
 ];
 
 // Default Schedule & Study Blocks Data for iCalendar Feed Generation
-const DEFAULT_BME_ROUTINE_EVENTS = [
+const DEFAULT_BME_STUDY_BLOCKS = [
   // Monday
-  { day: 'MO', dayNum: 1, start: '09:30', end: '12:30', title: 'SCPY161 General Physics I', sub: 'ห้อง L2-002', type: 'class', isClass: true },
-  { day: 'MO', dayNum: 1, start: '13:30', end: '17:30', title: 'EGBI122 Computer Programming', sub: 'ห้อง R335/1, R335/2', type: 'class', isClass: true },
   { day: 'MO', dayNum: 1, start: '19:00', end: '20:00', title: 'Study Block 1 — GenPhy / CompPro', sub: 'ทบทวนวิชาที่ 1 (60 นาที)', type: 'study', isStudyBlock: true },
   { day: 'MO', dayNum: 1, start: '20:30', end: '21:30', title: 'Study Block 2 — เคลียร์การบ้าน / ทบทวน', sub: 'ทบทวนวิชาที่ 2 (60 นาที)', type: 'study', isStudyBlock: true },
-
   // Tuesday
-  { day: 'TU', dayNum: 2, start: '08:30', end: '10:30', title: 'LAEN182 English for General Academic', sub: 'ห้อง 320', type: 'class', isClass: true },
-  { day: 'TU', dayNum: 2, start: '13:30', end: '16:30', title: 'SCBE102 General Biology Laboratory 1', sub: 'ห้อง Lab SC', type: 'class', isClass: true },
-  { day: 'TU', dayNum: 2, start: '17:40', end: '18:40', title: 'EGBI100 BME in the Real World', sub: 'ห้อง R238', type: 'class', isClass: true },
   { day: 'TU', dayNum: 2, start: '19:30', end: '20:30', title: 'Study Block 3 — Bio Lab / English', sub: 'ทบทวนวิชาที่ 3 (60 นาที)', type: 'study', isStudyBlock: true },
   { day: 'TU', dayNum: 2, start: '20:45', end: '21:45', title: 'Study Block 4 — สรุปเนื้อหา BME Real World', sub: 'ทบทวนวิชาที่ 4 (60 นาที)', type: 'study', isStudyBlock: true },
-
   // Wednesday
-  { day: 'WE', dayNum: 3, start: '09:00', end: '11:00', title: 'SCMA101 Mathematics I', sub: 'ห้อง SC1-152', type: 'class', isClass: true },
   { day: 'WE', dayNum: 3, start: '13:30', end: '14:30', title: 'Study Block 5 — ทบทวน Calculus / Math', sub: 'ฝึกทำโจทย์คณิตศาสตร์ (60 นาที)', type: 'study', isStudyBlock: true },
-
   // Thursday
-  { day: 'TH', dayNum: 4, start: '09:30', end: '12:30', title: 'SCSL190 Wonderful Life (Biology)', sub: 'ห้อง SC3-303', type: 'class', isClass: true },
-  { day: 'TH', dayNum: 4, start: '13:30', end: '16:30', title: 'SCCH161 General Chemistry', sub: 'ห้อง SC2-323', type: 'class', isClass: true },
   { day: 'TH', dayNum: 4, start: '19:30', end: '20:30', title: 'Study Block 6 — General Chemistry ทบทวน', sub: 'สรุปสูตรและโจทย์เคมี (60 นาที)', type: 'study', isStudyBlock: true },
   { day: 'TH', dayNum: 4, start: '20:45', end: '21:45', title: 'Study Block 7 — Wonderful Life สรุปชีวะ', sub: 'ทบทวนวิชาชีววิทยา (60 นาที)', type: 'study', isStudyBlock: true },
-
   // Friday
-  { day: 'FR', dayNum: 5, start: '09:30', end: '12:30', title: 'SCPY111 Physics Laboratory I', sub: 'ห้อง Lab SC', type: 'class', isClass: true },
-  { day: 'FR', dayNum: 5, start: '13:30', end: '16:30', title: 'SCCH169 Chemistry Laboratory', sub: 'ห้อง L2-201', type: 'class', isClass: true },
   { day: 'FR', dayNum: 5, start: '19:30', end: '20:30', title: 'Study Block 8 — เคลียร์ Lab Report & การบ้าน', sub: 'เขียนรายงานแล็ปฟิสิกส์/เคมี (60 นาที)', type: 'study', isStudyBlock: true },
-
   // Saturday
-  { day: 'SA', dayNum: 6, start: '10:00', end: '11:30', title: 'Study Block 9 — ทบทวนภาพรวมประจำสัปดาห์ (Weekly Review)', sub: 'เก็บตกทุกวิชาและเตรียมตัวล่วงหน้า (90 นาที)', type: 'study', isStudyBlock: true },
+  { day: 'SA', dayNum: 6, start: '10:00', end: '11:30', title: 'Study Block 9 — ทบทวนภาพรวมประจำสัปดาห์ (Weekly Review)', sub: 'เก็บตกทุกวิชาและเตรียมตัวล่วงหน้า (90 นาที)', type: 'study', isStudyBlock: true }
+];
+
+const DEFAULT_BME_ROUTINE_EVENTS = [
+  ...DEFAULT_BME_STUDY_BLOCKS,
+  // Prayers & Daily Routine events
+  { day: 'MO', start: '05:30', end: '06:15', title: 'ละหมาดซุบฮิ + อ่านอัซการเช้า', type: 'prayer' },
+  { day: 'MO', start: '18:45', end: '19:00', title: 'ละหมาดมัฆริบ', type: 'prayer' },
+  { day: 'MO', start: '20:00', end: '20:30', title: 'พักเบรกยาว + ละหมาดอีชาอ์', type: 'prayer' },
+  { day: 'TU', start: '05:30', end: '06:15', title: 'ละหมาดซุบฮิ + อ่านอัซการเช้า', type: 'prayer' },
+  { day: 'TU', start: '18:45', end: '19:00', title: 'ละหมาดมัฆริบ', type: 'prayer' },
+  { day: 'TU', start: '20:30', end: '20:45', title: 'ละหมาดอีชาอ์ + พักเบรก', type: 'prayer' },
+  { day: 'WE', start: '05:30', end: '06:15', title: 'ละหมาดซุบฮิ + อ่านอัซการเช้า', type: 'prayer' },
+  { day: 'TH', start: '05:30', end: '06:15', title: 'ละหมาดซุบฮิ + อ่านอัซการเช้า', type: 'prayer' },
+  { day: 'TH', start: '18:45', end: '19:00', title: 'ละหมาดมัฆริบ', type: 'prayer' },
+  { day: 'TH', start: '20:00', end: '20:30', title: 'พักเบรกยาว + ละหมาดอีชาอ์', type: 'prayer' },
+  { day: 'FR', start: '05:30', end: '06:15', title: 'ละหมาดซุบฮิ + อ่านอัซการเช้า', type: 'prayer' },
+  { day: 'FR', start: '12:30', end: '13:30', title: 'พักกลางวัน + ละหมาดวันศุกร์ 🕌', type: 'prayer' },
+  { day: 'SA', start: '05:30', end: '06:15', title: 'ละหมาดซุบฮิ', type: 'prayer' },
+  { day: 'SU', start: '05:30', end: '06:15', title: 'ละหมาดซุบฮิ', type: 'prayer' }
 ];
 
 // Helper: Format date for iCalendar RFC 5545
@@ -577,7 +581,6 @@ async function generateIcsCalendar(userId, includeRoutines = false, includeStudy
   };
 
   const userObj = Object.values(store._users || {}).find(u => u.id === userId || (u.username && u.username.toLowerCase() === userId.toLowerCase()));
-  const isWitchaya = userObj ? (userObj.username && userObj.username.toLowerCase() === 'witchaya') : (userId === '1' || userId === 'default');
   const userCustom = (await dbAdapter.getUserData(userId)) || store[userId] || {};
   const customBlocks = userCustom.customBlocks || {};
   const curriculum = (userCustom.curriculum && Array.isArray(userCustom.curriculum) && userCustom.curriculum.length > 0)
@@ -606,82 +609,89 @@ async function generateIcsCalendar(userId, includeRoutines = false, includeStudy
 
   const nowStamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
 
-  // Build events from curriculum (real-time)
+  // Build events
   const events = [];
   
+  // 1. Classes
   if (includeClass) {
-  // Add curriculum classes with real room/schedule data
-  curriculum.forEach((course) => {
-    if (!course.schedule && (!course.start || !course.end)) return;
-    if (!course.day) return;
-    const dayMap = {
-      monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU',
-      mon: 'MO', tue: 'TU', wed: 'WE', thu: 'TH', fri: 'FR', sat: 'SA', sun: 'SU'
-    };
-    const dayCode = dayMap[course.day.toLowerCase()] || course.day.toUpperCase();
-    if (!dayCode || !baseDates[dayCode]) return;
-    
-    let startTime = course.start;
-    let endTime = course.end;
-    if ((!startTime || !endTime) && course.schedule) {
-      const match = course.schedule.match(/(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/);
-      if (match) {
-        startTime = match[1];
-        endTime = match[2];
+    curriculum.forEach((course) => {
+      if (!course.schedule && (!course.start || !course.end)) return;
+      if (!course.day) return;
+      const dayMap = {
+        monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU',
+        mon: 'MO', tue: 'TU', wed: 'WE', thu: 'TH', fri: 'FR', sat: 'SA', sun: 'SU'
+      };
+      const dayCode = dayMap[course.day.toLowerCase()] || course.day.toUpperCase();
+      if (!dayCode || !baseDates[dayCode]) return;
+      
+      let startTime = course.start;
+      let endTime = course.end;
+      if ((!startTime || !endTime) && course.schedule) {
+        const match = course.schedule.match(/(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/);
+        if (match) {
+          startTime = match[1];
+          endTime = match[2];
+        }
       }
-    }
-    
-    events.push({
-      day: dayCode,
-      start: startTime || '09:00',
-      end: endTime || '10:00',
-      title: `${course.code || ''} ${course.name || ''}`.trim() || 'Class',
-      sub: course.room ? `ห้อง ${course.room}` : '',
-      type: 'class',
-      isClass: true
+      
+      events.push({
+        day: dayCode,
+        start: startTime || '09:00',
+        end: endTime || '10:00',
+        title: `${course.code || ''} ${course.name || ''}`.trim() || 'Class',
+        sub: course.room ? `ห้อง ${course.room}` : '',
+        type: 'class',
+        isClass: true
+      });
     });
-  });
-  } // end if (includeClass)
+  }
 
-  // Add default routine events (respecting category filters and deduplicating against curriculum)
-  if (includeRoutines) {
-    DEFAULT_BME_ROUTINE_EVENTS.forEach(ev => {
-      if (ev.isClass || ev.type === 'class') {
-        if (!includeClass) return;
-        const matchingCourse = curriculum.find(c => {
-          const dayMap = { MO: 'monday', TU: 'tuesday', WE: 'wednesday', TH: 'thursday', FR: 'friday', SA: 'saturday', SU: 'sunday' };
-          return dayMap[ev.day] === c.day && c.start === ev.start;
-        });
-        if (matchingCourse) return; // Skip duplicate class event
-      } else if (ev.isStudyBlock || ev.type === 'study') {
-        if (!includeStudy) return;
-      } else {
-        if (!includeRoutines) return;
-      }
+  // 2. Study Blocks (9 blocks per week)
+  if (includeStudy) {
+    DEFAULT_BME_STUDY_BLOCKS.forEach(ev => {
       events.push({ ...ev });
     });
   }
 
-  if (includeStudy) {
-  // Add custom blocks from user's study data
+  // 3. Daily Routines & Prayer (only if includeRoutines is checked!)
+  if (includeRoutines) {
+    DEFAULT_BME_ROUTINE_EVENTS.forEach(ev => {
+      if (ev.type === 'prayer' || (!ev.isStudyBlock && !ev.isClass && ev.type !== 'study' && ev.type !== 'class')) {
+        events.push({ ...ev });
+      }
+    });
+  }
+
+  // 4. Custom User Blocks (strictly check category filters)
   Object.entries(customBlocks).forEach(([day, blocks]) => {
-    const dayMap = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
+    const dayMap = {
+      monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU',
+      mon: 'MO', tue: 'TU', wed: 'WE', thu: 'TH', fri: 'FR', sat: 'SA', sun: 'SU'
+    };
     const dayCode = dayMap[day.toLowerCase()];
     if (!dayCode || !Array.isArray(blocks)) return;
     blocks.forEach((block) => {
       if (!block.start || !block.end) return;
+      const isStudy = block.isStudyBlock || block.tag === 'study';
+      const isClass = block.isClass || block.tag === 'class';
+      const isRoutine = !isStudy && !isClass;
+
+      if (isStudy && !includeStudy) return;
+      if (isClass && !includeClass) return;
+      if (isRoutine && !includeRoutines) return;
+
       events.push({
         day: dayCode,
         start: block.start,
         end: block.end,
         title: block.title || 'Custom Block',
         sub: block.notes || block.subtitle || '',
-        type: block.tag || 'study',
-        isStudyBlock: block.isStudyBlock || block.tag === 'study'
+        type: block.tag || (isStudy ? 'study' : isClass ? 'class' : 'routine'),
+        isStudyBlock: isStudy,
+        isClass: isClass
       });
     });
   });
-  } // end if (includeStudy)
 
   // Deduplicate events by title+day+start
   const seen = new Set();
