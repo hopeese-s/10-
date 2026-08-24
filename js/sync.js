@@ -86,6 +86,9 @@ const CloudSync = (function () {
         currentUser = data.user;
         localStorage.setItem('sd-auth-token', authToken);
         localStorage.setItem('sd-current-user', JSON.stringify(currentUser));
+        if (currentUser.isBme !== undefined) {
+          localStorage.setItem('sd-is-bme', currentUser.isBme ? 'true' : 'false');
+        }
         setSyncKey(currentUser.id);
         updateUIStatus();
         if (window.PushClient) window.PushClient.syncCurrentSubscription();
@@ -108,6 +111,9 @@ const CloudSync = (function () {
         const data = await res.json();
         currentUser = data.user;
         localStorage.setItem('sd-current-user', JSON.stringify(currentUser));
+        if (currentUser.isBme !== undefined) {
+          localStorage.setItem('sd-is-bme', currentUser.isBme ? 'true' : 'false');
+        }
         setSyncKey(currentUser.id);
         updateUIStatus();
         if (window.PushClient) window.PushClient.syncCurrentSubscription();

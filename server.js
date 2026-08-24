@@ -732,7 +732,8 @@ async function generateIcsCalendar(userId, includeRoutines = false, includeStudy
 
     const icon = isStudy ? '📚 ' : isClass ? '🎓 ' : '🗓️ ';
     const summary = icon + ev.title;
-    const desc = (ev.sub || '') + (isStudy ? '\nระบบเตือนความจำจาก E-Calendar: อย่าลืมเตรียมชีทสรุปและเริ่มอ่านหนังสือ!' : '\nวิชาเรียน BME Mahidol');
+    const classDesc = isBme ? '\nวิชาเรียน BME Mahidol' : '\nวิชาเรียนของคุณ';
+    const desc = (ev.sub || '') + (isStudy ? '\nระบบเตือนความจำจาก E-Calendar: อย่าลืมเตรียมชีทสรุปและเริ่มอ่านหนังสือ!' : classDesc);
 
     ics.push('BEGIN:VEVENT');
     ics.push(`UID:${uid}`);
@@ -4842,6 +4843,7 @@ const server = http.createServer(async (req, res) => {
           username: user.username,
           displayName: user.displayName,
           role: user.role,
+          isBme: user.isBme !== false,
           calendarKey: user.calendarKey
         }
       }));
@@ -4865,6 +4867,7 @@ const server = http.createServer(async (req, res) => {
         username: user.username,
         displayName: user.displayName,
         role: user.role,
+        isBme: user.isBme !== false,
         calendarKey: user.calendarKey
       }
     }));
