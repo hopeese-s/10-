@@ -1579,23 +1579,33 @@ function buildTaskAddedFlex(task, totalPending) {
       header: {
         type: 'box',
         layout: 'vertical',
-        backgroundColor: '#10B981',
-        paddingAll: '14px',
+        backgroundColor: '#059669',
+        paddingAll: '16px',
         contents: [
-          { type: 'text', text: 'TO-DO LIST SYNCED', color: '#ffffff', size: 'xxs', weight: 'bold' },
-          { type: 'text', text: '✅ เพิ่มงานสำเร็จ!', color: '#ffffff', size: 'md', weight: 'bold' }
+          { type: 'text', text: 'TASK & HOMEWORK MANAGER', color: '#ffffff', size: 'xxs', weight: 'bold' },
+          { type: 'text', text: '✅ เพิ่มการบ้านสำเร็จ!', color: '#ffffff', size: 'md', weight: 'bold' }
         ]
       },
       body: {
         type: 'box',
         layout: 'vertical',
         paddingAll: '14px',
+        spacing: 'xs',
         contents: [
-          { type: 'text', text: `${task.title}`, weight: 'bold', size: 'sm', color: '#111827', wrap: true },
-          ...(task.dueDate ? [
-            { type: 'text', text: `⏰ กำหนดส่ง: ${task.dueDate}`, size: 'xs', color: '#EF4444', margin: 'xs', weight: 'bold' }
-          ] : []),
-          { type: 'text', text: `(เหลืองานค้างทั้งหมด ${totalPending} รายการ)`, size: 'xs', color: '#6B7280', margin: 'sm' }
+          {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#F0FDF4',
+            cornerRadius: 'md',
+            paddingAll: '12px',
+            contents: [
+              { type: 'text', text: `📝 ${task.title}`, weight: 'bold', size: 'sm', color: '#065F46', wrap: true },
+              ...(task.dueDate ? [
+                { type: 'text', text: `⏰ กำหนดส่ง: ${task.dueDate}`, size: 'xs', color: '#DC2626', margin: 'xs', weight: 'bold' }
+              ] : [])
+            ]
+          },
+          { type: 'text', text: `💡 เหลืองานค้างทั้งหมด ${totalPending} รายการ`, size: 'xs', color: '#6B7280', margin: 'sm' }
         ]
       },
       footer: {
@@ -1605,14 +1615,14 @@ function buildTaskAddedFlex(task, totalPending) {
         contents: [
           {
             type: 'button',
-            action: { type: 'message', label: '📝 ดูงานทั้งหมด', text: 'งานค้าง' },
+            action: { type: 'message', label: '📝 ดูงานค้าง', text: 'งานค้าง' },
             style: 'primary',
-            color: '#C45A1B',
+            color: '#059669',
             height: 'sm'
           },
           {
             type: 'button',
-            action: { type: 'message', label: `✅ ติ๊กเสร็จ (${task.id || 1})`, text: `เสร็จ ${task.id || 1}` },
+            action: { type: 'message', label: '📌 ดูโน้ต', text: 'โน้ต' },
             style: 'secondary',
             height: 'sm'
           }
@@ -2734,6 +2744,97 @@ function buildQuickNoteFlex(notes) {
         spacing: 'sm',
         contents: [
           { type: 'button', action: { type: 'message', label: '📝 การบ้าน', text: 'งานค้าง' }, style: 'primary', color: '#CA8A04', height: 'sm' },
+          { type: 'button', action: { type: 'message', label: '📅 ตารางวันนี้', text: 'ตารางวันนี้' }, style: 'secondary', height: 'sm' }
+        ]
+      }
+    }
+  };
+}
+
+function buildPendingTasksFlex(tasks) {
+  const pending = (tasks || []).filter(t => !t.done && !t.completed);
+
+  const items = (pending.length === 0) ? [
+    {
+      type: 'box',
+      layout: 'vertical',
+      backgroundColor: '#F0FDF4',
+      cornerRadius: 'md',
+      paddingAll: '16px',
+      alignItems: 'center',
+      contents: [
+        { type: 'text', text: '🎉 ไม่มีงานค้างในระบบ!', weight: 'bold', size: 'sm', color: '#166534' },
+        { type: 'text', text: 'พิมพ์ "+งาน <ชื่อ> ส่ง <วัน>" เพื่อจดการบ้านได้ตลอดเวลาครับ', size: 'xs', color: '#15803D', wrap: true, margin: 'xs', align: 'center' }
+      ]
+    }
+  ] : pending.slice(0, 8).map((t, i) => {
+    const taskIndex = i + 1;
+    const taskTitle = t.title || t.text || 'การบ้าน/งาน';
+    const dueDateStr = t.dueDate ? `⏰ กำหนดส่ง: ${t.dueDate}` : null;
+
+    return {
+      type: 'box',
+      layout: 'horizontal',
+      backgroundColor: '#F0FDF4',
+      cornerRadius: 'md',
+      paddingAll: '10px',
+      margin: 'xs',
+      alignItems: 'center',
+      contents: [
+        {
+          type: 'box',
+          layout: 'vertical',
+          flex: 4,
+          contents: [
+            { type: 'text', text: `📝 ${taskIndex}. ${taskTitle}`, size: 'xs', weight: 'bold', color: '#065F46', wrap: true },
+            ...(dueDateStr ? [{ type: 'text', text: dueDateStr, size: 'xxs', color: '#DC2626', weight: 'bold', margin: 'xs' }] : []),
+            ...(t.createdAt ? [{ type: 'text', text: `บันทึกเมื่อ: ${t.createdAt.slice(0, 10)}`, size: 'xxs', color: '#15803D', margin: 'xs' }] : [])
+          ]
+        },
+        {
+          type: 'button',
+          action: {
+            type: 'postback',
+            label: 'เสร็จ',
+            data: `action=done_task&id=${t.id || taskIndex}`,
+            displayText: `เสร็จ ${taskIndex}`
+          },
+          style: 'secondary',
+          height: 'sm',
+          flex: 1
+        }
+      ]
+    };
+  });
+
+  return {
+    type: 'flex',
+    altText: `📝 รายการงานค้าง & การบ้าน (${pending.length} รายการ)`,
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#059669',
+        paddingAll: '16px',
+        contents: [
+          { type: 'text', text: 'TASK & HOMEWORK MANAGER', color: '#ffffff', size: 'xxs', weight: 'bold' },
+          { type: 'text', text: `📝 รายการงานค้าง (${pending.length} รายการ)`, color: '#ffffff', size: 'md', weight: 'bold' }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '14px',
+        spacing: 'xs',
+        contents: items
+      },
+      footer: {
+        type: 'box',
+        layout: 'horizontal',
+        spacing: 'sm',
+        contents: [
+          { type: 'button', action: { type: 'message', label: '📌 ดูโน้ต', text: 'โน้ต' }, style: 'primary', color: '#059669', height: 'sm' },
           { type: 'button', action: { type: 'message', label: '📅 ตารางวันนี้', text: 'ตารางวันนี้' }, style: 'secondary', height: 'sm' }
         ]
       }
@@ -4553,8 +4654,15 @@ const server = http.createServer(async (req, res) => {
 
       if (action === 'done_task') {
         const taskId = params.get('id');
-        const tasks = userData.tasks || [];
-        const found = tasks.find(t => t.id === taskId);
+        const tasks = userData.tasks || userData.todos || [];
+        const pending = tasks.filter(t => !t.done);
+        let found = tasks.find(t => String(t.id) === String(taskId));
+        if (!found && !isNaN(Number(taskId))) {
+          const idx = parseInt(taskId, 10) - 1;
+          if (idx >= 0 && idx < pending.length) {
+            found = pending[idx];
+          }
+        }
         if (found) {
           found.done = true;
           found.completedAt = new Date().toISOString();
@@ -4562,7 +4670,7 @@ const server = http.createServer(async (req, res) => {
           store[linkedUserId] = userData;
           saveStore();
           const remaining = tasks.filter(t => !t.done).length;
-          await sendLineReply(replyToken, `🎉 ทำงาน "${found.title}" เสร็จแล้วเรียบร้อย! ✨\n(เหลืองานค้างอีก ${remaining} รายการ)`);
+          await sendLineReply(replyToken, `🎉 ทำงาน "${found.title || found.text}" เสร็จแล้วเรียบร้อย! ✨\n(เหลืองานค้างอีก ${remaining} รายการ)`);
         } else {
           await sendLineReply(replyToken, '✅ บันทึกสถานะงานเรียบร้อยแล้วครับ');
         }
@@ -4581,7 +4689,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (!hasGemini) {
-        await sendLineReply(replyToken, '🎤 ได้รับข้อความเสียงแล้ว แต่ระบบ AI ถอดเสียงยังไม่ได้เปิดใช้งาน (ต้องการการตั้งค่า GEMINI_API_KEY บนเซิร์ฟเวอร์ครับ)');
+        await sendLineReply(replyToken, '🎤 ได้รับข้อความเสียงแล้ว แต่ระบบ AI ถอดเสียงต้องการ GEMINI_API_KEY\n\n💡 วิธีขอ API Key ฟรี 100%:\n1. เข้าเว็บ https://aistudio.google.com\n2. กด "Get API key" -> "Create API key"\n3. นำคีย์ไปใส่ใน Railway (Variables) ในชื่อ GEMINI_API_KEY');
         return;
       }
 
@@ -4663,7 +4771,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (!hasGemini) {
-        await sendLineReply(replyToken, '🖼️ ได้รับรูปภาพแล้ว แต่ระบบ AI สแกนภาพเป็นตารางงาน (Vision OCR) ต้องการการตั้งค่า GEMINI_API_KEY บนเซิร์ฟเวอร์ครับ');
+        await sendLineReply(replyToken, '🖼️ ได้รับรูปภาพแล้ว แต่ระบบ AI สแกนภาพ (Vision OCR) ต้องการ GEMINI_API_KEY ครับ\n\n💡 วิธีขอ API Key ฟรี 100%:\n1. เข้าเว็บ https://aistudio.google.com\n2. กด "Get API key" -> "Create API key"\n3. นำคีย์ไปใส่ใน Railway (แท็บ Variables) ในชื่อ GEMINI_API_KEY แล้ว Deploy ได้เลยครับ');
         return;
       }
 
@@ -4950,23 +5058,41 @@ const server = http.createServer(async (req, res) => {
       }
 
       // ─── 3.5 Command: เสร็จ / ทำเสร็จ / done <ลำดับ> / check <num> / finish <num> ───
-      const doneMatch = text.match(/^(เสร็จ|ทำเสร็จ|done|check|finish|ลบงาน)\s*(\d+)/i);
+      const doneMatch = text.match(/^(เสร็จ|ทำเสร็จ|done|check|finish|ลบงาน)(\s*(\d+))?$/i);
       if (doneMatch) {
-        const targetIndex = parseInt(doneMatch[2], 10) - 1;
+        const rawIdx = doneMatch[3];
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
         const tasks = userData.tasks || userData.todos || [];
         const pending = tasks.filter(t => !t.done);
 
+        if (!rawIdx) {
+          if (pending.length === 1) {
+            const finishedTask = pending[0];
+            finishedTask.done = true;
+            finishedTask.completedAt = new Date().toISOString();
+            await dbAdapter.saveUserData(linkedUserId, userData);
+            store[linkedUserId] = userData;
+            saveStore();
+            await sendLineReply(replyToken, `🎉 เยี่ยมมากครับ! ทำงาน "${finishedTask.title || finishedTask.text}" เสร็จเรียบร้อยแล้ว ✨\n(ไม่มีงานค้างแล้วครับ 🎉)`);
+            return;
+          }
+          await sendLineReply(replyToken, [buildPendingTasksFlex(tasks)]);
+          return;
+        }
+
+        const targetIndex = parseInt(rawIdx, 10) - 1;
         if (targetIndex >= 0 && targetIndex < pending.length) {
           const finishedTask = pending[targetIndex];
           finishedTask.done = true;
           finishedTask.completedAt = new Date().toISOString();
           await dbAdapter.saveUserData(linkedUserId, userData);
+          store[linkedUserId] = userData;
+          saveStore();
 
           const remainingCount = tasks.filter(t => !t.done).length;
-          await sendLineReply(replyToken, `🎉 เยี่ยมมากครับ! Completed "${finishedTask.title}" ✨\n(Remaining tasks / เหลืองานค้าง: ${remainingCount} items)`);
+          await sendLineReply(replyToken, `🎉 เยี่ยมมากครับ! ทำงาน "${finishedTask.title || finishedTask.text}" เสร็จแล้ว ✨\n(เหลืองานค้างอีก ${remainingCount} รายการ)`);
         } else {
-          await sendLineReply(replyToken, `❌ Task #${doneMatch[2]} not found / ไม่พบลำดับงานที่ ${doneMatch[2]} (พิมพ์ "tasks" หรือ "งานค้าง" เพื่อดูรายการครับ)`);
+          await sendLineReply(replyToken, `❌ Task #${rawIdx} not found / ไม่พบลำดับงานที่ ${rawIdx} (พิมพ์ "tasks" หรือ "งานค้าง" เพื่อดูรายการครับ)`);
         }
         return;
       }
@@ -5279,18 +5405,7 @@ const server = http.createServer(async (req, res) => {
       if (/^(งานค้าง|การบ้าน|tasks|task|todo|todos|homework|pending|deadline|งาน|ส่งงานไรบ้าง)/i.test(text)) {
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
         const tasks = userData.tasks || userData.todos || [];
-        const pending = tasks.filter(t => !t.done && !t.completed);
-
-        if (pending.length === 0) {
-          await sendLineReply(replyToken, '🎉 All clear! คุณไม่มีงานค้างหรือการบ้านที่ยังไม่เสร็จในระบบครับ ✨\n(พิมพ์ "+task <title> due <date>" หรือ "+งาน <ชื่อ>" เพื่อจดงานเพิ่มได้ตลอดเวลา)');
-        } else {
-          let msg = `📝 Pending Tasks / รายการงานค้าง (${pending.length} รายการ):\n`;
-          pending.slice(0, 8).forEach((t, i) => {
-            msg += `\n${i + 1}. ${t.title || t.text || 'Task'}${t.dueDate ? ` (Due: ${t.dueDate})` : ''}`;
-          });
-          msg += `\n\n💡 Tip: Type "done 1" หรือ "เสร็จ 1" to mark complete`;
-          await sendLineReply(replyToken, msg);
-        }
+        await sendLineReply(replyToken, [buildPendingTasksFlex(tasks)]);
         return;
       }
 
