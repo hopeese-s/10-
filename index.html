@@ -591,7 +591,18 @@
             <label class="form-label">รหัสผ่าน (Password) *</label>
             <input id="auth-password-input" class="form-input" type="password" placeholder="รหัสผ่านสำหรับเข้าใช้งาน" />
           </div>
-          <p id="auth-form-tip" style="font-size:11.5px;color:var(--label-3);line-height:1.4;margin-top:4px">
+          <div class="form-group" id="auth-bme-group" style="display:none;margin-top:10px;padding:12px;background:var(--bg-3);border-radius:var(--r-m);border:1px solid var(--sep)">
+            <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;user-select:none;margin:0">
+              <input type="checkbox" id="auth-is-bme-checkbox" style="margin-top:3px;accent-color:var(--accent);width:16px;height:16px;cursor:pointer" checked />
+              <div>
+                <div style="font-size:13px;font-weight:700;color:var(--label)">🧬 เป็นนักศึกษา BME (Mahidol)</div>
+                <div style="font-size:11.5px;color:var(--label-2);line-height:1.45;margin-top:2px">
+                  ติ๊กเลือกเพื่อรับโครงสร้างตารางเรียน BME 10 วิชา, แผนผัง Prerequisite Road Map (ปี 1-4) และคลังชีทเรียนเริ่มต้นอัตโนมัติ (หากไม่ได้ติ๊ก ระบบจะเปิดเป็นพื้นที่ว่างสำหรับจัดการตารางเรียนและเอกสารของคุณเอง)
+                </div>
+              </div>
+            </label>
+          </div>
+          <p id="auth-form-tip" style="font-size:11.5px;color:var(--label-3);line-height:1.4;margin-top:8px">
             🔒 ทุกบัญชีจะมีพื้นที่เก็บข้อมูลส่วนตัวแยกกัน 100% ไม่ปนกับผู้อื่น
           </p>
         </div>

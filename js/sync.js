@@ -45,12 +45,12 @@ const CloudSync = (function () {
   } catch (_) {}
 
   // ─── Authentication API ──────────────────────────────────────
-  async function register(username, password, displayName) {
+  async function register(username, password, displayName, isBme = true) {
     try {
       const res = await fetch(`${AUTH_API}/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password, displayName })
+        body: JSON.stringify({ username, password, displayName, isBme })
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -58,6 +58,9 @@ const CloudSync = (function () {
         currentUser = data.user;
         localStorage.setItem('sd-auth-token', authToken);
         localStorage.setItem('sd-current-user', JSON.stringify(currentUser));
+        if (currentUser.isBme !== undefined) {
+          localStorage.setItem('sd-is-bme', currentUser.isBme ? 'true' : 'false');
+        }
         setSyncKey(currentUser.id);
         updateUIStatus();
         if (window.PushClient) window.PushClient.syncCurrentSubscription();
@@ -491,6 +494,7 @@ const CloudSync = (function () {
     return {
       version:         data.version         || 0,
       updatedAt:       data.updatedAt       || new Date().toISOString(),
+      isBme:           data.isBme !== false,
       checklist:       data.checklist       || {},
       subjects:        data.subjects        || {},
       customBlocks:    data.customBlocks    || {},

@@ -461,31 +461,37 @@
       state.updatedAt = cloudData.updatedAt;
       localStorage.setItem('sd-updated-at', state.updatedAt);
     }
+    if (cloudData.isBme !== undefined) {
+      state.isBme = !!cloudData.isBme;
+      localStorage.setItem('sd-is-bme', state.isBme ? 'true' : 'false');
+    }
     if (cloudData.checklist)    state.checklist    = cloudData.checklist;
     if (cloudData.subjects)     state.subjects      = cloudData.subjects;
     if (cloudData.customBlocks) state.customBlocks  = cloudData.customBlocks;
 
-    // Curriculum — always prefer cloud version if non-empty
-    if (cloudData.curriculum && Array.isArray(cloudData.curriculum) && cloudData.curriculum.length > 0) {
+    // Curriculum: accept cloudData.curriculum directly (even if [] for non-BME)
+    if (cloudData.curriculum && Array.isArray(cloudData.curriculum)) {
       state.curriculum = cloudData.curriculum;
       localStorage.setItem('sd-curriculum', JSON.stringify(state.curriculum));
     }
 
-    // Folders: take cloud version if non-empty, else keep local
-    if (cloudData.studyFolders && Array.isArray(cloudData.studyFolders) && cloudData.studyFolders.length > 0) {
+    // Folders: take cloud version if present
+    if (cloudData.studyFolders && Array.isArray(cloudData.studyFolders)) {
       state.studyFolders = cloudData.studyFolders;
-      const existingFolderIds = new Set(state.studyFolders.map(f => f.id));
-      DEFAULT_STUDY_FOLDERS.forEach((df, idx) => {
-        if (!existingFolderIds.has(df.id)) {
-          state.studyFolders.splice(idx, 0, df);
-          existingFolderIds.add(df.id);
-        }
-      });
+      if (state.isBme !== false) {
+        const existingFolderIds = new Set(state.studyFolders.map(f => f.id));
+        DEFAULT_STUDY_FOLDERS.forEach((df, idx) => {
+          if (!existingFolderIds.has(df.id)) {
+            state.studyFolders.splice(idx, 0, df);
+            existingFolderIds.add(df.id);
+          }
+        });
+      }
       localStorage.setItem('sd-study-folders', JSON.stringify(state.studyFolders));
     }
 
-    // Links: take cloud version if non-empty, else keep local
-    if (cloudData.studyLinks && Array.isArray(cloudData.studyLinks) && cloudData.studyLinks.length > 0) {
+    // Links: take cloud version if present
+    if (cloudData.studyLinks && Array.isArray(cloudData.studyLinks)) {
       state.studyLinks = cloudData.studyLinks;
       localStorage.setItem('sd-study-links', JSON.stringify(state.studyLinks));
     }
@@ -538,6 +544,8 @@
       state.theme        = localStorage.getItem('sd-theme') || 'light';
       state.version      = parseInt(localStorage.getItem('sd-version') || '0', 10);
       state.updatedAt    = localStorage.getItem('sd-updated-at') || new Date().toISOString();
+      const isBmeStored  = localStorage.getItem('sd-is-bme');
+      state.isBme        = isBmeStored !== null ? (isBmeStored === 'true') : true;
       state.checklist    = JSON.parse(localStorage.getItem('sd-checklist') || '{}');
       state.subjects     = JSON.parse(localStorage.getItem('sd-subjects') || '{}');
       state.customBlocks = JSON.parse(localStorage.getItem('sd-custom-blocks') || '{}');
@@ -545,24 +553,26 @@
 
       // Study Folders
       const savedFolders = localStorage.getItem('sd-study-folders');
-      if (savedFolders) {
+      if (savedFolders !== null) {
         try {
-          state.studyFolders = JSON.parse(savedFolders);
+          const parsed = JSON.parse(savedFolders);
+          state.studyFolders = Array.isArray(parsed) ? parsed : [];
         } catch (_) {
-          state.studyFolders = [...DEFAULT_STUDY_FOLDERS];
+          state.studyFolders = state.isBme ? [...DEFAULT_STUDY_FOLDERS] : [];
         }
       } else {
-        state.studyFolders = [...DEFAULT_STUDY_FOLDERS];
+        state.studyFolders = state.isBme ? [...DEFAULT_STUDY_FOLDERS] : [];
       }
       
-      if (!Array.isArray(state.studyFolders)) state.studyFolders = [...DEFAULT_STUDY_FOLDERS];
-      const existingFolderIds = new Set(state.studyFolders.map(f => f.id));
-      DEFAULT_STUDY_FOLDERS.forEach((df, idx) => {
-        if (!existingFolderIds.has(df.id)) {
-          state.studyFolders.splice(idx, 0, df);
-          existingFolderIds.add(df.id);
-        }
-      });
+      if (state.isBme && Array.isArray(state.studyFolders)) {
+        const existingFolderIds = new Set(state.studyFolders.map(f => f.id));
+        DEFAULT_STUDY_FOLDERS.forEach((df, idx) => {
+          if (!existingFolderIds.has(df.id)) {
+            state.studyFolders.splice(idx, 0, df);
+            existingFolderIds.add(df.id);
+          }
+        });
+      }
       localStorage.setItem('sd-study-folders', JSON.stringify(state.studyFolders));
       state.selectedFolderId = localStorage.getItem('sd-selected-folder') || 'all';
 
@@ -571,17 +581,13 @@
       if (savedLinks !== null) {
         try {
           const parsed = JSON.parse(savedLinks);
-          if (Array.isArray(parsed)) {
-            state.studyLinks = parsed;
-          } else {
-            state.studyLinks = [...DEFAULT_STUDY_LINKS];
-          }
+          state.studyLinks = Array.isArray(parsed) ? parsed : [];
         } catch (_) {
-          state.studyLinks = [...DEFAULT_STUDY_LINKS];
+          state.studyLinks = state.isBme ? [...DEFAULT_STUDY_LINKS] : [];
         }
       } else {
-        state.studyLinks = [...DEFAULT_STUDY_LINKS];
-        saveStudyLinks();
+        state.studyLinks = state.isBme ? [...DEFAULT_STUDY_LINKS] : [];
+        if (state.isBme) saveStudyLinks();
       }
 
       // Auto-migrate legacy uploaded files into 'f-uploads' folder
@@ -606,24 +612,24 @@
 
       // Curriculum — load saved or default
       const savedCurriculum = localStorage.getItem('sd-curriculum');
-      if (savedCurriculum) {
+      if (savedCurriculum !== null) {
         try {
           const parsed = JSON.parse(savedCurriculum);
-          if (Array.isArray(parsed) && parsed.length > 0) {
+          if (Array.isArray(parsed)) {
             state.curriculum = parsed;
           } else {
-            state.curriculum = JSON.parse(JSON.stringify(DEFAULT_CURRICULUM));
+            state.curriculum = state.isBme ? JSON.parse(JSON.stringify(DEFAULT_CURRICULUM)) : [];
           }
         } catch (_) {
-          state.curriculum = JSON.parse(JSON.stringify(DEFAULT_CURRICULUM));
+          state.curriculum = state.isBme ? JSON.parse(JSON.stringify(DEFAULT_CURRICULUM)) : [];
         }
       } else {
-        state.curriculum = JSON.parse(JSON.stringify(DEFAULT_CURRICULUM));
+        state.curriculum = state.isBme ? JSON.parse(JSON.stringify(DEFAULT_CURRICULUM)) : [];
       }
     } catch (e) {
-      state.curriculum = JSON.parse(JSON.stringify(DEFAULT_CURRICULUM));
-      state.studyFolders = [...DEFAULT_STUDY_FOLDERS];
-      state.studyLinks = [...DEFAULT_STUDY_LINKS];
+      state.curriculum = state.isBme ? JSON.parse(JSON.stringify(DEFAULT_CURRICULUM)) : [];
+      state.studyFolders = state.isBme ? [...DEFAULT_STUDY_FOLDERS] : [];
+      state.studyLinks = state.isBme ? [...DEFAULT_STUDY_LINKS] : [];
       state.courseGrades = {};
     }
   }
@@ -1680,7 +1686,22 @@
     }
 
     let contentHtml = '';
-    if (isList) {
+    if (curriculumCourses.length === 0) {
+      contentHtml = `
+        <div style="padding:48px 24px;text-align:center;background:var(--bg-2);border-radius:var(--r-l);border:1px dashed var(--sep);margin:1.5rem 0">
+          <div style="font-size:42px;margin-bottom:12px">📚</div>
+          <h3 style="font-size:16px;font-weight:700;color:var(--label);margin-bottom:6px">ยังไม่มีรายวิชาในหลักสูตร</h3>
+          <p style="font-size:13px;color:var(--label-2);max-width:460px;margin:0 auto 16px">
+            คุณสามารถเพิ่มวิชาเรียนของคุณเอง หรือกดปุ่มโหลดหลักสูตร BME Mahidol (10 วิชา) ได้ตลอดเวลา
+          </p>
+          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+            <button class="btn btn-primary" id="btn-load-bme-curriculum" style="font-size:12.5px;padding:8px 18px">
+              🧬 โหลดหลักสูตร BME Mahidol (10 วิชา)
+            </button>
+          </div>
+        </div>
+      `;
+    } else if (isList) {
       // List Mode
       contentHtml = `
         <div class="curriculum-list-wrap">
@@ -1752,11 +1773,14 @@
       `;
     }
 
+    const curriculumHeaderTitle = state.isBme !== false ? 'หลักสูตรวิศวกรรมชีวแพทย์ (BME Mahidol 2026)' : 'โครงสร้างหลักสูตรและรายวิชา (Curriculum)';
+    const curriculumHeaderDesc = state.isBme !== false ? 'โครงสร้างรายวิชาปีที่ 1 ภาคเรียนที่ 1 รวมทั้งสิ้น 21 หน่วยกิต (คลิกการ์ดเพื่อดูรายละเอียด/แก้ไข)' : 'จัดการรายวิชา หน่วยกิต และจำลองผลการเรียน (คลิกการ์ดเพื่อดูรายละเอียด/แก้ไข)';
+
     container.innerHTML = `
       <div class="curriculum-header-row" style="margin-bottom:1.25rem">
         <div>
-          <h2 style="font-family:var(--font-serif);font-size:1.6rem;font-weight:700;margin-bottom:4px">หลักสูตรวิศวกรรมชีวแพทย์ (BME Mahidol 2026)</h2>
-          <p style="font-size:13.5px;color:var(--label-2)">โครงสร้างรายวิชาปีที่ 1 ภาคเรียนที่ 1 รวมทั้งสิ้น 21 หน่วยกิต (คลิกการ์ดเพื่อดูรายละเอียด/แก้ไข)</p>
+          <h2 style="font-family:var(--font-serif);font-size:1.6rem;font-weight:700;margin-bottom:4px">${curriculumHeaderTitle}</h2>
+          <p style="font-size:13.5px;color:var(--label-2)">${curriculumHeaderDesc}</p>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <div class="view-mode-toggle" aria-label="รูปแบบการแสดงผล">
@@ -1808,6 +1832,23 @@
 
       ${contentHtml}
     `;
+
+    document.getElementById('btn-load-bme-curriculum')?.addEventListener('click', () => {
+      state.isBme = true;
+      localStorage.setItem('sd-is-bme', 'true');
+      state.curriculum = JSON.parse(JSON.stringify(DEFAULT_CURRICULUM));
+      saveCurriculum();
+      if (!state.studyFolders || state.studyFolders.length === 0) {
+        state.studyFolders = [...DEFAULT_STUDY_FOLDERS];
+        localStorage.setItem('sd-study-folders', JSON.stringify(state.studyFolders));
+      }
+      if (!state.studyLinks || state.studyLinks.length === 0) {
+        state.studyLinks = [...DEFAULT_STUDY_LINKS];
+        saveStudyLinks();
+      }
+      showToast('🧬 โหลดหลักสูตรและคลัง BME เรียบร้อย!', 'success');
+      renderCurriculumView();
+    });
 
     // Attach switch listener
     container.querySelectorAll('.view-mode-btn').forEach(btn => {
@@ -2098,11 +2139,15 @@
         </div>
       `;
 
+    const studyHeaderDesc = state.isBme !== false
+      ? 'คลังเอกสาร ชีทสรุป Google Classroom และคู่มือ BME พร้อมระบบโฟลเดอร์'
+      : 'คลังเอกสาร ชีทสรุป และไฟล์ส่วนตัวของคุณ พร้อมระบบโฟลเดอร์';
+
     container.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.25rem;flex-wrap:wrap;gap:1rem">
         <div>
           <h2 style="font-family:var(--font-serif);font-size:1.6rem;font-weight:700;margin-bottom:4px">Study Resources &amp; Documents</h2>
-          <p style="font-size:13px;color:var(--label-2)">คลังเอกสาร ชีทสรุป Google Classroom และคู่มือ BME พร้อมระบบโฟลเดอร์</p>
+          <p style="font-size:13px;color:var(--label-2)">${studyHeaderDesc}</p>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <!-- Grid / List toggle -->
@@ -2137,9 +2182,20 @@
 
       <!-- File Cards (Grid or List) -->
       ${filteredLinks.length === 0 ? `
-        <div style="padding:3rem;text-align:center;color:var(--label-3);background:var(--bg-2);border-radius:var(--r-l);border:1px dashed var(--sep)">
-          <div style="font-weight:600;font-size:14px;color:var(--label-2)">ไม่มีเอกสารในโฟลเดอร์นี้</div>
-          <p style="font-size:12.5px;margin-top:4px">กดปุ่ม + เพิ่มเอกสาร เพื่อเพิ่มเอกสารใหม่</p>
+        <div style="padding:3.5rem 1.5rem;text-align:center;color:var(--label-3);background:var(--bg-2);border-radius:var(--r-l);border:1px dashed var(--sep)">
+          <div style="font-size:36px;margin-bottom:8px">📂</div>
+          <div style="font-weight:700;font-size:15px;color:var(--label)">ยังไม่มีเอกสารในคลัง</div>
+          <p style="font-size:12.5px;color:var(--label-2);margin-top:4px;margin-bottom:16px">กดปุ่ม "+ เพิ่มเอกสาร" เพื่ออัปโหลดไฟล์ PDF, รูปภาพ หรือเพิ่มลิงก์เอกสาร</p>
+          <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+            <button class="btn btn-primary" onclick="document.getElementById('add-resource-btn')?.click()" style="font-size:12px;padding:6px 14px">
+              <span>+</span> เพิ่มเอกสารแรก
+            </button>
+            ${state.isBme === false ? `
+              <button class="btn btn-secondary" id="btn-load-bme-study" style="font-size:12px;padding:6px 14px">
+                🧬 โหลดชีทและโฟลเดอร์ BME
+              </button>
+            ` : ''}
+          </div>
         </div>
       ` : isListMode ? `
         <div class="study-list-view" id="study-cards-grid">
@@ -2206,6 +2262,17 @@
         </div>
       `}
     `;
+
+    document.getElementById('btn-load-bme-study')?.addEventListener('click', () => {
+      state.isBme = true;
+      localStorage.setItem('sd-is-bme', 'true');
+      state.studyFolders = [...DEFAULT_STUDY_FOLDERS];
+      state.studyLinks = [...DEFAULT_STUDY_LINKS];
+      localStorage.setItem('sd-study-folders', JSON.stringify(state.studyFolders));
+      saveStudyLinks();
+      showToast('🧬 โหลดคลังเอกสาร BME เรียบร้อย!', 'success');
+      renderStudyView();
+    });
 
     // Attach Folder Layout Toggle
     
@@ -2532,6 +2599,8 @@
     const tabLogin = document.getElementById('auth-tab-login');
     const tabRegister = document.getElementById('auth-tab-register');
     const nameGroup = document.getElementById('auth-name-group');
+    const bmeGroup = document.getElementById('auth-bme-group');
+    const isBmeCheckbox = document.getElementById('auth-is-bme-checkbox');
     const submitBtn = document.getElementById('auth-submit-btn');
 
     const usernameInp = document.getElementById('auth-username-input');
@@ -2552,7 +2621,7 @@
       if (displayNameEl) displayNameEl.textContent = user.displayName || user.username;
       if (usernameTagEl) usernameTagEl.textContent = '@' + user.username;
       if (roleBadgeEl) {
-        roleBadgeEl.textContent = user.role === 'admin' ? '👑 MASTER ADMIN' : '👤 STUDENT';
+        roleBadgeEl.textContent = user.role === 'admin' ? '👑 MASTER ADMIN' : (user.isBme !== false ? '🧬 BME STUDENT' : '👤 STUDENT');
         roleBadgeEl.style.background = user.role === 'admin' ? 'var(--accent-bg)' : 'rgba(59,130,246,0.12)';
         roleBadgeEl.style.color = user.role === 'admin' ? 'var(--accent)' : '#2563eb';
       }
@@ -2583,11 +2652,13 @@
           if (tabLogin) { tabLogin.style.background = 'var(--accent-bg)'; tabLogin.style.color = 'var(--accent)'; tabLogin.style.fontWeight = '700'; }
           if (tabRegister) { tabRegister.style.background = 'transparent'; tabRegister.style.color = 'var(--label-2)'; tabRegister.style.fontWeight = '600'; }
           if (nameGroup) nameGroup.style.display = 'none';
+          if (bmeGroup) bmeGroup.style.display = 'none';
           if (submitBtn) submitBtn.textContent = 'เข้าสู่ระบบ';
         } else {
           if (tabRegister) { tabRegister.style.background = 'var(--accent-bg)'; tabRegister.style.color = 'var(--accent)'; tabRegister.style.fontWeight = '700'; }
           if (tabLogin) { tabLogin.style.background = 'transparent'; tabLogin.style.color = 'var(--label-2)'; tabLogin.style.fontWeight = '600'; }
           if (nameGroup) nameGroup.style.display = 'block';
+          if (bmeGroup) bmeGroup.style.display = 'block';
           if (submitBtn) submitBtn.textContent = 'สร้างบัญชี & เริ่มใช้งาน';
         }
       }
@@ -2624,6 +2695,7 @@
                 if (state.currentTopView === 'study') renderStudyView();
                 if (state.currentTopView === 'dashboard') renderDashboardCurrentView();
                 if (state.currentTopView === 'curriculum') renderCurriculumView();
+                if (state.currentTopView === 'graph') renderGraphView();
               }
 
               // Start background auto sync
@@ -2636,9 +2708,12 @@
               showToast(`⚠️ ${res.error}`, 'warning');
             }
           } else {
-            const res = await CloudSync.register(username, password, displayName);
+            const isBme = isBmeCheckbox ? isBmeCheckbox.checked : true;
+            const res = await CloudSync.register(username, password, displayName, isBme);
             if (res.ok) {
               closeModal('auth-modal');
+              state.isBme = isBme;
+              localStorage.setItem('sd-is-bme', isBme ? 'true' : 'false');
               showToast(`🎉 สมัครสมาชิกสำเร็จ ยินดีต้อนรับ ${res.user.displayName}!`, 'success');
               
               // Pull initial template
@@ -2649,6 +2724,7 @@
                 if (state.currentTopView === 'study') renderStudyView();
                 if (state.currentTopView === 'dashboard') renderDashboardCurrentView();
                 if (state.currentTopView === 'curriculum') renderCurriculumView();
+                if (state.currentTopView === 'graph') renderGraphView();
               }
 
               // Start background auto sync
@@ -3956,6 +4032,43 @@
   function renderGraphView() {
     const container = document.getElementById('view-egbe-graph');
     if (!container) return;
+
+    if (state.isBme === false) {
+      container.innerHTML = `
+        <div style="padding:60px 24px;text-align:center;background:var(--bg-2);border-radius:var(--r-l);border:1px dashed var(--sep);max-width:680px;margin:2rem auto">
+          <div style="font-size:48px;margin-bottom:14px">🗺️</div>
+          <h2 style="font-family:var(--font-serif);font-size:1.6rem;font-weight:700;margin-bottom:8px">BME Prerequisite Road Map</h2>
+          <p style="font-size:13.5px;color:var(--label-2);line-height:1.6;margin-bottom:20px">
+            แผนผังเส้นทางวิชาต่อเนื่อง (Prerequisite) นี้เป็นโครงสร้างเฉพาะของหลักสูตรวิศวกรรมชีวแพทย์ (BME Mahidol)<br>
+            เนื่องจากคุณลงทะเบียนในฐานะผู้ใช้งานทั่วไป ระบบจึงเว้นว่างไว้เพื่อความเป็นส่วนตัวของคุณ
+          </p>
+          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+            <button class="btn btn-primary" id="btn-graph-enable-bme" style="font-size:12.5px;padding:8px 18px">
+              🧬 เปิดใช้งานโครงสร้างวิชา BME Road Map
+            </button>
+          </div>
+        </div>
+      `;
+      document.getElementById('btn-graph-enable-bme')?.addEventListener('click', () => {
+        state.isBme = true;
+        localStorage.setItem('sd-is-bme', 'true');
+        if (!state.curriculum || state.curriculum.length === 0) {
+          state.curriculum = JSON.parse(JSON.stringify(DEFAULT_CURRICULUM));
+          saveCurriculum();
+        }
+        if (!state.studyFolders || state.studyFolders.length === 0) {
+          state.studyFolders = [...DEFAULT_STUDY_FOLDERS];
+          localStorage.setItem('sd-study-folders', JSON.stringify(state.studyFolders));
+        }
+        if (!state.studyLinks || state.studyLinks.length === 0) {
+          state.studyLinks = [...DEFAULT_STUDY_LINKS];
+          saveStudyLinks();
+        }
+        showToast('🧬 เปิดใช้งานแผนผังและหลักสูตร BME เรียบร้อย!', 'success');
+        renderGraphView();
+      });
+      return;
+    }
 
     const currentPillar = graphState.filterPillar || 'all';
     const query = (graphState.searchQuery || '').toLowerCase().trim();

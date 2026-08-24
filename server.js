@@ -4696,6 +4696,7 @@ const server = http.createServer(async (req, res) => {
       const passwordHash = hashPassword(data.password, salt);
       const isFirstUser = Object.keys(store._users || {}).length === 0;
       const role = isFirstUser ? 'admin' : 'student';
+      const isBme = data.isBme !== false && data.isBme !== 'false';
       const userId = 'u_' + username;
       const calendarKey = generateCalendarKey();
 
@@ -4706,6 +4707,7 @@ const server = http.createServer(async (req, res) => {
         passwordHash,
         salt,
         role,
+        isBme: !!isBme,
         calendarKey,
         createdAt: new Date().toISOString()
       };
@@ -4718,16 +4720,25 @@ const server = http.createServer(async (req, res) => {
       store._calKeys[calendarKey] = userId;
 
       const isWitchaya = username.toLowerCase() === 'witchaya';
-      const masterTemplate = isWitchaya ? ((await dbAdapter.getUserData('1')) || (await dbAdapter.getUserData('u_admin')) || store['1'] || {}) : {};
+      const masterTemplate = (isWitchaya || isBme) ? ((await dbAdapter.getUserData('1')) || (await dbAdapter.getUserData('u_admin')) || store['1'] || {}) : {};
+      const defaultBmeFolders = [
+        { id: 'f-classroom', name: '📚 Google Classroom', icon: '🏫', count: 0 },
+        { id: 'f-drive',     name: '📁 Google Drive รวมชีท', icon: '☁️', count: 0 },
+        { id: 'f-handbook',  name: '📖 คู่มือ BME & มหิดล', icon: '📘', count: 0 },
+        { id: 'f-notes',     name: '📝 บันทึกสรุป (Notes)', icon: '📌', count: 0 },
+        { id: 'f-uploads',   name: '📤 ไฟล์อัปโหลด (Uploads)', icon: '📂', count: 0 }
+      ];
+
       const initialUserData = {
         version: 1,
         updatedAt: new Date().toISOString(),
+        isBme: !!isBme,
         checklist: {},
         subjects: {},
         customBlocks: {},
-        curriculum: isWitchaya ? (masterTemplate.curriculum || DEFAULT_BME_CURRICULUM || []) : [],
-        studyFolders: isWitchaya ? (masterTemplate.studyFolders || []) : [],
-        studyLinks: isWitchaya ? ((masterTemplate.studyLinks || []).filter(l => l && l.isShared !== false)) : [],
+        curriculum: isBme ? (masterTemplate.curriculum || DEFAULT_BME_CURRICULUM || []) : [],
+        studyFolders: isBme ? (masterTemplate.studyFolders || defaultBmeFolders) : [],
+        studyLinks: isBme ? ((masterTemplate.studyLinks && masterTemplate.studyLinks.length > 0) ? masterTemplate.studyLinks.filter(l => l && l.isShared !== false) : DEFAULT_BME_STUDY_LINKS) : [],
         files: {}
       };
 
@@ -4737,13 +4748,13 @@ const server = http.createServer(async (req, res) => {
       // 2. Create session with 30-day expiry
       const token = generateToken();
       const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-      store._sessions[token] = { userId, username, role, expiresAt };
+      store._sessions[token] = { userId, username, role, isBme: !!isBme, expiresAt };
 
       // 3. Save all users & sessions directly into Supabase PostgreSQL
       await dbAdapter.saveSystemAuth();
       saveStore();
 
-      console.log(`✅ New user registered & saved permanently to Supabase: ${username} (${role})`);
+      console.log(`✅ New user registered & saved permanently to Supabase: ${username} (${role}, isBme=${isBme})`);
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
@@ -4754,6 +4765,7 @@ const server = http.createServer(async (req, res) => {
           username: user.username,
           displayName: user.displayName,
           role: user.role,
+          isBme: user.isBme,
           calendarKey: user.calendarKey
         }
       }));
