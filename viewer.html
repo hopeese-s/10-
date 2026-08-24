@@ -254,7 +254,11 @@
         loadingEl.style.display = 'none';
         contentEl.innerHTML = `
           <div style="display:flex;flex-direction:column;align-items:center;padding:20px;max-width:100%">
-            <img src="${escHtml(pdfSourceUrl || url)}" alt="${escHtml(title)}" style="max-width:100%;height:auto;max-height:85vh;object-fit:contain;border-radius:var(--r-m);box-shadow:var(--shadow-3)" />
+            <img src="${escHtml(pdfSourceUrl || url)}" alt="${escHtml(title)}" style="max-width:100%;height:auto;max-height:78vh;object-fit:contain;border-radius:var(--r-m);box-shadow:var(--shadow-3)" />
+            <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;justify-content:center">
+              <a href="${escHtml(pdfSourceUrl || url)}" download="${escHtml(title || 'image')}" class="btn btn-primary" style="padding:8px 20px;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:6px;text-decoration:none;border-radius:var(--r-pill)">📥 ดาวน์โหลดรูปภาพ</a>
+              <a href="${escHtml(pdfSourceUrl || url)}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="padding:8px 18px;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px;text-decoration:none;border-radius:var(--r-pill)">🔍 ดูภาพต้นฉบับ ↗</a>
+            </div>
           </div>
         `;
         return;

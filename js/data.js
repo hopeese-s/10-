@@ -216,6 +216,7 @@ function getDayKey(jsDay) {
 // Study Resources Folders & Default Links
 // ============================================================
 const DEFAULT_STUDY_FOLDERS = [
+  { id: 'f-uploads', name: '📤 ไฟล์ที่อัปโหลด (Uploads)', icon: '📤' },
   { id: 'f-handbook', name: '📘 คู่มือ & ตารางเรียนจำลอง', icon: '📘' },
   { id: 'f-classroom', name: '🏫 Google Classroom รายวิชา', icon: '🏫' },
   { id: 'f-drive', name: '📂 Google Drive ชีท & โค้ด', icon: '📂' },

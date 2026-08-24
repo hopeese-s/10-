@@ -321,6 +321,14 @@
     const hash = (window.location.hash || '').replace('#', '').toLowerCase().trim();
     const targetView = urlParams.get('view') || hash || 'home';
     const targetSubview = urlParams.get('subview');
+    const targetFolder = urlParams.get('folder');
+    const previewFileId = urlParams.get('preview') || urlParams.get('fileId') || urlParams.get('file');
+
+    if (targetFolder) {
+      state.selectedFolderId = targetFolder;
+      localStorage.setItem('sd-selected-folder', targetFolder);
+      localStorage.setItem('sd-study-active-folder', targetFolder);
+    }
 
     if (['home', 'dashboard', 'curriculum', 'study', 'graph'].includes(targetView)) {
       switchTopView(targetView);
@@ -332,6 +340,14 @@
       switchDashboardView(targetView);
     } else {
       switchTopView('home');
+    }
+
+    // Auto-open file preview if specified in URL query
+    if (previewFileId && state.studyLinks && state.studyLinks.length > 0) {
+      const match = state.studyLinks.find(l => l.id === previewFileId || (l.url && l.url.includes(previewFileId)));
+      if (match) {
+        setTimeout(() => openResourcePreview(match), 350);
+      }
     }
 
     window.addEventListener('hashchange', () => {
@@ -458,6 +474,13 @@
     // Folders: take cloud version if non-empty, else keep local
     if (cloudData.studyFolders && Array.isArray(cloudData.studyFolders) && cloudData.studyFolders.length > 0) {
       state.studyFolders = cloudData.studyFolders;
+      const existingFolderIds = new Set(state.studyFolders.map(f => f.id));
+      DEFAULT_STUDY_FOLDERS.forEach((df, idx) => {
+        if (!existingFolderIds.has(df.id)) {
+          state.studyFolders.splice(idx, 0, df);
+          existingFolderIds.add(df.id);
+        }
+      });
       localStorage.setItem('sd-study-folders', JSON.stringify(state.studyFolders));
     }
 
@@ -481,7 +504,7 @@
             type: isPdf ? 'pdf' : isImg ? 'image' : 'file',
             url: f.url,
             desc: `บันทึกเมื่อ ${f.uploadedAt ? new Date(f.uploadedAt).toLocaleString('th-TH') : 'ก่อนหน้า'}`,
-            folderId: 'f-notes',
+            folderId: 'f-uploads',
             createdAt: f.uploadedAt || new Date().toISOString()
           });
           existingUrls.add(f.url);
@@ -514,10 +537,24 @@
       // Study Folders
       const savedFolders = localStorage.getItem('sd-study-folders');
       if (savedFolders) {
-        state.studyFolders = JSON.parse(savedFolders);
+        try {
+          state.studyFolders = JSON.parse(savedFolders);
+        } catch (_) {
+          state.studyFolders = [...DEFAULT_STUDY_FOLDERS];
+        }
       } else {
         state.studyFolders = [...DEFAULT_STUDY_FOLDERS];
       }
+      
+      if (!Array.isArray(state.studyFolders)) state.studyFolders = [...DEFAULT_STUDY_FOLDERS];
+      const existingFolderIds = new Set(state.studyFolders.map(f => f.id));
+      DEFAULT_STUDY_FOLDERS.forEach((df, idx) => {
+        if (!existingFolderIds.has(df.id)) {
+          state.studyFolders.splice(idx, 0, df);
+          existingFolderIds.add(df.id);
+        }
+      });
+      localStorage.setItem('sd-study-folders', JSON.stringify(state.studyFolders));
       state.selectedFolderId = localStorage.getItem('sd-selected-folder') || 'all';
 
       // Study Links
@@ -538,6 +575,25 @@
         state.studyLinks = [...DEFAULT_STUDY_LINKS];
         saveStudyLinks();
       }
+
+      // Auto-migrate legacy uploaded files into 'f-uploads' folder
+      let linksMigrated = false;
+      state.studyLinks.forEach(l => {
+        if (l && (!l.folderId || l.folderId === 'f-notes') && (
+          (l.id && String(l.id).startsWith('file-')) ||
+          (l.url && String(l.url).includes('/uploads/')) ||
+          (l.sub && (String(l.sub).includes('Upload') || String(l.sub).includes('Cloud Vault'))) ||
+          l.type === 'image' ||
+          l.type === 'file'
+        )) {
+          l.folderId = 'f-uploads';
+          linksMigrated = true;
+        }
+      });
+      if (linksMigrated) {
+        saveStudyLinks();
+      }
+
       state.curriculumViewMode = localStorage.getItem('sd-curriculum-mode') || 'grid';
 
       // Curriculum — load saved or default
@@ -3220,7 +3276,7 @@
 
     if (folderSel) {
       folderSel.innerHTML = state.studyFolders.map(f => `
-        <option value="${f.id}" ${state.selectedFolderId === f.id ? 'selected' : ''}>${escHtml(f.name)}</option>
+        <option value="${f.id}" ${(state.selectedFolderId === f.id || (state.selectedFolderId === 'all' && f.id === 'f-uploads')) ? 'selected' : ''}>${escHtml(f.name)}</option>
       `).join('');
     }
 
@@ -3228,7 +3284,7 @@
     if (saveBtn) {
       saveBtn.onclick = async () => {
         const title = titleInp?.value.trim();
-        const folderId = folderSel?.value || (state.selectedFolderId !== 'all' ? state.selectedFolderId : 'f-notes');
+        const folderId = folderSel?.value || (state.selectedFolderId !== 'all' ? state.selectedFolderId : (currentUploadMode === 'file' ? 'f-uploads' : 'f-notes'));
         const desc = descInp?.value.trim();
 
         if (!title) {
@@ -3805,17 +3861,19 @@
       body.innerHTML = '';
 
       const isPdfFile = (item.type === 'pdf' || (fileUrl && (fileUrl.endsWith('.pdf') || fileUrl.includes('.pdf') || fileUrl.startsWith('data:application/pdf') || (item.type === 'local' && !fileUrl.startsWith('data:image/')))));
-      const isImageFile = (item.type === 'image' || (fileUrl && (fileUrl.match(/\.(png|jpe?g|gif|webp|svg)$/i) || fileUrl.startsWith('data:image/'))));
+      const isImageFile = (item.type === 'image' || (fileUrl && (fileUrl.match(/\.(png|jpe?g|gif|webp|svg)(\?.*)?$/i) || fileUrl.startsWith('data:image/'))));
 
       if (isPdfFile && fileUrl) {
         // Multi-page PDF rendering via PDF.js (works on iPad, iPhone, PC)
         renderPdfWithPdfJs(fileUrl, body, item.title);
       } else if (isImageFile && fileUrl) {
+        const resolvedUrl = (fileUrl.startsWith('/') && !fileUrl.startsWith('//')) ? `${window.location.origin}${fileUrl}` : fileUrl;
         body.innerHTML = `
           <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;min-height:300px;max-height:calc(90vh - 130px);overflow:auto">
-            <img src="${escHtml(fileUrl)}" alt="${escHtml(item.title)}" style="max-width:100%;height:auto;max-height:75vh;object-fit:contain;border-radius:var(--r-m);box-shadow:var(--shadow-2)" />
-            <div style="margin-top:12px;display:flex;gap:8px">
-              <a href="${escHtml(fileUrl)}" target="_blank" class="btn btn-secondary" style="font-size:12px;padding:6px 14px;text-decoration:none">🔍 ดูภาพขนาดเต็ม</a>
+            <img src="${escHtml(resolvedUrl)}" alt="${escHtml(item.title)}" style="max-width:100%;height:auto;max-height:75vh;object-fit:contain;border-radius:var(--r-m);box-shadow:var(--shadow-2)" />
+            <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
+              <a href="${escHtml(resolvedUrl)}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="font-size:12.5px;padding:8px 18px;text-decoration:none;border-radius:var(--r-pill);font-weight:600">🔍 ดูภาพขนาดเต็ม ↗</a>
+              <a href="${escHtml(resolvedUrl)}" download="${escHtml(item.title || 'image')}" class="btn btn-primary" style="font-size:12.5px;padding:8px 18px;text-decoration:none;border-radius:var(--r-pill);font-weight:700">📥 ดาวน์โหลดรูปภาพ</a>
             </div>
           </div>`;
       } else {

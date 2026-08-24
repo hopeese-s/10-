@@ -908,7 +908,7 @@ async function saveMediaFileToStorage(buffer, originalFilename, ext, contentType
     type: fileType,
     url: `/uploads/${filename}`,
     desc: `อัปโหลดผ่าน LINE Bot เมื่อ ${new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}`,
-    folderId: 'f-notes',
+    folderId: 'f-uploads',
     createdAt: new Date().toISOString()
   };
   ownerData.studyLinks.unshift(studyEntry);
@@ -1376,7 +1376,7 @@ function buildScheduleFlex(dayTitle, dateStr, classesList, routineList) {
             action: {
               type: 'uri',
               label: '🌐 เปิด E-Calendar Dashboard',
-              uri: safeLineUri(APP_BASE_URL)
+              uri: safeLineUri(`${APP_BASE_URL}/?view=dashboard`)
             },
             style: 'primary',
             color: '#C45A1B',
@@ -1473,7 +1473,7 @@ function buildCourseProfileFlex(course) {
     action: {
       type: 'uri',
       label: '🌐 เปิดดูชีท & เอกสาร',
-      uri: safeLineUri(APP_BASE_URL)
+      uri: safeLineUri(`${APP_BASE_URL}/?view=study`)
     },
     style: 'secondary',
     height: 'sm'
@@ -1728,7 +1728,7 @@ function buildClassroomDirectoryFlex(curriculum, studyLinks) {
             action: {
               type: 'uri',
               label: '🌐 คลังความรู้ & ไฟล์ชีททั้งหมด',
-              uri: APP_BASE_URL
+              uri: safeLineUri(`${APP_BASE_URL}/?view=study`)
             },
             style: 'secondary',
             height: 'sm'
@@ -2324,7 +2324,7 @@ function buildDailyDigestFlex(type, data) {
             action: {
               type: 'uri',
               label: '📅 เปิดดูตารางแบบเต็ม',
-              uri: safeLineUri(liffUrl)
+              uri: safeLineUri(`${liffUrl}${liffUrl.includes('?') ? '&' : '?'}view=dashboard`)
             },
             style: 'primary',
             color: headerBg,
@@ -2535,7 +2535,7 @@ function buildAiEventCreatedFlex(events, summary = '', sourceLabel = 'AI Assista
             action: {
               type: 'uri',
               label: '📅 เปิดดูในตาราง E-Calendar',
-              uri: safeLineUri(liffUrl)
+              uri: safeLineUri(`${liffUrl}${liffUrl.includes('?') ? '&' : '?'}view=dashboard`)
             },
             style: 'primary',
             color: '#7C3AED',
@@ -2549,10 +2549,12 @@ function buildAiEventCreatedFlex(events, summary = '', sourceLabel = 'AI Assista
 
 function buildAiSolutionFlex(aiResult, fileRecord) {
   const isPdf = fileRecord && fileRecord.name && fileRecord.name.toLowerCase().endsWith('.pdf');
+  const isImg = fileRecord && fileRecord.name && fileRecord.name.match(/\.(png|jpe?g|webp|gif)$/i);
   const rawFileUrl = fileRecord ? `${APP_BASE_URL}${fileRecord.url}` : APP_BASE_URL;
-  const fileUrl = (fileRecord && isPdf)
-    ? `${APP_BASE_URL}/viewer.html?url=${encodeURIComponent(rawFileUrl)}&title=${encodeURIComponent(fileRecord.name)}&type=pdf`
+  const fileUrl = (fileRecord && (isPdf || isImg))
+    ? `${APP_BASE_URL}/viewer.html?url=${encodeURIComponent(rawFileUrl)}&title=${encodeURIComponent(fileRecord.name)}&type=${isPdf ? 'pdf' : 'image'}`
     : rawFileUrl;
+  const studyFolderUrl = `${APP_BASE_URL}/?view=study&folder=f-uploads`;
   const bodyContents = [];
 
   if (aiResult.summary || aiResult.solution || aiResult.text) {
@@ -2655,8 +2657,8 @@ function buildAiSolutionFlex(aiResult, fileRecord) {
         layout: 'horizontal',
         spacing: 'sm',
         contents: [
-          { type: 'button', action: { type: 'uri', label: '📂 ดูไฟล์บนเว็บ', uri: safeLineUri(fileUrl) }, style: 'primary', color: '#7C3AED', height: 'sm' },
-          { type: 'button', action: { type: 'message', label: '📅 ตารางวันนี้', text: 'ตารางวันนี้' }, style: 'secondary', height: 'sm' }
+          { type: 'button', action: { type: 'uri', label: isImg ? '🖼️ ดูรูปภาพ' : '📂 ดูไฟล์บนเว็บ', uri: safeLineUri(fileUrl) }, style: 'primary', color: '#7C3AED', height: 'sm' },
+          { type: 'button', action: { type: 'uri', label: '📁 คลังไฟล์อัปโหลด', uri: safeLineUri(studyFolderUrl) }, style: 'secondary', height: 'sm' }
         ]
       }
     }
@@ -2665,10 +2667,12 @@ function buildAiSolutionFlex(aiResult, fileRecord) {
 
 function buildFileSavedFlex(fileRecord, aiSummary) {
   const isPdf = fileRecord && fileRecord.name && fileRecord.name.toLowerCase().endsWith('.pdf');
+  const isImg = fileRecord && fileRecord.name && fileRecord.name.match(/\.(png|jpe?g|webp|gif)$/i);
   const rawFileUrl = `${APP_BASE_URL}${fileRecord.url}`;
-  const fileUrl = isPdf
-    ? `${APP_BASE_URL}/viewer.html?url=${encodeURIComponent(rawFileUrl)}&title=${encodeURIComponent(fileRecord.name)}&type=pdf`
+  const fileUrl = (isPdf || isImg)
+    ? `${APP_BASE_URL}/viewer.html?url=${encodeURIComponent(rawFileUrl)}&title=${encodeURIComponent(fileRecord.name)}&type=${isPdf ? 'pdf' : 'image'}`
     : rawFileUrl;
+  const studyFolderUrl = `${APP_BASE_URL}/?view=study&folder=f-uploads`;
   const sizeKb = fileRecord.size ? `${(fileRecord.size / 1024).toFixed(1)} KB` : '';
 
   return {
@@ -2724,8 +2728,8 @@ function buildFileSavedFlex(fileRecord, aiSummary) {
         layout: 'horizontal',
         spacing: 'sm',
         contents: [
-          { type: 'button', action: { type: 'uri', label: '📖 เปิดดูไฟล์', uri: safeLineUri(fileUrl) }, style: 'primary', color: '#0284C7', height: 'sm' },
-          { type: 'button', action: { type: 'message', label: '📝 งานค้าง', text: 'งานค้าง' }, style: 'secondary', height: 'sm' }
+          { type: 'button', action: { type: 'uri', label: isImg ? '🖼️ เปิดดูรูปภาพ' : '📖 เปิดดูไฟล์', uri: safeLineUri(fileUrl) }, style: 'primary', color: '#0284C7', height: 'sm' },
+          { type: 'button', action: { type: 'uri', label: '📂 คลังไฟล์ที่อัปโหลด', uri: safeLineUri(studyFolderUrl) }, style: 'secondary', height: 'sm' }
         ]
       }
     }
@@ -3352,7 +3356,7 @@ function buildUserProfileFlex(user, taskCount = 0, noteCount = 0, webCalUrl = ''
         contents: [
           {
             type: 'button',
-            action: { type: 'uri', label: '🌐 เปิดเว็บ Dashboard', uri: APP_BASE_URL },
+            action: { type: 'uri', label: '🌐 เปิดเว็บ Dashboard', uri: safeLineUri(`${APP_BASE_URL}/?view=dashboard`) },
             style: 'primary',
             color: '#0F172A',
             height: 'sm'
@@ -3799,7 +3803,7 @@ function buildHelpMenuFlex() {
             spacing: 'sm',
             contents: [
               { type: 'button', action: { type: 'message', label: '💬 Sample Meeting', text: 'Meeting tomorrow 14:00' }, style: 'primary', color: '#7C3AED', height: 'sm' },
-              { type: 'button', action: { type: 'uri', label: '📅 Open E-Calen', uri: safeLineUri(liffUrl) }, style: 'secondary', height: 'sm' }
+              { type: 'button', action: { type: 'uri', label: '📅 Open E-Calen', uri: safeLineUri(`${liffUrl}${liffUrl.includes('?') ? '&' : '?'}view=dashboard`) }, style: 'secondary', height: 'sm' }
             ]
           }
         },
@@ -4297,7 +4301,7 @@ const server = http.createServer(async (req, res) => {
         type: fileType,
         url: fileUrl,
         desc: `อัปโหลดผ่านเว็บเมื่อ ${new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}`,
-        folderId: 'f-notes',
+        folderId: 'f-uploads',
         createdAt: new Date().toISOString()
       };
       ownerData.studyLinks.unshift(studyEntry);
