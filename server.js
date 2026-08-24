@@ -1451,12 +1451,16 @@ function buildScheduleFlex(dayTitle, dateStr, classesList, routineList) {
 function findCourseMatch(query, curriculum) {
   if (!query) return null;
   const q = query.toLowerCase().trim().replace(/^(วิชา|ห้อง|room)\s*/i, '');
-  const courses = curriculum || DEFAULT_BME_CURRICULUM;
+  const cleanQ = q.replace(/[\s\-_]+/g, '');
+  const courses = Array.isArray(curriculum) ? curriculum : DEFAULT_BME_CURRICULUM;
 
-  let found = courses.find(c => c.code.toLowerCase() === q);
+  let found = courses.find(c => (c.code || '').toLowerCase() === q || (c.code || '').toLowerCase().replace(/[\s\-_]+/g, '') === cleanQ);
   if (found) return found;
 
-  found = courses.find(c => c.code.toLowerCase().includes(q) || q.includes(c.code.toLowerCase()));
+  found = courses.find(c => {
+    const cleanCode = (c.code || '').toLowerCase().replace(/[\s\-_]+/g, '');
+    return cleanCode.includes(cleanQ) || cleanQ.includes(cleanCode);
+  });
   if (found) return found;
 
   const keywordMap = {
@@ -1490,12 +1494,19 @@ function findCourseMatch(query, curriculum) {
     'แล็ปฟิสิกส์': 'SCPY111',
     'phylab': 'SCPY111',
     'แล็ปเคมี': 'SCCH169',
-    'chemlab': 'SCCH169'
+    'chemlab': 'SCCH169',
+    'ชีววิทยา': 'SCBE101',
+    'scbe': 'SCBE101',
+    'prpr': 'PRPR102',
+    'laen': 'LAEN180',
+    'scin': 'SCIN102',
+    'scgi': 'SCGI103',
+    'scch189': 'SCCH189'
   };
 
   for (const [kw, code] of Object.entries(keywordMap)) {
     if (q.includes(kw)) {
-      const match = courses.find(c => c.code === code);
+      const match = courses.find(c => (c.code || '').toLowerCase().replace(/[\s\-_]+/g, '') === code.toLowerCase().replace(/[\s\-_]+/g, ''));
       if (match) return match;
     }
   }
@@ -1503,7 +1514,7 @@ function findCourseMatch(query, curriculum) {
   found = courses.find(c => c.room && c.room.toLowerCase().includes(q));
   if (found) return found;
 
-  found = courses.find(c => c.name.toLowerCase().includes(q));
+  found = courses.find(c => (c.name || '').toLowerCase().includes(q));
   return found || null;
 }
 
