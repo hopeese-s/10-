@@ -923,54 +923,95 @@ async function saveMediaFileToStorage(buffer, originalFilename, ext, contentType
 // ─── Google Gemini AI Client Helpers ─────────────────────────
 async function callGeminiApi(contents, systemInstruction = '') {
   if (!hasGemini) return null;
-  const models = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp'];
+  const models = [
+    'gemini-1.5-flash',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash-latest',
+    'gemini-2.0-flash-exp',
+    'gemini-1.5-pro',
+    'gemini-1.5-pro-latest',
+    'gemini-1.5-flash-8b'
+  ];
+
   for (const m of models) {
-    try {
-      const payload = {
-        contents,
-        generationConfig: {
-          temperature: 0.2,
-          maxOutputTokens: 2048,
-          responseMimeType: 'application/json'
-        }
-      };
-      if (systemInstruction) {
-        payload.systemInstruction = {
-          parts: [{ text: systemInstruction }]
-        };
-      }
-
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${GEMINI_API_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      if (!res.ok) {
-        const errText = await res.text();
-        console.warn(`⚠️ Gemini API error on model ${m} (HTTP ${res.status}):`, errText);
-        continue;
-      }
-
-      const json = await res.json();
-      const candidate = json.candidates && json.candidates[0];
-      const textOut = candidate && candidate.content && candidate.content.parts && candidate.content.parts[0] && candidate.content.parts[0].text;
-      if (!textOut) continue;
-
-      let cleaned = textOut.trim();
-      if (cleaned.startsWith('```json')) cleaned = cleaned.slice(7);
-      if (cleaned.startsWith('```')) cleaned = cleaned.slice(3);
-      if (cleaned.endsWith('```')) cleaned = cleaned.slice(0, -3);
-      cleaned = cleaned.trim();
-
+    // Attempt 1: with JSON responseMimeType
+    // Attempt 2: with standard text response (fallback if JSON mode is unsupported on image/audio)
+    for (const withJsonMode of [true, false]) {
       try {
-        return JSON.parse(cleaned);
-      } catch (pe) {
-        console.warn('⚠️ Gemini JSON parse warning, returning raw text structure');
-        return { summary: cleaned, title: 'AI Response', text: cleaned, solution: cleaned };
+        const payload = {
+          contents,
+          generationConfig: {
+            temperature: 0.2,
+            maxOutputTokens: 2048,
+            ...(withJsonMode ? { responseMimeType: 'application/json' } : {})
+          }
+        };
+        if (systemInstruction) {
+          payload.systemInstruction = {
+            parts: [{ text: systemInstruction }]
+          };
+        }
+
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${GEMINI_API_KEY}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          console.warn(`⚠️ Gemini API error on model ${m} (withJsonMode=${withJsonMode}, HTTP ${res.status}):`, errText);
+          if (withJsonMode && (res.status === 400 || errText.includes('response_mime_type') || errText.includes('responseMimeType') || errText.includes('Invalid JSON payload'))) {
+            continue; // Retry next attempt without responseMimeType!
+          }
+          break; // Move to next model
+        }
+
+        const json = await res.json();
+        const candidate = json.candidates && json.candidates[0];
+        if (!candidate || !candidate.content || !candidate.content.parts || !candidate.content.parts[0]) {
+          if (candidate && candidate.finishReason) {
+            console.warn(`⚠️ Gemini model ${m} finished with reason:`, candidate.finishReason);
+          }
+          continue;
+        }
+
+        const textOut = candidate.content.parts[0].text;
+        if (!textOut) continue;
+
+        let cleaned = textOut.trim();
+        if (cleaned.startsWith('```json')) cleaned = cleaned.slice(7);
+        else if (cleaned.startsWith('```')) cleaned = cleaned.slice(3);
+        if (cleaned.endsWith('```')) cleaned = cleaned.slice(0, -3);
+        cleaned = cleaned.trim();
+
+        // Extract JSON object if embedded in surrounding response
+        const firstBrace = cleaned.indexOf('{');
+        const lastBrace = cleaned.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace > firstBrace) {
+          try {
+            const parsed = JSON.parse(cleaned.substring(firstBrace, lastBrace + 1));
+            return parsed;
+          } catch (e) {
+            // continue
+          }
+        }
+
+        try {
+          return JSON.parse(cleaned);
+        } catch (pe) {
+          console.warn('⚠️ Gemini JSON parse warning, using text structure');
+          return {
+            type: 'general',
+            title: 'AI วิเคราะห์ข้อมูล',
+            summary: cleaned,
+            solution: cleaned,
+            text: cleaned
+          };
+        }
+      } catch (err) {
+        console.warn(`⚠️ Gemini API call failed on ${m} (withJsonMode=${withJsonMode}):`, err.message);
       }
-    } catch (err) {
-      console.warn(`⚠️ Gemini API call failed on ${m}:`, err.message);
     }
   }
   return null;
@@ -5101,7 +5142,12 @@ const server = http.createServer(async (req, res) => {
 
       const aiResult = await analyzeImageWithGemini(imageBuffer, 'image/jpeg');
       if (!aiResult) {
-        await sendLineReply(replyToken, `🖼️ บันทึกรูปภาพเข้าสู่คลังเอกสารแล้ว (${fileRecord.url})\n\n⚠️ AI ไม่สามารถวิเคราะห์รายละเอียดในภาพนี้ได้`);
+        await sendLineReply(replyToken, [
+          buildAiSolutionFlex({
+            title: '🖼️ บันทึกรูปภาพเข้าสู่คลังเอกสารแล้ว',
+            summary: 'บันทึกรูปภาพเข้าสู่คลังเอกสาร E-Calendar เรียบร้อยแล้ว สามารถกดปุ่ม "📂 ดูไฟล์บนเว็บ" ด้านล่างเพื่อเปิดดูรูปภาพได้ทันทีครับ\n\n💡 หากต้องการให้ AI สแกนโจทย์คำนวณหรืออ่านตาราง กรุณาลองส่งภาพที่มีความคมชัดและแสงสว่างเพียงพออีกครั้งครับ'
+          }, fileRecord)
+        ]);
         return;
       }
 
