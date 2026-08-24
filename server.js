@@ -766,7 +766,7 @@ async function sendLineReply(replyToken, messages) {
 async function sendLinePush(toUserId, messages) {
   if (!hasLine || !toUserId) {
     console.warn('⚠️ Cannot send LINE push: hasLine =', hasLine, 'toUserId =', Boolean(toUserId));
-    return false;
+    return { ok: false, status: 400, error: 'LINE_CHANNEL_ACCESS_TOKEN หรือ toUserId ไม่ถูกต้อง' };
   }
   try {
     const msgs = (Array.isArray(messages) ? messages : [messages]).map(m => typeof m === 'string' ? { type: 'text', text: m } : m);
@@ -781,11 +781,12 @@ async function sendLinePush(toUserId, messages) {
     if (!res.ok) {
       const errText = await res.text();
       console.error(`❌ LINE Push Error (HTTP ${res.status}):`, errText);
+      return { ok: false, status: res.status, error: errText };
     }
-    return res.ok;
+    return { ok: true, status: 200 };
   } catch (e) {
     console.error('❌ LINE sendLinePush exception:', e.message);
-    return false;
+    return { ok: false, status: 500, error: e.message };
   }
 }
 
@@ -5547,7 +5548,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const success = await sendLinePush(lineUserId, [
+      const pushResult = await sendLinePush(lineUserId, [
         buildClassReminderFlex({
           code: 'SCPY161',
           name: 'General Physics I (ทดสอบแจ้งเตือนผ่าน LINE)',
@@ -5558,12 +5559,16 @@ const server = http.createServer(async (req, res) => {
         }, 'อีก 15 นาที')
       ]);
 
-      if (success) {
+      if (pushResult && pushResult.ok) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, message: 'ส่งข้อความเข้า LINE เรียบร้อยแล้ว!' }));
       } else {
         res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'ส่งข้อความเข้า LINE ไม่สำเร็จ ตรวจสอบ Channel Access Token' }));
+        let errMsg = 'ส่งข้อความเข้า LINE ไม่สำเร็จ';
+        if (pushResult && pushResult.error) {
+          errMsg += ` (${pushResult.error})`;
+        }
+        res.end(JSON.stringify({ error: errMsg }));
       }
     });
     return;
