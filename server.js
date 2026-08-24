@@ -568,7 +568,7 @@ function formatIcsDateTime(dateStr, timeStr) {
   return cleanDate + 'T' + cleanTime;
 }
 
-// Generate RFC 5545 .ics Feed with real-time curriculum data
+// Generate RFC 5545 .ics Feed with real-time curriculum data adapted to each specific user
 async function generateIcsCalendar(userId, includeRoutines = false, includeStudy = true, includeClass = true) {
   const baseDates = {
     MO: '2026-08-17',
@@ -583,19 +583,32 @@ async function generateIcsCalendar(userId, includeRoutines = false, includeStudy
   const userObj = Object.values(store._users || {}).find(u => u.id === userId || (u.username && u.username.toLowerCase() === userId.toLowerCase()));
   const userCustom = (await dbAdapter.getUserData(userId)) || store[userId] || {};
   const customBlocks = userCustom.customBlocks || {};
-  const curriculum = (userCustom.curriculum && Array.isArray(userCustom.curriculum) && userCustom.curriculum.length > 0)
-    ? userCustom.curriculum
-    : DEFAULT_BME_CURRICULUM;
+  
+  // Determine if this user is a BME student
+  const isBme = userCustom.isBme !== undefined
+    ? !!userCustom.isBme
+    : (userObj ? userObj.isBme !== false : (userId === '1' || userId === 'default'));
+
+  // User curriculum: use their custom curriculum if set, or if BME and unset fallback to DEFAULT_BME_CURRICULUM, or empty [] for non-BME
+  let curriculum = [];
+  if (userCustom.curriculum && Array.isArray(userCustom.curriculum)) {
+    curriculum = userCustom.curriculum;
+  } else if (isBme) {
+    curriculum = DEFAULT_BME_CURRICULUM;
+  }
+
+  const calName = userObj ? `E-Calendar (${userObj.displayName || userObj.username})` : 'E-Calendar (Study & Schedule)';
+  const calDesc = isBme ? 'BME Mahidol 2026 Study Blocks and Class Schedule' : 'Personal Study Blocks and Class Schedule';
 
   let ics = [];
   ics.push('BEGIN:VCALENDAR');
   ics.push('VERSION:2.0');
-  ics.push('PRODID:-//E-Calendar//BME Study Dashboard 2026//TH');
+  ics.push('PRODID:-//E-Calendar//Study Dashboard 2026//TH');
   ics.push('CALSCALE:GREGORIAN');
   ics.push('METHOD:PUBLISH');
-  ics.push('X-WR-CALNAME:E-Calendar (BME Study & Schedule)');
+  ics.push(`X-WR-CALNAME:${calName}`);
   ics.push('X-WR-TIMEZONE:Asia/Bangkok');
-  ics.push('X-WR-CALDESC:BME Mahidol 2026 Study Blocks and Class Schedule');
+  ics.push(`X-WR-CALDESC:${calDesc}`);
 
   ics.push('BEGIN:VTIMEZONE');
   ics.push('TZID:Asia/Bangkok');
@@ -646,15 +659,15 @@ async function generateIcsCalendar(userId, includeRoutines = false, includeStudy
     });
   }
 
-  // 2. Study Blocks (9 blocks per week)
-  if (includeStudy) {
+  // 2. Study Blocks (9 blocks per week for BME users)
+  if (includeStudy && isBme) {
     DEFAULT_BME_STUDY_BLOCKS.forEach(ev => {
       events.push({ ...ev });
     });
   }
 
-  // 3. Daily Routines & Prayer (only if includeRoutines is checked!)
-  if (includeRoutines) {
+  // 3. Daily Routines & Prayer (only if includeRoutines is checked and user is BME)
+  if (includeRoutines && isBme) {
     DEFAULT_BME_ROUTINE_EVENTS.forEach(ev => {
       if (ev.type === 'prayer' || (!ev.isStudyBlock && !ev.isClass && ev.type !== 'study' && ev.type !== 'class')) {
         events.push({ ...ev });
