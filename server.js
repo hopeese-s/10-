@@ -582,7 +582,7 @@ async function generateIcsCalendar(userId, includeRoutines = false, includeStudy
   const customBlocks = userCustom.customBlocks || {};
   const curriculum = (userCustom.curriculum && Array.isArray(userCustom.curriculum) && userCustom.curriculum.length > 0)
     ? userCustom.curriculum
-    : (isWitchaya ? DEFAULT_BME_CURRICULUM : []);
+    : DEFAULT_BME_CURRICULUM;
 
   let ics = [];
   ics.push('BEGIN:VCALENDAR');
@@ -614,16 +614,27 @@ async function generateIcsCalendar(userId, includeRoutines = false, includeStudy
   curriculum.forEach((course) => {
     if (!course.schedule && (!course.start || !course.end)) return;
     if (!course.day) return;
-    const dayMap = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
+    const dayMap = {
+      monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU',
+      mon: 'MO', tue: 'TU', wed: 'WE', thu: 'TH', fri: 'FR', sat: 'SA', sun: 'SU'
+    };
     const dayCode = dayMap[course.day.toLowerCase()] || course.day.toUpperCase();
     if (!dayCode || !baseDates[dayCode]) return;
     
-    const [startTime, endTime] = (course.schedule ? course.schedule.match(/(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/) : null) || [null, course.start || '09:00', course.end || '10:00'].slice(1);
+    let startTime = course.start;
+    let endTime = course.end;
+    if ((!startTime || !endTime) && course.schedule) {
+      const match = course.schedule.match(/(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/);
+      if (match) {
+        startTime = match[1];
+        endTime = match[2];
+      }
+    }
     
     events.push({
       day: dayCode,
-      start: startTime || course.start || '09:00',
-      end: endTime || course.end || '10:00',
+      start: startTime || '09:00',
+      end: endTime || '10:00',
       title: `${course.code || ''} ${course.name || ''}`.trim() || 'Class',
       sub: course.room ? `ห้อง ${course.room}` : '',
       type: 'class',
@@ -632,8 +643,8 @@ async function generateIcsCalendar(userId, includeRoutines = false, includeStudy
   });
   } // end if (includeClass)
 
-  // Add default routine events for Witchaya only (respecting category filters and deduplicating against curriculum)
-  if (isWitchaya && includeRoutines) {
+  // Add default routine events (respecting category filters and deduplicating against curriculum)
+  if (includeRoutines) {
     DEFAULT_BME_ROUTINE_EVENTS.forEach(ev => {
       if (ev.isClass || ev.type === 'class') {
         if (!includeClass) return;
@@ -4054,7 +4065,7 @@ setInterval(async () => {
             sentReminderKeys.add(morningKey);
             const userObj = Object.values(store._users || {}).find(u => u.id === userId || (u.username && u.username.toLowerCase() === userId.toLowerCase()));
             const isWitchaya = userObj ? (userObj.username && userObj.username.toLowerCase() === 'witchaya') : (userId === '1' || userId === 'default');
-            const curriculum = userData.curriculum || (isWitchaya ? DEFAULT_BME_CURRICULUM : []);
+            const curriculum = (userData.curriculum && Array.isArray(userData.curriculum) && userData.curriculum.length > 0) ? userData.curriculum : DEFAULT_BME_CURRICULUM;
             const todayClasses = curriculum.filter(c => c.day === currentDay).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
             const pendingTasks = (userData.tasks || []).filter(t => !t.done);
             const customAppointments = (userData.customBlocks && userData.customBlocks[currentDay]) || [];
@@ -4086,8 +4097,7 @@ setInterval(async () => {
           if (!sentReminderKeys.has(eveningKey)) {
             sentReminderKeys.add(eveningKey);
             const userObj = Object.values(store._users || {}).find(u => u.id === userId || (u.username && u.username.toLowerCase() === userId.toLowerCase()));
-            const isWitchaya = userObj ? (userObj.username && userObj.username.toLowerCase() === 'witchaya') : (userId === '1' || userId === 'default');
-            const curriculum = userData.curriculum || (isWitchaya ? DEFAULT_BME_CURRICULUM : []);
+            const curriculum = (userData.curriculum && Array.isArray(userData.curriculum) && userData.curriculum.length > 0) ? userData.curriculum : DEFAULT_BME_CURRICULUM;
             const tomorrowDay = days[(now.getDay() + 1) % 7];
             const tomorrowClasses = curriculum.filter(c => c.day === tomorrowDay).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
             const completedTasks = (userData.tasks || []).filter(t => t.done && t.completedAt && t.completedAt.startsWith(todayDateStr));
@@ -4122,8 +4132,7 @@ setInterval(async () => {
       }
 
       const userObj = Object.values(store._users || {}).find(u => u.id === userId || (u.username && u.username.toLowerCase() === userId.toLowerCase()));
-      const isWitchaya = userObj ? (userObj.username && userObj.username.toLowerCase() === 'witchaya') : (userId === '1' || userId === 'default');
-      const curriculum = userData.curriculum || (isWitchaya ? DEFAULT_BME_CURRICULUM : []);
+      const curriculum = (userData.curriculum && Array.isArray(userData.curriculum) && userData.curriculum.length > 0) ? userData.curriculum : DEFAULT_BME_CURRICULUM;
 
       const offsets = Array.isArray(notiSettings.offsets) && notiSettings.offsets.length > 0
         ? notiSettings.offsets
@@ -5431,8 +5440,8 @@ const server = http.createServer(async (req, res) => {
       const targetUser = Object.values(store._users || {}).find(u => u.id === linkedUserId) || { id: linkedUserId, displayName: 'นักศึกษา' };
       const targetUsername = (targetUser && targetUser.username) ? targetUser.username.toLowerCase() : '';
       const isWitchaya = targetUsername === 'witchaya' || linkedUserId === '1';
-      const defaultCurriculum = isWitchaya ? DEFAULT_BME_CURRICULUM : [];
-      const defaultRoutines = isWitchaya ? DEFAULT_BME_ROUTINE_EVENTS : [];
+      const defaultCurriculum = DEFAULT_BME_CURRICULUM;
+      const defaultRoutines = DEFAULT_BME_ROUTINE_EVENTS;
 
       // ─── 0. Command: เมนู / Menu / Help / วิธีใช้ / คู่มือ ───
       if (/^(help|menu|guide|manual|วิธีใช้|คู่มือ|เมนู|\?|คำสั่ง|ฟีเจอร์)$/i.test(text)) {
@@ -5900,8 +5909,8 @@ const server = http.createServer(async (req, res) => {
       // ─── 13. Command: คลาสรูม / classroom / ชีท / sheet / ลิงก์เรียน / เอกสาร ───
       if (/^(คลาสรูม|classroom|ลิงก์เรียน|ลิงก์ห้องเรียน|ชีท|ชีทเรียน|google\s*classroom|sheet|sheets|เอกสาร|คลังเอกสาร)/i.test(text)) {
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
-        const curriculum = userData.curriculum || defaultCurriculum;
-        const links = userData.studyLinks || (isWitchaya ? DEFAULT_BME_STUDY_LINKS : []);
+        const curriculum = (userData.curriculum && Array.isArray(userData.curriculum) && userData.curriculum.length > 0) ? userData.curriculum : defaultCurriculum;
+        const links = (userData.studyLinks && Array.isArray(userData.studyLinks) && userData.studyLinks.length > 0) ? userData.studyLinks : DEFAULT_BME_STUDY_LINKS;
         await sendLineReply(replyToken, [buildClassroomDirectoryFlex(curriculum, links)]);
         return;
       }

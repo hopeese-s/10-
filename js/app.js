@@ -609,10 +609,19 @@
       if (savedCurriculum) {
         try {
           const parsed = JSON.parse(savedCurriculum);
-          if (Array.isArray(parsed) && parsed.length > 0) state.curriculum = parsed;
-        } catch (_) {}
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            state.curriculum = parsed;
+          } else {
+            state.curriculum = JSON.parse(JSON.stringify(DEFAULT_CURRICULUM));
+          }
+        } catch (_) {
+          state.curriculum = JSON.parse(JSON.stringify(DEFAULT_CURRICULUM));
+        }
+      } else {
+        state.curriculum = JSON.parse(JSON.stringify(DEFAULT_CURRICULUM));
       }
     } catch (e) {
+      state.curriculum = JSON.parse(JSON.stringify(DEFAULT_CURRICULUM));
       state.studyFolders = [...DEFAULT_STUDY_FOLDERS];
       state.studyLinks = [...DEFAULT_STUDY_LINKS];
       state.courseGrades = {};
