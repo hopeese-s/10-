@@ -5356,12 +5356,28 @@ const server = http.createServer(async (req, res) => {
       store[linkedUserId] = userData;
       saveStore();
 
+      // Always show AI description/analysis first, append event-saved footnote if needed
+      const solutionFlex = buildAiSolutionFlex(aiResult, fileRecord);
       if (addedEvents.length > 0) {
-        await sendLineReply(replyToken, [buildAiEventCreatedFlex(addedEvents, aiResult.summary || 'สแกนเอกสารและบันทึกลงตารางแล้ว', 'Image OCR Vision')]);
-      } else {
-        await sendLineReply(replyToken, [buildAiSolutionFlex(aiResult, fileRecord)]);
+        // Append footnote about saved events to the AI description summary
+        const eventNames = addedEvents.map(e => `• ${e.title}`).join('\n');
+        if (solutionFlex && solutionFlex.body && solutionFlex.body.contents) {
+          solutionFlex.body.contents.push({
+            type: 'separator',
+            margin: 'md'
+          });
+          solutionFlex.body.contents.push({
+            type: 'text',
+            text: `📅 บันทึกลงตารางแล้ว ${addedEvents.length} รายการ:\n${eventNames}`,
+            size: 'xs',
+            color: '#10B981',
+            wrap: true,
+            margin: 'md'
+          });
+        }
       }
-      return;
+      await sendLineReply(replyToken, [solutionFlex]);
+
     }
 
     // ─── Document / File Message Handler (PDF / Docs / Cloud Vault) ───
@@ -5518,9 +5534,35 @@ const server = http.createServer(async (req, res) => {
         }
       }
 
-      // ─── 1.8 Natural Language Appointment / Meeting Creation (นัด... / มีตติ้ง... / ประชุม...) ───
+      // ─── 2. Command: โน้ตด่วน / Memo (+โน้ต <ข้อความ> / จดโน้ต <ข้อความ> / +note <text> / add note <text>) ───
+      const explicitNoteMatch = text.match(/^(\+โน้ต|จดโน้ต|เพิ่มโน้ต|\+note|memo|บันทึกโน้ต|add note)\s*(.+)/i);
+      if (explicitNoteMatch) {
+        const noteText = explicitNoteMatch[2].trim();
+        if (noteText) {
+          const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+          if (!userData.quickNotes) userData.quickNotes = [];
+          userData.quickNotes.push({
+            id: Date.now().toString(),
+            text: noteText,
+            createdAt: new Date().toISOString()
+          });
+          await dbAdapter.saveUserData(linkedUserId, userData);
+          store[linkedUserId] = userData;
+          saveStore();
+          await sendLineReply(replyToken, [buildQuickNoteFlex(userData.quickNotes)]);
+          return;
+        }
+      }
+
+      // ─── 3. Command: +งาน / +การบ้าน / +task <title> due <date> / add task <title> ───
+      const explicitTaskMatch = text.match(/^(\+งาน|\+การบ้าน|เพิ่มงาน|เพิ่มการบ้าน|จดงาน|จดการบ้าน|การบ้านใหม่|\+task|add task)\s*(.+)/i);
+
+
+      // ─── 1.8 Natural Language Appointment / Meeting Creation ───
+      // NOTE: Only runs if NOT an explicit +โน้ต / +task / +งาน command
       const appointmentMatch = text.match(/^(นัด|นัดหมาย|มีตติ้ง|meeting|ประชุม|ซ้อม|ติว)\s*(.+)/i);
-      if (appointmentMatch || (hasGemini && text.length > 15 && (text.includes('พรุ่งนี้') || text.includes('วันจันทร์') || text.includes('วันอังคาร') || text.includes('วันพุธ') || text.includes('วันพฤหัส') || text.includes('วันศุกร์') || text.includes('วันเสาร์') || text.includes('วันอาทิตย์')))) {
+      const hasDateKeyword = hasGemini && text.length > 15 && (text.includes('พรุ่งนี้') || text.includes('วันจันทร์') || text.includes('วันอังคาร') || text.includes('วันพุธ') || text.includes('วันพฤหัส') || text.includes('วันศุกร์') || text.includes('วันเสาร์') || text.includes('วันอาทิตย์'));
+      if (!explicitNoteMatch && !explicitTaskMatch && (appointmentMatch || hasDateKeyword)) {
         let extracted = null;
         if (hasGemini) {
           extracted = await extractScheduleWithGemini(text);
@@ -5564,28 +5606,7 @@ const server = http.createServer(async (req, res) => {
         }
       }
 
-      // ─── 2. Command: โน้ตด่วน / Memo (+โน้ต <ข้อความ> / จดโน้ต <ข้อความ> / +note <text> / add note <text>) ───
-      const explicitNoteMatch = text.match(/^(\+โน้ต|จดโน้ต|เพิ่มโน้ต|\+note|note|memo|บันทึกโน้ต|add note)\s*(.+)/i);
-      if (explicitNoteMatch) {
-        const noteText = explicitNoteMatch[2].trim();
-        if (noteText) {
-          const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
-          if (!userData.quickNotes) userData.quickNotes = [];
-          userData.quickNotes.push({
-            id: Date.now().toString(),
-            text: noteText,
-            createdAt: new Date().toISOString()
-          });
-          await dbAdapter.saveUserData(linkedUserId, userData);
-          store[linkedUserId] = userData;
-          saveStore();
-          await sendLineReply(replyToken, [buildQuickNoteFlex(userData.quickNotes)]);
-          return;
-        }
-      }
-
-      // ─── 3. Command: +งาน / +การบ้าน / +task <title> due <date> / add task <title> ───
-      const explicitTaskMatch = text.match(/^(\+งาน|\+การบ้าน|เพิ่มงาน|เพิ่มการบ้าน|จดงาน|จดการบ้าน|การบ้านใหม่|task|\+task|add task)\s*(.+)/i);
+      // ─── 3. Command: +งาน / +การบ้าน / +task <title> ───
       // Fallback for generic "+" or "จด"
       const genericMatch = !explicitNoteMatch && !explicitTaskMatch ? text.match(/^(\+|จด)\s*(.+)/i) : null;
 
@@ -5614,6 +5635,7 @@ const server = http.createServer(async (req, res) => {
 
       if (isNote && taskOrNoteText) {
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+
         if (!userData.quickNotes) userData.quickNotes = [];
         userData.quickNotes.push({
           id: Date.now().toString(),
