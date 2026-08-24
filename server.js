@@ -5733,10 +5733,33 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // ─── 9. Command: ตารางเรียนระบุวัน (ตาราง จันทร์, schedule monday, schedule mon, etc.) ───
-      const dayArgMatch = text.match(/^(ตาราง|ตารางเรียน|schedule)?\s*(จันทร์|อังคาร|พุธ|พฤหัส|พฤหัสบดี|ศุกร์|เสาร์|อาทิตย์|monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)$/i);
+      // ─── 9. Command: ตารางพรุ่งนี้ / พรุ่งนี้ / tomorrow ───
+      if (/^(ตาราง\s*พรุ่งนี้|ตารางเรียน\s*พรุ่งนี้|พรุ่งนี้|tomorrow|schedule\s*tomorrow|tomorrow\s*schedule|พรุ่งนี้เรียนไร|พรุ่งนี้เรียนอะไร|มีเรียนมั้ยพรุ่งนี้|พรุ่งนี้มีเรียนมั้ย)/i.test(text)) {
+        const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
+        now.setDate(now.getDate() + 1);
+        const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        const dayNamesTH = {
+          sunday: 'วันอาทิตย์ (Sunday)', monday: 'วันจันทร์ (Monday)', tuesday: 'วันอังคาร (Tuesday)',
+          wednesday: 'วันพุธ (Wednesday)', thursday: 'วันพฤหัสบดี (Thursday)', friday: 'วันศุกร์ (Friday)', saturday: 'วันเสาร์ (Saturday)'
+        };
+        const dayCode = days[now.getDay()];
+        const dayName = dayNamesTH[dayCode];
+        const dateStr = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
+
+        const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+        const curriculum = userData.curriculum || defaultCurriculum;
+        const tomorrowClasses = curriculum.filter(c => c.day === dayCode).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
+        const dayMapCode = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
+        const tomorrowRoutines = defaultRoutines.filter(r => r.day === dayMapCode[dayCode]);
+
+        await sendLineReply(replyToken, [buildScheduleFlex(`${dayName} (พรุ่งนี้/Tomorrow)`, dateStr, tomorrowClasses, tomorrowRoutines)]);
+        return;
+      }
+
+      // ─── 10. Command: ตารางเรียนระบุวัน (ตารางวันจันทร์, ตาราง วันอังคาร, วันพุธ, schedule monday, etc.) ───
+      const dayArgMatch = text.match(/^(ตาราง|ตารางเรียน|schedule)?\s*(วัน)?\s*(จันทร์|อังคาร|พุธ|พฤหัส|พฤหัสบดี|ศุกร์|เสาร์|อาทิตย์|monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)$/i);
       if (dayArgMatch) {
-        const rawDay = (dayArgMatch[2] || '').toLowerCase();
+        const rawDay = (dayArgMatch[3] || '').toLowerCase();
         const dayMap = {
           'จันทร์': 'monday', 'monday': 'monday', 'mon': 'monday',
           'อังคาร': 'tuesday', 'tuesday': 'tuesday', 'tue': 'tuesday',
@@ -5761,16 +5784,38 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // ─── 10. Command: ตารางสัปดาห์ / สัปดาห์นี้ / week / weekly / all schedule ───
-      if (/^(ตารางสัปดาห์|สัปดาห์นี้|ทั้งสัปดาห์|ตารางทั้งหมด|week|weekly|all schedule)/i.test(text)) {
+      // ─── 11. Command: ตารางวันนี้ / วันนี้ / today / schedule / ตาราง / ตารางเรียน ───
+      if (/^(ตาราง\s*วันนี้|ตารางเรียน\s*วันนี้|ตารางเรียน|ตารางสอน|ตาราง|วันนี้|today|schedule\s*today|today\s*schedule|schedule|เรียนไร|มีเรียนมั้ย|วันนี้เรียนไร|วันนี้มีเรียนมั้ย|เรียนไรวันนี้|มีเรียนมั้ยวันนี้)/i.test(text)) {
+        const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
+        const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        const dayNamesTH = {
+          sunday: 'วันอาทิตย์ (Sunday)', monday: 'วันจันทร์ (Monday)', tuesday: 'วันอังคาร (Tuesday)',
+          wednesday: 'วันพุธ (Wednesday)', thursday: 'วันพฤหัสบดี (Thursday)', friday: 'วันศุกร์ (Friday)', saturday: 'วันเสาร์ (Saturday)'
+        };
+        const dayCode = days[now.getDay()];
+        const dayName = dayNamesTH[dayCode];
+        const dateStr = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
+
+        const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+        const curriculum = userData.curriculum || defaultCurriculum;
+        const todayClasses = curriculum.filter(c => c.day === dayCode).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
+        const dayMapCode = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
+        const todayRoutines = defaultRoutines.filter(r => r.day === dayMapCode[dayCode]);
+
+        await sendLineReply(replyToken, [buildScheduleFlex(`${dayName}`, dateStr, todayClasses, todayRoutines)]);
+        return;
+      }
+
+      // ─── 12. Command: ตารางสัปดาห์ / สัปดาห์นี้ / week / weekly / all schedule ───
+      if (/^(ตาราง\s*สัปดาห์|สัปดาห์นี้|ทั้งสัปดาห์|ตารางทั้งหมด|week|weekly|all\s*schedule|schedule\s*week|weekly\s*schedule)/i.test(text)) {
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
         const curriculum = userData.curriculum || defaultCurriculum;
         await sendLineReply(replyToken, [buildWeeklyScheduleFlex(curriculum)]);
         return;
       }
 
-      // ─── 11. Command: คลาสรูม / classroom / ชีท / sheet / ลิงก์เรียน ───
-      if (/^(คลาสรูม|classroom|ลิงก์เรียน|ลิงก์ห้องเรียน|ชีท|ชีทเรียน|google classroom|sheet|sheets)/i.test(text)) {
+      // ─── 13. Command: คลาสรูม / classroom / ชีท / sheet / ลิงก์เรียน / เอกสาร ───
+      if (/^(คลาสรูม|classroom|ลิงก์เรียน|ลิงก์ห้องเรียน|ชีท|ชีทเรียน|google\s*classroom|sheet|sheets|เอกสาร|คลังเอกสาร)/i.test(text)) {
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
         const curriculum = userData.curriculum || defaultCurriculum;
         const links = userData.studyLinks || (isWitchaya ? DEFAULT_BME_STUDY_LINKS : []);
@@ -5778,8 +5823,8 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // ─── 12. Command: โปรไฟล์ / profile / สถานะ / me / บัญชี ───
-      if (/^(โปรไฟล์|profile|สถานะ|me|บัญชี|ข้อมูลฉัน|my profile|status)/i.test(text)) {
+      // ─── 14. Command: โปรไฟล์ / profile / สถานะ / me / บัญชี ───
+      if (/^(โปรไฟล์|profile|สถานะ|me|บัญชี|ข้อมูลฉัน|my\s*profile|status)/i.test(text)) {
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
         const tasks = userData.tasks || userData.todos || [];
         const pendingCount = tasks.filter(t => !t.done).length;
@@ -5788,43 +5833,43 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // ─── 13. Command: ตารางสอบรายวิชา (Detailed Exam Schedule / exam / exams) ───
-      if (/^(ตารางสอบ|สอบวิชาไรบ้าง|ตารางสอบกลางภาค|สอบกลางภาค|วันสอบวิชา|exam|exams|midterm)/i.test(text)) {
+      // ─── 15. Command: ตารางสอบรายวิชา (Detailed Exam Schedule / exam / exams) ───
+      if (/^(ตาราง\s*สอบ|สอบวิชาไรบ้าง|ตารางสอบกลางภาค|สอบกลางภาค|วันสอบวิชา|exam|exams|midterm)/i.test(text)) {
         await sendLineReply(replyToken, [buildDetailedExamScheduleFlex()]);
         return;
       }
 
-      // ─── 14. Command: D-Day / สอบ / วันสอบ / นับถอยหลัง / dday / countdown ───
+      // ─── 16. Command: D-Day / สอบ / วันสอบ / นับถอยหลัง / dday / countdown ───
       if (/^(สอบ|วันสอบ|dday|d-day|นับถอยหลัง|countdown)/i.test(text)) {
         await sendLineReply(replyToken, [buildDDayCountdownFlex()]);
         return;
       }
 
-      // ─── 15. Command: รถราง / บริการ ม.มหิดล / เบอร์ฉุกเฉิน / tram / bus / emergency ───
-      if (/^(รถราง|tram|รถศาลายา|ฉุกเฉิน|เบอร์โทร|transit|emergency|รถบัส|salaya link|bus)/i.test(text)) {
+      // ─── 17. Command: รถราง / บริการ ม.มหิดล / เบอร์ฉุกเฉิน / tram / bus / emergency ───
+      if (/^(รถราง|tram|รถศาลายา|ฉุกเฉิน|เบอร์โทร|transit|emergency|รถบัส|salaya\s*link|bus)/i.test(text)) {
         await sendLineReply(replyToken, [buildCampusServicesFlex()]);
         return;
       }
 
-      // ─── 16. Command: ห้องสมุด / Co-Working / ที่อ่านหนังสือ / library ───
+      // ─── 18. Command: ห้องสมุด / Co-Working / ที่อ่านหนังสือ / library ───
       if (/^(ห้องสมุด|library|co-working|coworking|ที่อ่านหนังสือ|mlc|หอสมุด)/i.test(text)) {
         await sendLineReply(replyToken, [buildLibraryStudyLoungeFlex()]);
         return;
       }
 
-      // ─── 17. Command: เป้าเกรด / GPA Simulator / เกรดเฉลี่ย / gpa / grade ───
+      // ─── 19. Command: เป้าเกรด / GPA Simulator / เกรดเฉลี่ย / gpa / grade ───
       if (/^(เป้าเกรด|เกรด|gpa|คำนวณเกรด|เกรดเฉลี่ย|gpax|grade|grades)/i.test(text)) {
         await sendLineReply(replyToken, [buildGpaTargetSimulatorFlex()]);
         return;
       }
 
-      // ─── 18. Command: โฟกัส / Pomodoro / เทคนิคอ่านหนังสือ / focus ───
+      // ─── 20. Command: โฟกัส / Pomodoro / เทคนิคอ่านหนังสือ / focus ───
       if (/^(โฟกัส|pomodoro|เทคนิคอ่านหนังสือ|อ่านหนังสือ|focus|routine|บล็อกอ่าน)/i.test(text)) {
         await sendLineReply(replyToken, [buildStudyFocusRoutineFlex()]);
         return;
       }
 
-      // ─── 19. Command: สรุปเช้า / เช้านี้ / สรุปวัน / briefing / morning / brief ───
+      // ─── 21. Command: สรุปเช้า / เช้านี้ / สรุปวัน / briefing / morning / brief ───
       if (/^(สรุปเช้า|เช้านี้|สรุปวัน|morning|briefing|brief|สรุปวันนี้)/i.test(text)) {
         const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
         const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
@@ -5848,60 +5893,15 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // ─── 20. Command: Course Finder (ค้นหารายละเอียดวิชา / ห้องเรียน / course <name>) ───
+      // ─── 22. Command: Course Finder (ค้นหารายละเอียดวิชา / ห้องเรียน / course <name>) ───
       const courseMatch = findCourseMatch(text, (await dbAdapter.getUserData(linkedUserId))?.curriculum || defaultCurriculum);
       if (courseMatch && (text.startsWith('วิชา') || text.startsWith('ห้อง') || text.toLowerCase().startsWith('course') || text.length <= 10 || /^(sc|eg|la)/i.test(text))) {
         await sendLineReply(replyToken, [buildCourseProfileFlex(courseMatch)]);
         return;
       }
 
-      // ─── 21. Command: ตารางวันนี้ / วันนี้ / today / schedule ───
-      if (/^(ตารางวันนี้|วันนี้|today|schedule|เรียนไร|มีเรียนมั้ย)/i.test(text)) {
-        const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
-        const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-        const dayNamesTH = {
-          sunday: 'วันอาทิตย์ (Sunday)', monday: 'วันจันทร์ (Monday)', tuesday: 'วันอังคาร (Tuesday)',
-          wednesday: 'วันพุธ (Wednesday)', thursday: 'วันพฤหัสบดี (Thursday)', friday: 'วันศุกร์ (Friday)', saturday: 'วันเสาร์ (Saturday)'
-        };
-        const dayCode = days[now.getDay()];
-        const dayName = dayNamesTH[dayCode];
-        const dateStr = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
-
-        const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
-        const curriculum = userData.curriculum || defaultCurriculum;
-        const todayClasses = curriculum.filter(c => c.day === dayCode).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
-        const dayMapCode = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
-        const todayRoutines = defaultRoutines.filter(r => r.day === dayMapCode[dayCode]);
-
-        await sendLineReply(replyToken, [buildScheduleFlex(`${dayName}`, dateStr, todayClasses, todayRoutines)]);
-        return;
-      }
-
-      // ─── 22. Command: ตารางพรุ่งนี้ / พรุ่งนี้ / tomorrow ───
-      if (/^(ตารางพรุ่งนี้|พรุ่งนี้|tomorrow|พรุ่งนี้เรียนไร)/i.test(text)) {
-        const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
-        now.setDate(now.getDate() + 1);
-        const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-        const dayNamesTH = {
-          sunday: 'วันอาทิตย์ (Sunday)', monday: 'วันจันทร์ (Monday)', tuesday: 'วันอังคาร (Tuesday)',
-          wednesday: 'วันพุธ (Wednesday)', thursday: 'วันพฤหัสบดี (Thursday)', friday: 'วันศุกร์ (Friday)', saturday: 'วันเสาร์ (Saturday)'
-        };
-        const dayCode = days[now.getDay()];
-        const dayName = dayNamesTH[dayCode];
-        const dateStr = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
-
-        const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
-        const curriculum = userData.curriculum || defaultCurriculum;
-        const tomorrowClasses = curriculum.filter(c => c.day === dayCode).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
-        const dayMapCode = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
-        const tomorrowRoutines = defaultRoutines.filter(r => r.day === dayMapCode[dayCode]);
-
-        await sendLineReply(replyToken, [buildScheduleFlex(`${dayName} (พรุ่งนี้/Tomorrow)`, dateStr, tomorrowClasses, tomorrowRoutines)]);
-        return;
-      }
-
       // ─── 23. Command: งานค้าง / การบ้าน / tasks / task / todo / todos / homework / pending ───
-      if (/^(งานค้าง|การบ้าน|tasks|task|todo|todos|homework|pending|deadline|งาน|ส่งงานไรบ้าง)/i.test(text)) {
+      if (/^(งานค้าง|งาน\s*ค้าง|การบ้าน|tasks|task|todo|todos|homework|pending|deadline|งาน|ส่งงานไรบ้าง|เช็คงาน|ดูงาน)/i.test(text)) {
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
         const tasks = userData.tasks || userData.todos || [];
         await sendLineReply(replyToken, [buildPendingTasksFlex(tasks)]);
@@ -5937,6 +5937,39 @@ const server = http.createServer(async (req, res) => {
           await sendLineReply(replyToken, 'ℹ️ บัญชี LINE นี้ยังไม่ได้ผูกกับบัญชี E-Calendar ใดๆ ครับ');
         }
         return;
+      }
+
+      // ─── 26. Intelligent AI Conversational Assistant (Gemini) ───
+      if (hasGemini && text.length >= 2 && !/^(help|menu|guide|manual|วิธีใช้|คู่มือ|เมนู|\?)$/i.test(text)) {
+        try {
+          const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+          const curriculum = userData.curriculum || defaultCurriculum;
+          const tasks = (userData.tasks || []).filter(t => !t.done);
+          const scheduleSummary = curriculum.map(c => `${c.day}: ${c.code} ${c.name} (${c.start}-${c.end}) ห้อง ${c.room || '-'}`).join('\n');
+          const taskSummary = tasks.map(t => `- ${t.title} ${t.dueDate ? `(ส่ง: ${t.dueDate})` : ''}`).join('\n') || 'ไม่มีงานค้าง';
+
+          const aiPrompt = `คุณคือผู้ช่วย AI ประจำ E-Calendar นักศึกษา BME ตอบคำถามสั้นกระชับ เป็นกันเองและถูกต้องตามข้อมูลด้านล่างนี้:\n\n[ตารางเรียน]:\n${scheduleSummary}\n\n[งานค้าง]:\n${taskSummary}\n\n[คำถามของผู้ใช้]:\n${text}`;
+          const aiResponse = await callGeminiApi([{ role: 'user', parts: [{ text: aiPrompt }] }], 'ตอบคำถามนักศึกษาอย่างกระชับ ไม่เยิ่นเย้อ ใช้ภาษาไทยที่เป็นกันเอง มี emoji ประกอบ');
+
+          if (aiResponse && aiResponse.text) {
+            const aiTextMsg = {
+              type: 'text',
+              text: `🤖 ${aiResponse.text.trim()}`,
+              quickReply: {
+                items: [
+                  { type: 'action', action: { type: 'message', label: '📅 ตารางวันนี้', text: 'today' } },
+                  { type: 'action', action: { type: 'message', label: '📅 ตารางพรุ่งนี้', text: 'tomorrow' } },
+                  { type: 'action', action: { type: 'message', label: '📝 งานค้าง', text: 'tasks' } },
+                  { type: 'action', action: { type: 'message', label: '⚡ คาบต่อไป', text: 'next' } }
+                ]
+              }
+            };
+            await sendLineReply(replyToken, [aiTextMsg]);
+            return;
+          }
+        } catch (geminiErr) {
+          console.warn('⚠️ Gemini fallback response error:', geminiErr.message);
+        }
       }
 
       // ─── Fallback / Help Menu: Smart Interactive Menu (Carousel & Bilingual Quick Replies) ───
