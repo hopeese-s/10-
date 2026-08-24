@@ -3266,9 +3266,11 @@ function buildStudyFocusRoutineFlex() {
 }
 
 function buildHelpMenuFlex() {
+  const liffUrl = LINE_LIFF_ID ? `https://liff.line.me/${LINE_LIFF_ID}` : APP_BASE_URL;
+
   return {
     type: 'flex',
-    altText: '🤖 คู่มือคำสั่งและฟีเจอร์ทั้งหมดของ E-Calendar Bot',
+    altText: '🤖 E-Calendar Bot Command Menu & Guide (คู่มือคำสั่ง & ฟีเจอร์ทั้งหมด)',
     contents: {
       type: 'carousel',
       contents: [
@@ -3282,7 +3284,7 @@ function buildHelpMenuFlex() {
             paddingAll: '14px',
             contents: [
               { type: 'text', text: 'SCHEDULE & LIVE CLASSES', color: '#ffffff', size: 'xxs', weight: 'bold' },
-              { type: 'text', text: '📅 1. ตารางเรียน & คาบสด', color: '#ffffff', size: 'md', weight: 'bold' }
+              { type: 'text', text: '📅 1. Schedule / ตารางเรียน', color: '#ffffff', size: 'md', weight: 'bold' }
             ]
           },
           body: {
@@ -3291,10 +3293,11 @@ function buildHelpMenuFlex() {
             paddingAll: '14px',
             spacing: 'sm',
             contents: [
-              { type: 'text', text: '⚡ "คาบต่อไป" — เช็ควิชาที่กำลังเรียน/คาบถัดไป', size: 'xs', color: '#1F2937', wrap: true },
-              { type: 'text', text: '📅 "ตารางวันนี้" / "ตารางพรุ่งนี้"', size: 'xs', color: '#1F2937', wrap: true },
-              { type: 'text', text: '🗓️ "ตารางสัปดาห์" — สรุปจันทร์-ศุกร์', size: 'xs', color: '#1F2937', wrap: true },
-              { type: 'text', text: '📌 "ตาราง จันทร์" — ดูเฉพาะวันที่ระบุ', size: 'xs', color: '#1F2937', wrap: true }
+              { type: 'text', text: '⚡ "next" / "คาบต่อไป" — Current & next class', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '📅 "today" / "ตารางวันนี้" — Today\'s classes', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '🌅 "tomorrow" / "ตารางพรุ่งนี้" — Tomorrow\'s schedule', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '🗓️ "week" / "ตารางสัปดาห์" — Mon-Fri schedule', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '📌 "schedule mon" / "ตาราง จันทร์" — Specific day', size: 'xs', color: '#1F2937', wrap: true }
             ]
           },
           footer: {
@@ -3302,8 +3305,79 @@ function buildHelpMenuFlex() {
             layout: 'horizontal',
             spacing: 'sm',
             contents: [
-              { type: 'button', action: { type: 'message', label: '⚡ คาบต่อไป', text: 'คาบต่อไป' }, style: 'primary', color: '#C45A1B', height: 'sm' },
-              { type: 'button', action: { type: 'message', label: '📅 วันนี้', text: 'ตารางวันนี้' }, style: 'secondary', height: 'sm' }
+              { type: 'button', action: { type: 'message', label: '⚡ Next Class', text: 'next' }, style: 'primary', color: '#C45A1B', height: 'sm' },
+              { type: 'button', action: { type: 'message', label: '📅 Today', text: 'today' }, style: 'secondary', height: 'sm' }
+            ]
+          }
+        },
+        {
+          type: 'bubble',
+          size: 'kilo',
+          header: {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#7C3AED',
+            paddingAll: '14px',
+            contents: [
+              { type: 'text', text: 'GEMINI AI MULTIMODAL', color: '#ffffff', size: 'xxs', weight: 'bold' },
+              { type: 'text', text: '🤖 2. AI Voice, OCR & Chat', color: '#ffffff', size: 'md', weight: 'bold' }
+            ]
+          },
+          body: {
+            type: 'box',
+            layout: 'vertical',
+            paddingAll: '14px',
+            spacing: 'sm',
+            contents: [
+              { type: 'text', text: '🎤 ส่งคลิปเสียง (Voice Note) — AI ถอดเสียงลงตารางทันที', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '📷 ส่งรูปภาพ/โปสเตอร์ (Vision OCR) — สแกนนัดหมายลงปฏิทิน', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '💬 พิมพ์สั่งง่ายๆ เช่น "Meeting tomorrow 14:00" หรือ "นัดตัดผม พรุ่งนี้ บ่ายสอง"', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '✨ รองรับทั้งภาษาไทย & English ยาวหลายประโยค', size: 'xxs', color: '#7C3AED', weight: 'bold', wrap: true }
+            ]
+          },
+          footer: {
+            type: 'box',
+            layout: 'horizontal',
+            spacing: 'sm',
+            contents: [
+              { type: 'button', action: { type: 'message', label: '💬 Sample Meeting', text: 'Meeting tomorrow 14:00' }, style: 'primary', color: '#7C3AED', height: 'sm' },
+              { type: 'button', action: { type: 'uri', label: '📅 Open E-Calen', uri: liffUrl }, style: 'secondary', height: 'sm' }
+            ]
+          }
+        },
+        {
+          type: 'bubble',
+          size: 'kilo',
+          header: {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#DC2626',
+            paddingAll: '14px',
+            contents: [
+              { type: 'text', text: 'SMART CONTEXT & NOTIFICATIONS', color: '#ffffff', size: 'xxs', weight: 'bold' },
+              { type: 'text', text: '🔔 3. แจ้งเตือนล่วงหน้า /noti', color: '#ffffff', size: 'md', weight: 'bold' }
+            ]
+          },
+          body: {
+            type: 'box',
+            layout: 'vertical',
+            paddingAll: '14px',
+            spacing: 'sm',
+            contents: [
+              { type: 'text', text: '🔔 "/noti on" / "/noti 15" — เปิดเตือน 15 นาทีก่อนเรียน', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '⚡ "/noti 10 15 30" — แจ้งเตือน 3 รอบ (10, 15, 30 นาที)', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '🚫 "/noti cancel" / "/noti off" — ปิดการแจ้งเตือน', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '🌤️ "weather" / "สภาพอากาศ" — เช็คฝน/อุณหภูมิ ศาลายา', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '💡 ค่าเริ่มต้นคือปิดไว้ (Per-user Setting)', size: 'xxs', color: '#DC2626', weight: 'bold', wrap: true }
+            ]
+          },
+          footer: {
+            type: 'box',
+            layout: 'horizontal',
+            spacing: 'sm',
+            contents: [
+              { type: 'button', action: { type: 'message', label: '🔔 /noti 15', text: '/noti 15' }, style: 'primary', color: '#DC2626', height: 'sm' },
+              { type: 'button', action: { type: 'message', label: '⚡ /noti 10 15 30', text: '/noti 10 15 30' }, style: 'secondary', height: 'sm' }
             ]
           }
         },
@@ -3317,7 +3391,7 @@ function buildHelpMenuFlex() {
             paddingAll: '14px',
             contents: [
               { type: 'text', text: 'TASK & MEMO MANAGER', color: '#ffffff', size: 'xxs', weight: 'bold' },
-              { type: 'text', text: '📝 2. การบ้าน & โน้ตกันลืม', color: '#ffffff', size: 'md', weight: 'bold' }
+              { type: 'text', text: '📝 4. Tasks & Notes / งาน & โน้ต', color: '#ffffff', size: 'md', weight: 'bold' }
             ]
           },
           body: {
@@ -3326,10 +3400,11 @@ function buildHelpMenuFlex() {
             paddingAll: '14px',
             spacing: 'sm',
             contents: [
-              { type: 'text', text: '➕ "+งาน <ชื่อ> ส่ง <วัน>" — สั่งจดการบ้าน', size: 'xs', color: '#1F2937', wrap: true },
-              { type: 'text', text: '📝 "งานค้าง" — เช็ครายการงานที่ยังไม่เสร็จ', size: 'xs', color: '#1F2937', wrap: true },
-              { type: 'text', text: '✅ "เสร็จ 1" — ติ๊กงานลำดับที่ 1 ว่าเสร็จ', size: 'xs', color: '#1F2937', wrap: true },
-              { type: 'text', text: '📌 "+โน้ต <ข้อความ>" — สมุดจดกันลืม', size: 'xs', color: '#1F2937', wrap: true }
+              { type: 'text', text: '➕ "+task <title> due <date>" / "+งาน <ชื่อ> ส่ง <วัน>"', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '📝 "tasks" / "งานค้าง" — ดูรายการงานที่ต้องส่ง', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '✅ "done 1" / "เสร็จ 1" — ติ๊กงานลำดับ 1 ว่าเสร็จแล้ว', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '📌 "+note <text>" / "+โน้ต <ข้อความ>" — จดบันทึกด่วน', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '📋 "notes" / "โน้ต" — ดูโน้ตทั้งหมด / "delnote 1"', size: 'xs', color: '#1F2937', wrap: true }
             ]
           },
           footer: {
@@ -3337,8 +3412,8 @@ function buildHelpMenuFlex() {
             layout: 'horizontal',
             spacing: 'sm',
             contents: [
-              { type: 'button', action: { type: 'message', label: '📝 งานค้าง', text: 'งานค้าง' }, style: 'primary', color: '#059669', height: 'sm' },
-              { type: 'button', action: { type: 'message', label: '📌 ดูโน้ต', text: 'โน้ต' }, style: 'secondary', height: 'sm' }
+              { type: 'button', action: { type: 'message', label: '📝 Tasks / งานค้าง', text: 'tasks' }, style: 'primary', color: '#059669', height: 'sm' },
+              { type: 'button', action: { type: 'message', label: '📌 Notes / โน้ต', text: 'notes' }, style: 'secondary', height: 'sm' }
             ]
           }
         },
@@ -3351,8 +3426,8 @@ function buildHelpMenuFlex() {
             backgroundColor: '#2563EB',
             paddingAll: '14px',
             contents: [
-              { type: 'text', text: 'COURSE & CLASSROOM HUB', color: '#ffffff', size: 'xxs', weight: 'bold' },
-              { type: 'text', text: '🔍 3. ค้นหาวิชา & คลาสรูม', color: '#ffffff', size: 'md', weight: 'bold' }
+              { type: 'text', text: 'COURSES & EXAM SCHEDULE', color: '#ffffff', size: 'xxs', weight: 'bold' },
+              { type: 'text', text: '📚 5. Classroom & Exams / สอบ', color: '#ffffff', size: 'md', weight: 'bold' }
             ]
           },
           body: {
@@ -3361,10 +3436,10 @@ function buildHelpMenuFlex() {
             paddingAll: '14px',
             spacing: 'sm',
             contents: [
-              { type: 'text', text: '🔎 "วิชา ฟิสิกส์" หรือ "SCPY161" — ดูห้อง/เวลา/ชีท', size: 'xs', color: '#1F2937', wrap: true },
-              { type: 'text', text: '🏢 "ห้อง L2-002" — ค้นหาวิชาตามห้อง', size: 'xs', color: '#1F2937', wrap: true },
-              { type: 'text', text: '📚 "คลาสรูม" — รวมลิงก์ Google Classroom', size: 'xs', color: '#1F2937', wrap: true },
-              { type: 'text', text: '⏰ แจ้งเตือน 2 รอบอัตโนมัติ (30 นาที & 15 นาที)', size: 'xs', color: '#2563EB', weight: 'bold', wrap: true }
+              { type: 'text', text: '📚 "classroom" / "คลาสรูม" — รวมลิงก์ Google Classroom', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '🗓️ "exam" / "ตารางสอบ" — ตารางสอบกลางภาคทุกวิชา', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '⏳ "dday" / "สอบ" — นับถอยหลังวันสอบกลางภาค', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '🔎 "course Physics" / "วิชา ฟิสิกส์" / "SCPY161"', size: 'xs', color: '#1F2937', wrap: true }
             ]
           },
           footer: {
@@ -3372,43 +3447,8 @@ function buildHelpMenuFlex() {
             layout: 'horizontal',
             spacing: 'sm',
             contents: [
-              { type: 'button', action: { type: 'message', label: '📚 คลาสรูม', text: 'คลาสรูม' }, style: 'primary', color: '#2563EB', height: 'sm' },
-              { type: 'button', action: { type: 'message', label: '🔍 วิชาฟิสิกส์', text: 'วิชา ฟิสิกส์' }, style: 'secondary', height: 'sm' }
-            ]
-          }
-        },
-        {
-          type: 'bubble',
-          size: 'kilo',
-          header: {
-            type: 'box',
-            layout: 'vertical',
-            backgroundColor: '#B91C1C',
-            paddingAll: '14px',
-            contents: [
-              { type: 'text', text: 'EXAM & ACADEMIC PLANNER', color: '#ffffff', size: 'xxs', weight: 'bold' },
-              { type: 'text', text: '🎯 4. ตารางสอบ & เป้าเกรด', color: '#ffffff', size: 'md', weight: 'bold' }
-            ]
-          },
-          body: {
-            type: 'box',
-            layout: 'vertical',
-            paddingAll: '14px',
-            spacing: 'sm',
-            contents: [
-              { type: 'text', text: '🗓️ "ตารางสอบ" — ตารางสอบกลางภาคทุกวิชา', size: 'xs', color: '#1F2937', wrap: true },
-              { type: 'text', text: '⏳ "สอบ" — นับถอยหลัง D-Day วันสอบ', size: 'xs', color: '#1F2937', wrap: true },
-              { type: 'text', text: '🎯 "เป้าเกรด" / "เกรด" — แผนพิชิต GPA 3.50+', size: 'xs', color: '#1F2937', wrap: true },
-              { type: 'text', text: '📊 "หน่วยกิต" — สรุปหน่วยกิตเทอมนี้', size: 'xs', color: '#1F2937', wrap: true }
-            ]
-          },
-          footer: {
-            type: 'box',
-            layout: 'horizontal',
-            spacing: 'sm',
-            contents: [
-              { type: 'button', action: { type: 'message', label: '🗓️ ตารางสอบ', text: 'ตารางสอบ' }, style: 'primary', color: '#B91C1C', height: 'sm' },
-              { type: 'button', action: { type: 'message', label: '🎯 เป้าเกรด', text: 'เป้าเกรด' }, style: 'secondary', height: 'sm' }
+              { type: 'button', action: { type: 'message', label: '📚 Classroom', text: 'classroom' }, style: 'primary', color: '#2563EB', height: 'sm' },
+              { type: 'button', action: { type: 'message', label: '🗓️ Exams / ตารางสอบ', text: 'exam' }, style: 'secondary', height: 'sm' }
             ]
           }
         },
@@ -3422,7 +3462,7 @@ function buildHelpMenuFlex() {
             paddingAll: '14px',
             contents: [
               { type: 'text', text: 'CAMPUS & STUDY SPACES', color: '#ffffff', size: 'xxs', weight: 'bold' },
-              { type: 'text', text: '🏫 5. รถราง, หอสมุด & ฉุกเฉิน', color: '#ffffff', size: 'md', weight: 'bold' }
+              { type: 'text', text: '🏫 6. Campus & Food / บริการ ม.', color: '#ffffff', size: 'md', weight: 'bold' }
             ]
           },
           body: {
@@ -3431,10 +3471,10 @@ function buildHelpMenuFlex() {
             paddingAll: '14px',
             spacing: 'sm',
             contents: [
-              { type: 'text', text: '🚍 "รถราง" — สายรถรางฟรี & Salaya Link', size: 'xs', color: '#1F2937', wrap: true },
-              { type: 'text', text: '📖 "ห้องสมุด" — เวลาเปิดหอสมุด & Co-Working', size: 'xs', color: '#1F2937', wrap: true },
-              { type: 'text', text: '🚨 "ฉุกเฉิน" — เบอร์ รปภ. 24 ชม. & ห้องพยาบาล', size: 'xs', color: '#1F2937', wrap: true },
-              { type: 'text', text: '🍅 "โฟกัส" — เทคนิค Pomodoro & อ่านหนังสือ', size: 'xs', color: '#1F2937', wrap: true }
+              { type: 'text', text: '🚍 "tram" / "รถราง" — สายรถรางฟรี & Salaya Link', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '📖 "library" / "ห้องสมุด" — เวลาเปิดหอสมุด & Co-Working', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '🚨 "emergency" / "ฉุกเฉิน" — เบอร์ รปภ. 24 ชม. & แพทย์', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '🍽️ "food" / "กินไรดี" — สุ่มเมนู/ร้านเด็ดแถวมหิดล!', size: 'xs', color: '#1F2937', wrap: true }
             ]
           },
           footer: {
@@ -3442,8 +3482,8 @@ function buildHelpMenuFlex() {
             layout: 'horizontal',
             spacing: 'sm',
             contents: [
-              { type: 'button', action: { type: 'message', label: '🚍 รถราง มหิดล', text: 'รถราง' }, style: 'primary', color: '#0284C7', height: 'sm' },
-              { type: 'button', action: { type: 'message', label: '📖 ห้องสมุด', text: 'ห้องสมุด' }, style: 'secondary', height: 'sm' }
+              { type: 'button', action: { type: 'message', label: '🚍 Tram / รถราง', text: 'tram' }, style: 'primary', color: '#0284C7', height: 'sm' },
+              { type: 'button', action: { type: 'message', label: '🍽️ Food / กินไรดี', text: 'food' }, style: 'secondary', height: 'sm' }
             ]
           }
         },
@@ -3453,11 +3493,11 @@ function buildHelpMenuFlex() {
           header: {
             type: 'box',
             layout: 'vertical',
-            backgroundColor: '#7C3AED',
+            backgroundColor: '#4338CA',
             paddingAll: '14px',
             contents: [
-              { type: 'text', text: 'PLANNING & LIFESTYLE', color: '#ffffff', size: 'xxs', weight: 'bold' },
-              { type: 'text', text: '🍽️ 6. วางแผนเวลา & ของกิน', color: '#ffffff', size: 'md', weight: 'bold' }
+              { type: 'text', text: 'PLANNING & PROFILE', color: '#ffffff', size: 'xxs', weight: 'bold' },
+              { type: 'text', text: '📊 7. Free Time & GPA / วางแผน', color: '#ffffff', size: 'md', weight: 'bold' }
             ]
           },
           body: {
@@ -3466,10 +3506,11 @@ function buildHelpMenuFlex() {
             paddingAll: '14px',
             spacing: 'sm',
             contents: [
-              { type: 'text', text: '🕒 "เวลาว่าง" — คำนวณช่วงว่างระหว่างคาบ', size: 'xs', color: '#1F2937', wrap: true },
-              { type: 'text', text: '🍽️ "กินไรดี" — สุ่มเมนู/ร้านเด็ดแถวมหิดล!', size: 'xs', color: '#1F2937', wrap: true },
-              { type: 'text', text: '🌅 "สรุปเช้า" — ภาพรวมวิชาและการบ้านวันนี้', size: 'xs', color: '#1F2937', wrap: true },
-              { type: 'text', text: '👤 "โปรไฟล์" — ดูสถานะบัญชี & Cloud Sync', size: 'xs', color: '#1F2937', wrap: true }
+              { type: 'text', text: '🕒 "freetime" / "เวลาว่าง" — คำนวณช่วงว่างระหว่างคาบ', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '🎯 "gpa" / "เป้าเกรด" — แผนพิชิตเป้า GPA 3.50+', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '📊 "credits" / "หน่วยกิต" — สรุปหน่วยกิตเทอมนี้', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '👤 "profile" / "โปรไฟล์" — ดูสถานะบัญชี & Cloud Sync', size: 'xs', color: '#1F2937', wrap: true },
+              { type: 'text', text: '🍅 "focus" / "โฟกัส" — เทคนิค Pomodoro & อ่านหนังสือ', size: 'xs', color: '#1F2937', wrap: true }
             ]
           },
           footer: {
@@ -3477,8 +3518,8 @@ function buildHelpMenuFlex() {
             layout: 'horizontal',
             spacing: 'sm',
             contents: [
-              { type: 'button', action: { type: 'message', label: '🕒 เวลาว่าง', text: 'เวลาว่าง' }, style: 'primary', color: '#7C3AED', height: 'sm' },
-              { type: 'button', action: { type: 'message', label: '🍽️ กินไรดี', text: 'กินไรดี' }, style: 'secondary', height: 'sm' }
+              { type: 'button', action: { type: 'message', label: '🕒 Free Time', text: 'freetime' }, style: 'primary', color: '#4338CA', height: 'sm' },
+              { type: 'button', action: { type: 'message', label: '👤 Profile', text: 'profile' }, style: 'secondary', height: 'sm' }
             ]
           }
         }
@@ -4814,8 +4855,8 @@ const server = http.createServer(async (req, res) => {
         }
       }
 
-      // ─── 2. Command: โน้ตด่วน / Memo (+โน้ต <ข้อความ> / จดโน้ต <ข้อความ> / note <ข้อความ> / memo <ข้อความ>) ───
-      const explicitNoteMatch = text.match(/^(\+โน้ต|จดโน้ต|เพิ่มโน้ต|\+note|note|memo|บันทึกโน้ต)\s*(.+)/i);
+      // ─── 2. Command: โน้ตด่วน / Memo (+โน้ต <ข้อความ> / จดโน้ต <ข้อความ> / +note <text> / add note <text>) ───
+      const explicitNoteMatch = text.match(/^(\+โน้ต|จดโน้ต|เพิ่มโน้ต|\+note|note|memo|บันทึกโน้ต|add note)\s*(.+)/i);
       if (explicitNoteMatch) {
         const noteText = explicitNoteMatch[2].trim();
         if (noteText) {
@@ -4834,8 +4875,8 @@ const server = http.createServer(async (req, res) => {
         }
       }
 
-      // ─── 3. Command: +งาน / +การบ้าน / จดการบ้าน / task <ชื่องาน> <กำหนดส่ง> ───
-      const explicitTaskMatch = text.match(/^(\+งาน|\+การบ้าน|เพิ่มงาน|เพิ่มการบ้าน|จดงาน|จดการบ้าน|การบ้านใหม่|task|\+task)\s*(.+)/i);
+      // ─── 3. Command: +งาน / +การบ้าน / +task <title> due <date> / add task <title> ───
+      const explicitTaskMatch = text.match(/^(\+งาน|\+การบ้าน|เพิ่มงาน|เพิ่มการบ้าน|จดงาน|จดการบ้าน|การบ้านใหม่|task|\+task|add task)\s*(.+)/i);
       // Fallback for generic "+" or "จด"
       const genericMatch = !explicitNoteMatch && !explicitTaskMatch ? text.match(/^(\+|จด)\s*(.+)/i) : null;
 
@@ -4851,7 +4892,7 @@ const server = http.createServer(async (req, res) => {
         if (/^(โน้ต|note|memo)/i.test(payload)) {
           isNote = true;
           taskOrNoteText = payload.replace(/^(โน้ต|note|memo)\s*/i, '').trim();
-        } else if (/^(งาน|การบ้าน|task)/i.test(payload) || /(กำหนดส่ง|ส่ง|ภายใน|ก่อน|deadline|due)/i.test(payload)) {
+        } else if (/^(งาน|การบ้าน|task)/i.test(payload) || /(กำหนดส่ง|ส่ง|ภายใน|ก่อน|deadline|due|by)/i.test(payload)) {
           isTask = true;
           taskOrNoteText = payload.replace(/^(งาน|การบ้าน|task)\s*/i, '').trim();
         } else {
@@ -4884,7 +4925,7 @@ const server = http.createServer(async (req, res) => {
         // Parse optional due date if contains date keywords
         let title = taskOrNoteText;
         let dueDate = '';
-        const dateMatch = taskOrNoteText.match(/(กำหนดส่ง|ส่ง|ภายใน|ก่อน|deadline|due)\s*[:\-]?\s*(.+)$/i);
+        const dateMatch = taskOrNoteText.match(/(กำหนดส่ง|ส่ง|ภายใน|ก่อน|deadline|due|by)\s*[:\-]?\s*(.+)$/i);
         if (dateMatch) {
           title = taskOrNoteText.slice(0, dateMatch.index).trim();
           dueDate = dateMatch[2].trim();
@@ -4908,8 +4949,8 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // ─── 3. Command: เสร็จ / ทำเสร็จ / done <ลำดับ> ───
-      const doneMatch = text.match(/^(เสร็จ|ทำเสร็จ|done|check|ลบงาน)\s*(\d+)/i);
+      // ─── 3.5 Command: เสร็จ / ทำเสร็จ / done <ลำดับ> / check <num> / finish <num> ───
+      const doneMatch = text.match(/^(เสร็จ|ทำเสร็จ|done|check|finish|ลบงาน)\s*(\d+)/i);
       if (doneMatch) {
         const targetIndex = parseInt(doneMatch[2], 10) - 1;
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
@@ -4923,15 +4964,15 @@ const server = http.createServer(async (req, res) => {
           await dbAdapter.saveUserData(linkedUserId, userData);
 
           const remainingCount = tasks.filter(t => !t.done).length;
-          await sendLineReply(replyToken, `🎉 เยี่ยมมากครับ! ทำงาน "${finishedTask.title}" เสร็จแล้ว ✨\n(เหลืองานค้างอีก ${remainingCount} รายการ)`);
+          await sendLineReply(replyToken, `🎉 เยี่ยมมากครับ! Completed "${finishedTask.title}" ✨\n(Remaining tasks / เหลืองานค้าง: ${remainingCount} items)`);
         } else {
-          await sendLineReply(replyToken, `❌ ไม่พบลำดับงานที่ ${doneMatch[2]} กรุณาพิมพ์ "งานค้าง" เพื่อดูรายการและลำดับงานครับ`);
+          await sendLineReply(replyToken, `❌ Task #${doneMatch[2]} not found / ไม่พบลำดับงานที่ ${doneMatch[2]} (พิมพ์ "tasks" หรือ "งานค้าง" เพื่อดูรายการครับ)`);
         }
         return;
       }
 
-      // ─── 4. Command: คาบต่อไป / วิชาต่อไป / next / เรียนไรต่อ / ห้องต่อไป ───
-      if (/^(คาบต่อไป|วิชาต่อไป|next|เรียนไรต่อ|ห้องต่อไป|คาบถัดไป)/i.test(text)) {
+      // ─── 4. Command: คาบต่อไป / วิชาต่อไป / next / next class / upcoming / now ───
+      if (/^(คาบต่อไป|วิชาต่อไป|next|next class|upcoming|now|เรียนไรต่อ|ห้องต่อไป|คาบถัดไป)/i.test(text)) {
         const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
         const currentMinutes = now.getHours() * 60 + now.getMinutes();
         const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
@@ -4966,51 +5007,45 @@ const server = http.createServer(async (req, res) => {
         }
       }
 
-      // ─── 5. Command: โน้ตด่วน / Memo (+โน้ต <ข้อความ> / ลบโน้ต <เลข> / โน้ต) ───
-      const addNoteMatch = text.match(/^(\+โน้ต|จดโน้ต|เพิ่มโน้ต|note)\s*(.+)/i);
-      if (addNoteMatch) {
-        const noteText = addNoteMatch[2].trim();
-        if (noteText) {
-          const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
-          if (!userData.quickNotes) userData.quickNotes = [];
-          userData.quickNotes.push({
-            id: Date.now().toString(),
-            text: noteText,
-            createdAt: new Date().toISOString()
-          });
-          await dbAdapter.saveUserData(linkedUserId, userData);
-          await sendLineReply(replyToken, [buildQuickNoteFlex(userData.quickNotes)]);
-          return;
-        }
-      }
-
-      const deleteNoteMatch = text.match(/^(ลบโน้ต|delnote)\s*(\d+)/i);
+      // ─── 5. Command: โน้ตด่วน / Memo (delnote <num> / notes / note / โน้ต) ───
+      const deleteNoteMatch = text.match(/^(ลบโน้ต|delnote|deletenote)\s*(\d+)/i);
       if (deleteNoteMatch) {
         const targetIdx = parseInt(deleteNoteMatch[2], 10) - 1;
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
         if (userData.quickNotes && targetIdx >= 0 && targetIdx < userData.quickNotes.length) {
           const removed = userData.quickNotes.splice(targetIdx, 1)[0];
           await dbAdapter.saveUserData(linkedUserId, userData);
-          await sendLineReply(replyToken, `🗑️ ลบโน้ต "${removed.text}" เรียบร้อยแล้วครับ`);
+          await sendLineReply(replyToken, `🗑️ ลบโน้ต "${removed.text}" เรียบร้อยแล้วครับ (Note deleted)`);
         } else {
-          await sendLineReply(replyToken, `❌ ไม่พบลำดับโน้ตที่ ${deleteNoteMatch[2]} ครับ (พิมพ์ "โน้ต" เพื่อดูรายการโน้ตทั้งหมด)`);
+          await sendLineReply(replyToken, `❌ Note #${deleteNoteMatch[2]} not found / ไม่พบลำดับโน้ตที่ ${deleteNoteMatch[2]} ครับ`);
         }
         return;
       }
 
-      if (/^(โน้ต|ดูโน้ต|notes|memo|บันทึก|ข้อความกันลืม)/i.test(text)) {
+      if (/^(โน้ต|ดูโน้ต|notes|note|memo|บันทึก|ข้อความกันลืม)/i.test(text)) {
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
         await sendLineReply(replyToken, [buildQuickNoteFlex(userData.quickNotes || [])]);
         return;
       }
 
-      // ─── 6. Command: เวลาว่าง / อ่านหนังสือตอนไหน ───
-      if (/^(เวลาว่าง|ว่างตอนไหน|freetime|อ่านหนังสือตอนไหน|ช่องว่าง|ช่วงว่าง)/i.test(text)) {
+      // ─── 5.5 Command: สภาพอากาศ / weather / weather salaya ───
+      if (/^(สภาพอากาศ|อากาศ|ฝน|weather|weather salaya|salaya weather)/i.test(text)) {
+        const weatherInfo = await fetchSalayaWeather();
+        if (weatherInfo) {
+          await sendLineReply(replyToken, `🌤️ สภาพอากาศ มหิดล ศาลายา (Weather Salaya):\n🌡️ อุณหภูมิ: ${weatherInfo.temp}\n💧 ความชื้น: ${weatherInfo.humidity}\n🌧️ โอกาสฝนตก: ${weatherInfo.rainProb}\n☁️ สถานะ: ${weatherInfo.summary}${weatherInfo.alert ? `\n\n⚠️ ${weatherInfo.alert}` : ''}`);
+        } else {
+          await sendLineReply(replyToken, '🌤️ กำลังเชื่อมต่อข้อมูลสภาพอากาศศาลายา กรุณาลองใหม่อีกครั้งครับ');
+        }
+        return;
+      }
+
+      // ─── 6. Command: เวลาว่าง / freetime / free time ───
+      if (/^(เวลาว่าง|ว่างตอนไหน|freetime|free time|free|อ่านหนังสือตอนไหน|ช่องว่าง|ช่วงว่าง)/i.test(text)) {
         const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
         const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
         const dayNamesTH = {
-          sunday: 'วันอาทิตย์', monday: 'วันจันทร์', tuesday: 'วันอังคาร',
-          wednesday: 'วันพุธ', thursday: 'วันพฤหัสบดี', friday: 'วันศุกร์', saturday: 'วันเสาร์'
+          sunday: 'วันอาทิตย์ (Sunday)', monday: 'วันจันทร์ (Monday)', tuesday: 'วันอังคาร (Tuesday)',
+          wednesday: 'วันพุธ (Wednesday)', thursday: 'วันพฤหัสบดี (Thursday)', friday: 'วันศุกร์ (Friday)', saturday: 'วันเสาร์ (Saturday)'
         };
         const dayCode = days[now.getDay()];
         const dayName = dayNamesTH[dayCode];
@@ -5030,9 +5065,9 @@ const server = http.createServer(async (req, res) => {
           const startM = sh * 60 + sm;
           const diff = startM - endM;
           if (diff > 15) {
-            let suggest = 'พักผ่อน / ทานข้าว';
-            if (diff >= 90) suggest = 'ทบทวนบทเรียน / อ่านหนังสือ';
-            else if (diff >= 45) suggest = 'ทำการบ้าน / เคลียร์ชีท';
+            let suggest = 'พักผ่อน / Rest';
+            if (diff >= 90) suggest = 'ทบทวนบทเรียน / Deep Study';
+            else if (diff >= 45) suggest = 'เคลียร์การบ้าน / Homework';
             freeSlots.push({
               start: currentClass.end,
               end: nextClass.start,
@@ -5057,8 +5092,8 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // ─── 8. Command: สุ่มของกินแถวมหิดล (Food Roulette) ───
-      if (/^(กินไรดี|หิว|อาหาร|เมนูวันนี้|สุ่มของกิน|กินอะไรดี|food|กินไร)/i.test(text)) {
+      // ─── 8. Command: สุ่มของกินแถวมหิดล (Food Roulette / food / hungry / eat) ───
+      if (/^(กินไรดี|หิว|อาหาร|เมนูวันนี้|สุ่มของกิน|กินอะไรดี|food|กินไร|eat|hungry)/i.test(text)) {
         const foodList = [
           { name: 'ข้าวราดแกง / ข้าวขาหมู', location: 'โรงอาหารกลาง (โรงชาย)', highlight: 'มีให้เลือกหลากหลาย ราคาประหยัด อิ่มคุ้ม', price: '35 - 50 บาท' },
           { name: 'ก๋วยเตี๋ยวต้มยำ / สเต็ก', location: 'โรงอาหารคณะวิทย์ (SC)', highlight: 'น้ำซุปเข้มข้น แอร์เย็น นั่งสบาย', price: '45 - 65 บาท' },
@@ -5073,23 +5108,23 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // ─── 9. Command: ตารางเรียนระบุวัน (ตาราง จันทร์, ตาราง อังคาร, etc.) ───
-      const dayArgMatch = text.match(/^(ตาราง|ตารางเรียน)?\s*(จันทร์|อังคาร|พุธ|พฤหัส|พฤหัสบดี|ศุกร์|เสาร์|อาทิตย์|monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/i);
+      // ─── 9. Command: ตารางเรียนระบุวัน (ตาราง จันทร์, schedule monday, schedule mon, etc.) ───
+      const dayArgMatch = text.match(/^(ตาราง|ตารางเรียน|schedule)?\s*(จันทร์|อังคาร|พุธ|พฤหัส|พฤหัสบดี|ศุกร์|เสาร์|อาทิตย์|monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)$/i);
       if (dayArgMatch) {
         const rawDay = (dayArgMatch[2] || '').toLowerCase();
         const dayMap = {
-          'จันทร์': 'monday', 'monday': 'monday',
-          'อังคาร': 'tuesday', 'tuesday': 'tuesday',
-          'พุธ': 'wednesday', 'wednesday': 'wednesday',
-          'พฤหัส': 'thursday', 'พฤหัสบดี': 'thursday', 'thursday': 'thursday',
-          'ศุกร์': 'friday', 'friday': 'friday',
-          'เสาร์': 'saturday', 'saturday': 'saturday',
-          'อาทิตย์': 'sunday', 'sunday': 'sunday'
+          'จันทร์': 'monday', 'monday': 'monday', 'mon': 'monday',
+          'อังคาร': 'tuesday', 'tuesday': 'tuesday', 'tue': 'tuesday',
+          'พุธ': 'wednesday', 'wednesday': 'wednesday', 'wed': 'wednesday',
+          'พฤหัส': 'thursday', 'พฤหัสบดี': 'thursday', 'thursday': 'thursday', 'thu': 'thursday',
+          'ศุกร์': 'friday', 'friday': 'friday', 'fri': 'friday',
+          'เสาร์': 'saturday', 'saturday': 'saturday', 'sat': 'saturday',
+          'อาทิตย์': 'sunday', 'sunday': 'sunday', 'sun': 'sunday'
         };
         const targetDayCode = dayMap[rawDay] || 'monday';
         const dayNamesTH = {
-          monday: 'วันจันทร์', tuesday: 'วันอังคาร', wednesday: 'วันพุธ',
-          thursday: 'วันพฤหัสบดี', friday: 'วันศุกร์', saturday: 'วันเสาร์', sunday: 'วันอาทิตย์'
+          monday: 'วันจันทร์ (Monday)', tuesday: 'วันอังคาร (Tuesday)', wednesday: 'วันพุธ (Wednesday)',
+          thursday: 'วันพฤหัสบดี (Thursday)', friday: 'วันศุกร์ (Friday)', saturday: 'วันเสาร์ (Saturday)', sunday: 'วันอาทิตย์ (Sunday)'
         };
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
         const curriculum = userData.curriculum || defaultCurriculum;
@@ -5097,20 +5132,20 @@ const server = http.createServer(async (req, res) => {
         const dayMapCode = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
         const targetRoutines = defaultRoutines.filter(r => r.day === dayMapCode[targetDayCode]);
 
-        await sendLineReply(replyToken, [buildScheduleFlex(`${dayNamesTH[targetDayCode]}`, `ตารางเรียน`, targetClasses, targetRoutines)]);
+        await sendLineReply(replyToken, [buildScheduleFlex(`${dayNamesTH[targetDayCode]}`, `Schedule`, targetClasses, targetRoutines)]);
         return;
       }
 
-      // ─── 10. Command: ตารางสัปดาห์ / สัปดาห์นี้ / week ───
-      if (/^(ตารางสัปดาห์|สัปดาห์นี้|ทั้งสัปดาห์|ตารางทั้งหมด|week|all schedule)/i.test(text)) {
+      // ─── 10. Command: ตารางสัปดาห์ / สัปดาห์นี้ / week / weekly / all schedule ───
+      if (/^(ตารางสัปดาห์|สัปดาห์นี้|ทั้งสัปดาห์|ตารางทั้งหมด|week|weekly|all schedule)/i.test(text)) {
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
         const curriculum = userData.curriculum || defaultCurriculum;
         await sendLineReply(replyToken, [buildWeeklyScheduleFlex(curriculum)]);
         return;
       }
 
-      // ─── 11. Command: คลาสรูม / classroom / ชีท / ลิงก์เรียน ───
-      if (/^(คลาสรูม|classroom|ลิงก์เรียน|ลิงก์ห้องเรียน|ชีท|ชีทเรียน|google classroom)/i.test(text)) {
+      // ─── 11. Command: คลาสรูม / classroom / ชีท / sheet / ลิงก์เรียน ───
+      if (/^(คลาสรูม|classroom|ลิงก์เรียน|ลิงก์ห้องเรียน|ชีท|ชีทเรียน|google classroom|sheet|sheets)/i.test(text)) {
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
         const curriculum = userData.curriculum || defaultCurriculum;
         const links = userData.studyLinks || (isWitchaya ? DEFAULT_BME_STUDY_LINKS : []);
@@ -5119,7 +5154,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       // ─── 12. Command: โปรไฟล์ / profile / สถานะ / me / บัญชี ───
-      if (/^(โปรไฟล์|profile|สถานะ|me|บัญชี|ข้อมูลฉัน|my profile)/i.test(text)) {
+      if (/^(โปรไฟล์|profile|สถานะ|me|บัญชี|ข้อมูลฉัน|my profile|status)/i.test(text)) {
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
         const tasks = userData.tasks || userData.todos || [];
         const pendingCount = tasks.filter(t => !t.done).length;
@@ -5128,49 +5163,49 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // ─── 13. Command: ตารางสอบรายวิชา (Detailed Exam Schedule) ───
-      if (/^(ตารางสอบ|สอบวิชาไรบ้าง|ตารางสอบกลางภาค|สอบกลางภาค|วันสอบวิชา)/i.test(text)) {
+      // ─── 13. Command: ตารางสอบรายวิชา (Detailed Exam Schedule / exam / exams) ───
+      if (/^(ตารางสอบ|สอบวิชาไรบ้าง|ตารางสอบกลางภาค|สอบกลางภาค|วันสอบวิชา|exam|exams|midterm)/i.test(text)) {
         await sendLineReply(replyToken, [buildDetailedExamScheduleFlex()]);
         return;
       }
 
-      // ─── 14. Command: D-Day / สอบ / วันสอบ / นับถอยหลัง ───
-      if (/^(สอบ|วันสอบ|dday|นับถอยหลัง|exam)/i.test(text)) {
+      // ─── 14. Command: D-Day / สอบ / วันสอบ / นับถอยหลัง / dday / countdown ───
+      if (/^(สอบ|วันสอบ|dday|d-day|นับถอยหลัง|countdown)/i.test(text)) {
         await sendLineReply(replyToken, [buildDDayCountdownFlex()]);
         return;
       }
 
-      // ─── 15. Command: รถราง / บริการ ม.มหิดล / เบอร์ฉุกเฉิน ───
-      if (/^(รถราง|tram|รถศาลายา|ฉุกเฉิน|เบอร์โทร|transit|emergency|รถบัส|salaya link)/i.test(text)) {
+      // ─── 15. Command: รถราง / บริการ ม.มหิดล / เบอร์ฉุกเฉิน / tram / bus / emergency ───
+      if (/^(รถราง|tram|รถศาลายา|ฉุกเฉิน|เบอร์โทร|transit|emergency|รถบัส|salaya link|bus)/i.test(text)) {
         await sendLineReply(replyToken, [buildCampusServicesFlex()]);
         return;
       }
 
-      // ─── 16. Command: ห้องสมุด / Co-Working / ที่อ่านหนังสือ ───
+      // ─── 16. Command: ห้องสมุด / Co-Working / ที่อ่านหนังสือ / library ───
       if (/^(ห้องสมุด|library|co-working|coworking|ที่อ่านหนังสือ|mlc|หอสมุด)/i.test(text)) {
         await sendLineReply(replyToken, [buildLibraryStudyLoungeFlex()]);
         return;
       }
 
-      // ─── 17. Command: เป้าเกรด / GPA Simulator / เกรดเฉลี่ย ───
-      if (/^(เป้าเกรด|เกรด|gpa|คำนวณเกรด|เกรดเฉลี่ย|gpax)/i.test(text)) {
+      // ─── 17. Command: เป้าเกรด / GPA Simulator / เกรดเฉลี่ย / gpa / grade ───
+      if (/^(เป้าเกรด|เกรด|gpa|คำนวณเกรด|เกรดเฉลี่ย|gpax|grade|grades)/i.test(text)) {
         await sendLineReply(replyToken, [buildGpaTargetSimulatorFlex()]);
         return;
       }
 
-      // ─── 18. Command: โฟกัส / Pomodoro / เทคนิคอ่านหนังสือ ───
+      // ─── 18. Command: โฟกัส / Pomodoro / เทคนิคอ่านหนังสือ / focus ───
       if (/^(โฟกัส|pomodoro|เทคนิคอ่านหนังสือ|อ่านหนังสือ|focus|routine|บล็อกอ่าน)/i.test(text)) {
         await sendLineReply(replyToken, [buildStudyFocusRoutineFlex()]);
         return;
       }
 
-      // ─── 19. Command: สรุปเช้า / เช้านี้ / สรุปวัน / briefing ───
-      if (/^(สรุปเช้า|เช้านี้|สรุปวัน|morning|briefing|สรุปวันนี้)/i.test(text)) {
+      // ─── 19. Command: สรุปเช้า / เช้านี้ / สรุปวัน / briefing / morning / brief ───
+      if (/^(สรุปเช้า|เช้านี้|สรุปวัน|morning|briefing|brief|สรุปวันนี้)/i.test(text)) {
         const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
         const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
         const dayNamesTH = {
-          sunday: 'วันอาทิตย์', monday: 'วันจันทร์', tuesday: 'วันอังคาร',
-          wednesday: 'วันพุธ', thursday: 'วันพฤหัสบดี', friday: 'วันศุกร์', saturday: 'วันเสาร์'
+          sunday: 'วันอาทิตย์ (Sunday)', monday: 'วันจันทร์ (Monday)', tuesday: 'วันอังคาร (Tuesday)',
+          wednesday: 'วันพุธ (Wednesday)', thursday: 'วันพฤหัสบดี (Thursday)', friday: 'วันศุกร์ (Friday)', saturday: 'วันเสาร์ (Saturday)'
         };
         const dayCode = days[now.getDay()];
         const dayName = dayNamesTH[dayCode];
@@ -5188,20 +5223,20 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // ─── 20. Command: Course Finder (ค้นหารายละเอียดวิชา / ห้องเรียน) ───
+      // ─── 20. Command: Course Finder (ค้นหารายละเอียดวิชา / ห้องเรียน / course <name>) ───
       const courseMatch = findCourseMatch(text, (await dbAdapter.getUserData(linkedUserId))?.curriculum || defaultCurriculum);
-      if (courseMatch && (text.startsWith('วิชา') || text.startsWith('ห้อง') || text.length <= 10 || /^(sc|eg|la)/i.test(text))) {
+      if (courseMatch && (text.startsWith('วิชา') || text.startsWith('ห้อง') || text.toLowerCase().startsWith('course') || text.length <= 10 || /^(sc|eg|la)/i.test(text))) {
         await sendLineReply(replyToken, [buildCourseProfileFlex(courseMatch)]);
         return;
       }
 
-      // ─── 21. Command: ตารางวันนี้ / วันนี้ / today ───
+      // ─── 21. Command: ตารางวันนี้ / วันนี้ / today / schedule ───
       if (/^(ตารางวันนี้|วันนี้|today|schedule|เรียนไร|มีเรียนมั้ย)/i.test(text)) {
         const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
         const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
         const dayNamesTH = {
-          sunday: 'วันอาทิตย์', monday: 'วันจันทร์', tuesday: 'วันอังคาร',
-          wednesday: 'วันพุธ', thursday: 'วันพฤหัสบดี', friday: 'วันศุกร์', saturday: 'วันเสาร์'
+          sunday: 'วันอาทิตย์ (Sunday)', monday: 'วันจันทร์ (Monday)', tuesday: 'วันอังคาร (Tuesday)',
+          wednesday: 'วันพุธ (Wednesday)', thursday: 'วันพฤหัสบดี (Thursday)', friday: 'วันศุกร์ (Friday)', saturday: 'วันเสาร์ (Saturday)'
         };
         const dayCode = days[now.getDay()];
         const dayName = dayNamesTH[dayCode];
@@ -5223,8 +5258,8 @@ const server = http.createServer(async (req, res) => {
         now.setDate(now.getDate() + 1);
         const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
         const dayNamesTH = {
-          sunday: 'วันอาทิตย์', monday: 'วันจันทร์', tuesday: 'วันอังคาร',
-          wednesday: 'วันพุธ', thursday: 'วันพฤหัสบดี', friday: 'วันศุกร์', saturday: 'วันเสาร์'
+          sunday: 'วันอาทิตย์ (Sunday)', monday: 'วันจันทร์ (Monday)', tuesday: 'วันอังคาร (Tuesday)',
+          wednesday: 'วันพุธ (Wednesday)', thursday: 'วันพฤหัสบดี (Thursday)', friday: 'วันศุกร์ (Friday)', saturday: 'วันเสาร์ (Saturday)'
         };
         const dayCode = days[now.getDay()];
         const dayName = dayNamesTH[dayCode];
@@ -5236,24 +5271,24 @@ const server = http.createServer(async (req, res) => {
         const dayMapCode = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
         const tomorrowRoutines = defaultRoutines.filter(r => r.day === dayMapCode[dayCode]);
 
-        await sendLineReply(replyToken, [buildScheduleFlex(`${dayName} (พรุ่งนี้)`, dateStr, tomorrowClasses, tomorrowRoutines)]);
+        await sendLineReply(replyToken, [buildScheduleFlex(`${dayName} (พรุ่งนี้/Tomorrow)`, dateStr, tomorrowClasses, tomorrowRoutines)]);
         return;
       }
 
-      // ─── 23. Command: งานค้าง / การบ้าน / todo / deadline ───
-      if (/^(งานค้าง|การบ้าน|todo|deadline|งาน|ส่งงานไรบ้าง)/i.test(text)) {
+      // ─── 23. Command: งานค้าง / การบ้าน / tasks / task / todo / todos / homework / pending ───
+      if (/^(งานค้าง|การบ้าน|tasks|task|todo|todos|homework|pending|deadline|งาน|ส่งงานไรบ้าง)/i.test(text)) {
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
         const tasks = userData.tasks || userData.todos || [];
         const pending = tasks.filter(t => !t.done && !t.completed);
 
         if (pending.length === 0) {
-          await sendLineReply(replyToken, '🎉 ยอดเยี่ยมมาก! คุณไม่มีงานค้างหรือการบ้านที่ยังไม่เสร็จในระบบครับ ✨\n(สามารถพิมพ์ "+งาน <ชื่องาน>" เพื่อสั่งจดการบ้านเพิ่มได้ตลอดเวลา)');
+          await sendLineReply(replyToken, '🎉 All clear! คุณไม่มีงานค้างหรือการบ้านที่ยังไม่เสร็จในระบบครับ ✨\n(พิมพ์ "+task <title> due <date>" หรือ "+งาน <ชื่อ>" เพื่อจดงานเพิ่มได้ตลอดเวลา)');
         } else {
-          let msg = `📝 รายการงานค้างของคุณ (${pending.length} รายการ):\n`;
+          let msg = `📝 Pending Tasks / รายการงานค้าง (${pending.length} รายการ):\n`;
           pending.slice(0, 8).forEach((t, i) => {
-            msg += `\n${i + 1}. ${t.title || t.text || 'งาน'}${t.dueDate ? ` (กำหนดส่ง: ${t.dueDate})` : ''}`;
+            msg += `\n${i + 1}. ${t.title || t.text || 'Task'}${t.dueDate ? ` (Due: ${t.dueDate})` : ''}`;
           });
-          msg += `\n\n💡 ทิป: พิมพ์ "เสร็จ 1" เพื่อติ๊กงานลำดับที่ 1 ว่าเสร็จแล้ว`;
+          msg += `\n\n💡 Tip: Type "done 1" หรือ "เสร็จ 1" to mark complete`;
           await sendLineReply(replyToken, msg);
         }
         return;
@@ -5263,20 +5298,19 @@ const server = http.createServer(async (req, res) => {
       if (/^(ทดสอบ|test)/i.test(text)) {
         const dummyCourse = {
           code: 'SCPY161',
-          name: 'General Physics I (ทดสอบแจ้งเตือน)',
+          name: 'General Physics I (ทดสอบแจ้งเตือน / Test Alert)',
           start: '09:30',
           end: '12:30',
           room: 'L2-002',
           classroomUrl: 'https://classroom.google.com/u/6/c/ODcxMTQzMDA0NzAw'
         };
         await sendLineReply(replyToken, [
-          buildClassReminderFlex(dummyCourse, 'อีก 30 นาที', '#D97706'),
           buildClassReminderFlex(dummyCourse, 'อีก 15 นาที', '#DC2626')
         ]);
         return;
       }
 
-      // ─── 25. Command: ยกเลิกการผูก / unlink ───
+      // ─── 25. Command: ยกเลิกการผูก / unlink / logout ───
       if (/^(ยกเลิกการผูก|unlink|logout)/i.test(text)) {
         if (store._lineUsers && store._lineUsers[lineUserId]) {
           const oldUid = store._lineUsers[lineUserId];
@@ -5284,41 +5318,45 @@ const server = http.createServer(async (req, res) => {
           if (store._userLine && store._userLine[oldUid]) delete store._userLine[oldUid];
           await dbAdapter.saveSystemAuth();
           saveStore();
-          await sendLineReply(replyToken, '👋 ยกเลิกการผูกบัญชี E-Calendar เรียบร้อยแล้วครับ หากต้องการผูกใหม่สามารถพิมพ์ /link <Username> ได้ตลอดเวลา');
+          await sendLineReply(replyToken, '👋 Unlinked successfully / ยกเลิกการผูกบัญชีเรียบร้อยแล้วครับ หากต้องการผูกใหม่สามารถพิมพ์ /link <Username> ได้ตลอดเวลา');
         } else {
           await sendLineReply(replyToken, 'ℹ️ บัญชี LINE นี้ยังไม่ได้ผูกกับบัญชี E-Calendar ใดๆ ครับ');
         }
         return;
       }
 
-      // ─── Fallback: Smart Interactive Menu (Carousel & Quick Replies) ───
+      // ─── Fallback / Help Menu: Smart Interactive Menu (Carousel & Bilingual Quick Replies) ───
       const isLinked = Boolean(store._lineUsers && store._lineUsers[lineUserId]);
-      if (isLinked) {
+      if (isLinked || /^(help|menu|guide|manual|วิธีใช้|คู่มือ|เมนู|\?)/i.test(text)) {
         const menuFlex = buildHelpMenuFlex();
         menuFlex.quickReply = {
           items: [
-            { type: 'action', action: { type: 'message', label: '⚡ คาบต่อไป', text: 'คาบต่อไป' } },
-            { type: 'action', action: { type: 'message', label: '📅 ตารางวันนี้', text: 'ตารางวันนี้' } },
-            { type: 'action', action: { type: 'message', label: '🕒 เวลาว่าง', text: 'เวลาว่าง' } },
-            { type: 'action', action: { type: 'message', label: '📝 งานค้าง', text: 'งานค้าง' } },
-            { type: 'action', action: { type: 'message', label: '📌 โน้ต', text: 'โน้ต' } },
-            { type: 'action', action: { type: 'message', label: '📊 หน่วยกิต', text: 'หน่วยกิต' } },
-            { type: 'action', action: { type: 'message', label: '🍽️ กินไรดี', text: 'กินไรดี' } }
+            { type: 'action', action: { type: 'message', label: '⚡ Next / คาบต่อไป', text: 'next' } },
+            { type: 'action', action: { type: 'message', label: '📅 Today / ตารางวันนี้', text: 'today' } },
+            { type: 'action', action: { type: 'message', label: '📝 Tasks / งานค้าง', text: 'tasks' } },
+            { type: 'action', action: { type: 'message', label: '🔔 /noti status', text: '/noti status' } },
+            { type: 'action', action: { type: 'message', label: '🕒 Free Time / เวลาว่าง', text: 'freetime' } },
+            { type: 'action', action: { type: 'message', label: '🌤️ Weather / อากาศ', text: 'weather' } },
+            { type: 'action', action: { type: 'message', label: '🍽️ Food / กินไรดี', text: 'food' } },
+            { type: 'action', action: { type: 'message', label: '📚 Classroom', text: 'classroom' } },
+            { type: 'action', action: { type: 'message', label: '🗓️ Exams / สอบ', text: 'exam' } },
+            { type: 'action', action: { type: 'message', label: '👤 Profile', text: 'profile' } }
           ]
         };
         await sendLineReply(replyToken, [menuFlex]);
       } else {
         const welcomeUnlinked = {
           type: 'text',
-          text: `👋 สวัสดีครับ! บัญชี LINE นี้ยังไม่ได้ผูกกับ E-Calendar\n\nกรุณาพิมพ์:\n👉 /link <Username ของคุณ>\nเช่น: /link witchaya\n\n(ดูชื่อ Username ได้บนหน้าเว็บ E-Calendar Dashboard ครับ)`,
+          text: `👋 สวัสดีครับ! Welcome to E-Calendar Bot 📚\n\nบัญชี LINE นี้ยังไม่ได้ผูกกับ E-Calendar\nPlease link your account by typing:\n👉 /link <Your Username>\nExample: /link witchaya\n\n(Find your username on E-Calendar Dashboard)`,
           quickReply: {
             items: [
-              { type: 'action', action: { type: 'message', label: '❓ วิธีใช้', text: 'วิธีใช้' } }
+              { type: 'action', action: { type: 'message', label: '❓ Help / วิธีใช้', text: 'help' } }
             ]
           }
         };
         await sendLineReply(replyToken, [welcomeUnlinked]);
       }
+      return;
     }
   }
 
