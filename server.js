@@ -897,7 +897,25 @@ async function saveMediaFileToStorage(buffer, originalFilename, ext, contentType
     uploadedAt: new Date().toISOString()
   };
   ownerData.files[fileId] = fileRecord;
+
+  // Also register into Study Resources / Documents list for instant visibility on web
+  if (!ownerData.studyLinks) ownerData.studyLinks = [];
+  const fileType = safeExt === '.pdf' ? 'pdf' : (['.png', '.jpg', '.jpeg', '.webp'].includes(safeExt)) ? 'image' : 'file';
+  const studyEntry = {
+    id: `file-${fileId}`,
+    title: originalFilename || filename,
+    sub: `LINE Upload (${(size / 1024).toFixed(1)} KB)`,
+    type: fileType,
+    url: `/uploads/${filename}`,
+    desc: `อัปโหลดผ่าน LINE Bot เมื่อ ${new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}`,
+    folderId: 'f-notes',
+    createdAt: new Date().toISOString()
+  };
+  ownerData.studyLinks.unshift(studyEntry);
+
   await dbAdapter.saveUserData(ownerId, ownerData);
+  store[ownerId] = ownerData;
+  saveStore();
 
   return fileRecord;
 }
