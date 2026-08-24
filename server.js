@@ -4318,6 +4318,64 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ─── API: Delete File / Resource (POST /api/files/delete) ───
+  if (pathname === '/api/files/delete' && req.method === 'POST') {
+    parseJsonBody(async (err, body) => {
+      if (err || !body) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid body' }));
+        return;
+      }
+      const ownerId = resolveOwnerId(body);
+      const targetId = body.id;
+      const targetUrl = body.url;
+
+      const ownerData = (await dbAdapter.getUserData(ownerId)) || {};
+      let fileDeleted = false;
+
+      // 1. Remove from ownerData.files
+      if (ownerData.files && typeof ownerData.files === 'object') {
+        Object.keys(ownerData.files).forEach(fId => {
+          const f = ownerData.files[fId];
+          if ((targetId && (fId === targetId || `file-${fId}` === targetId)) || (targetUrl && f.url === targetUrl)) {
+            // Delete physical file if local
+            if (f.url && f.url.startsWith('/uploads/')) {
+              const filename = path.basename(f.url);
+              const localPath = path.join(UPLOAD_DIR, filename);
+              fs.unlink(localPath, () => {});
+            }
+            delete ownerData.files[fId];
+            fileDeleted = true;
+          }
+        });
+      }
+
+      // 2. Remove from ownerData.studyLinks
+      if (ownerData.studyLinks && Array.isArray(ownerData.studyLinks)) {
+        const initialLen = ownerData.studyLinks.length;
+        ownerData.studyLinks = ownerData.studyLinks.filter(l => {
+          if (targetId && l.id === targetId) return false;
+          if (targetUrl && l.url === targetUrl) return false;
+          return true;
+        });
+        if (ownerData.studyLinks.length !== initialLen) fileDeleted = true;
+      }
+
+      // 3. Save if changes made
+      if (fileDeleted) {
+        ownerData.version = (parseInt(ownerData.version, 10) || 0) + 1;
+        ownerData.updatedAt = new Date().toISOString();
+        await dbAdapter.saveUserData(ownerId, ownerData);
+        store[ownerId] = ownerData;
+        saveStore();
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, deleted: fileDeleted }));
+    });
+    return;
+  }
+
   // ─── API: Serve Uploaded Files with R2 Stream Fallback (GET /uploads/:filename) ───
   if (pathname.startsWith('/uploads/')) {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -6259,12 +6317,38 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        // Merge instead of overwrite to preserve files
+        // Merge instead of overwrite to preserve files, but respect deletions
         const existing = (await dbAdapter.getUserData(key)) || {};
+        let mergedFiles = { ...(existing.files || {}), ...(parsed.files || {}) };
+
+        // 1. Remove files explicitly marked as deleted
+        if (Array.isArray(parsed.deletedFileUrls) && parsed.deletedFileUrls.length > 0) {
+          const delUrls = new Set(parsed.deletedFileUrls);
+          Object.keys(mergedFiles).forEach(fId => {
+            if (mergedFiles[fId] && (delUrls.has(mergedFiles[fId].url) || delUrls.has(fId) || delUrls.has(`file-${fId}`))) {
+              delete mergedFiles[fId];
+            }
+          });
+        }
+
+        // 2. If studyLinks is provided from client, purge files that are neither in studyLinks nor in parsed.files
+        if (Array.isArray(parsed.studyLinks)) {
+          const activeUrls = new Set(parsed.studyLinks.map(l => l.url));
+          const activeIds = new Set(parsed.studyLinks.map(l => l.id));
+          const newFileKeys = new Set(Object.keys(parsed.files || {}));
+          Object.keys(mergedFiles).forEach(fId => {
+            if (newFileKeys.has(fId)) return; // freshly uploaded
+            const f = mergedFiles[fId];
+            if (f && f.url && !activeUrls.has(f.url) && !activeIds.has(`file-${fId}`) && !activeIds.has(fId)) {
+              delete mergedFiles[fId];
+            }
+          });
+        }
+
         const merged = {
           ...existing,
           ...parsed,
-          files: { ...(existing.files || {}), ...(parsed.files || {}) },
+          files: mergedFiles,
           updatedAt: new Date().toISOString()
         };
         await dbAdapter.saveUserData(key, merged);

@@ -490,11 +490,17 @@
       localStorage.setItem('sd-study-links', JSON.stringify(state.studyLinks));
     }
 
-    // Files: ensure any files in cloudData.files are represented in studyLinks
+    // Files: ensure any files in cloudData.files are represented in studyLinks (excluding deleted files)
     if (cloudData.files && typeof cloudData.files === 'object') {
       const existingUrls = new Set((state.studyLinks || []).map(l => l.url));
+      let deletedFiles = new Set();
+      try {
+        deletedFiles = new Set(JSON.parse(localStorage.getItem('sd-deleted-files') || '[]'));
+      } catch (_) {}
+      let filesAdded = false;
+
       Object.values(cloudData.files).forEach(f => {
-        if (f && f.url && !existingUrls.has(f.url)) {
+        if (f && f.url && !existingUrls.has(f.url) && !deletedFiles.has(f.url) && !deletedFiles.has(f.id) && !deletedFiles.has(`file-${f.id}`)) {
           const isPdf = f.name && f.name.toLowerCase().endsWith('.pdf');
           const isImg = f.name && f.name.match(/\.(png|jpe?g|webp|gif)$/i);
           state.studyLinks.unshift({
@@ -508,9 +514,12 @@
             createdAt: f.uploadedAt || new Date().toISOString()
           });
           existingUrls.add(f.url);
+          filesAdded = true;
         }
       });
-      localStorage.setItem('sd-study-links', JSON.stringify(state.studyLinks));
+      if (filesAdded) {
+        localStorage.setItem('sd-study-links', JSON.stringify(state.studyLinks));
+      }
     }
 
     // Course Grades: sync from cloud
@@ -559,17 +568,16 @@
 
       // Study Links
       const savedLinks = localStorage.getItem('sd-study-links');
-      if (savedLinks) {
-        const parsed = JSON.parse(savedLinks);
-        if (Array.isArray(parsed) && parsed.length >= DEFAULT_STUDY_LINKS.length) {
-          state.studyLinks = parsed;
-        } else {
-          // Merge custom items with updated DEFAULT_STUDY_LINKS
-          const defaultIds = new Set(DEFAULT_STUDY_LINKS.map(l => l.id));
-          // Keep ALL non-default items (user-added links use id 'link-TIMESTAMP')
-          const customOnly = (Array.isArray(parsed) ? parsed : []).filter(l => !defaultIds.has(l.id));
-          state.studyLinks = [...DEFAULT_STUDY_LINKS, ...customOnly];
-          saveStudyLinks();
+      if (savedLinks !== null) {
+        try {
+          const parsed = JSON.parse(savedLinks);
+          if (Array.isArray(parsed)) {
+            state.studyLinks = parsed;
+          } else {
+            state.studyLinks = [...DEFAULT_STUDY_LINKS];
+          }
+        } catch (_) {
+          state.studyLinks = [...DEFAULT_STUDY_LINKS];
         }
       } else {
         state.studyLinks = [...DEFAULT_STUDY_LINKS];
@@ -674,6 +682,44 @@
         }
       });
     }
+  }
+
+  async function deleteStudyResource(id) {
+    const item = state.studyLinks.find(l => l.id === id);
+    if (!item) return;
+
+    // Record tombstone in localStorage to prevent resurrection during sync
+    try {
+      const deletedFiles = JSON.parse(localStorage.getItem('sd-deleted-files') || '[]');
+      if (item.url && !deletedFiles.includes(item.url)) deletedFiles.push(item.url);
+      if (item.id && !deletedFiles.includes(item.id)) deletedFiles.push(item.id);
+      localStorage.setItem('sd-deleted-files', JSON.stringify(deletedFiles));
+    } catch (_) {}
+
+    // Remove from state
+    state.studyLinks = state.studyLinks.filter(l => l.id !== id);
+
+    // Remove from IndexedDB
+    if (window.LocalFileDB) {
+      try { await LocalFileDB.deleteFile(id); } catch (_) {}
+    }
+
+    // Call server delete API asynchronously
+    try {
+      fetch('/api/files/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id,
+          url: item.url,
+          key: window.CloudSync ? window.CloudSync.getSyncKey() : '1'
+        })
+      }).catch(() => {});
+    } catch (_) {}
+
+    saveStudyLinks();
+    renderStudyView();
+    showToast('🗑️ ลบเอกสารเรียบร้อย', 'info');
   }
 
   function saveTheme() {
@@ -2295,13 +2341,7 @@
         e.stopPropagation();
         const id = btn.dataset.id;
         if (confirm('คุณต้องการลบเอกสารนี้หรือไม่?')) {
-          state.studyLinks = state.studyLinks.filter(l => l.id !== id);
-          if (window.LocalFileDB) {
-            try { await LocalFileDB.deleteFile(id); } catch (_) {}
-          }
-          saveStudyLinks();
-          renderStudyView();
-          showToast('ลบเอกสารเรียบร้อย', 'info');
+          await deleteStudyResource(id);
         }
       });
     });
@@ -2321,13 +2361,7 @@
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const id = btn.dataset.id;
-        state.studyLinks = state.studyLinks.filter(l => l.id !== id);
-        if (window.LocalFileDB) {
-          try { await LocalFileDB.deleteFile(id); } catch (_) {}
-        }
-        saveStudyLinks();
-        renderStudyView();
-        showToast('🗑️ ลบเอกสารแล้ว', 'info');
+        await deleteStudyResource(id);
       });
     });
 

@@ -484,16 +484,21 @@ const CloudSync = (function () {
   }
 
   function _sanitize(data) {
+    let delUrls = [];
+    try {
+      delUrls = JSON.parse(localStorage.getItem('sd-deleted-files') || '[]');
+    } catch (_) {}
     return {
-      version:      data.version      || 0,
-      updatedAt:    data.updatedAt    || new Date().toISOString(),
-      checklist:    data.checklist    || {},
-      subjects:     data.subjects     || {},
-      customBlocks: data.customBlocks || {},
-      curriculum:   data.curriculum   || [],
-      studyFolders: data.studyFolders || [],
-      studyLinks:   data.studyLinks   || [],
-      courseGrades: data.courseGrades || {}
+      version:         data.version         || 0,
+      updatedAt:       data.updatedAt       || new Date().toISOString(),
+      checklist:       data.checklist       || {},
+      subjects:        data.subjects        || {},
+      customBlocks:    data.customBlocks    || {},
+      curriculum:      data.curriculum      || [],
+      studyFolders:    data.studyFolders    || [],
+      studyLinks:      data.studyLinks      || [],
+      courseGrades:    data.courseGrades    || {},
+      deletedFileUrls: delUrls
     };
   }
 
