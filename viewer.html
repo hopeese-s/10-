@@ -290,19 +290,19 @@
         toolbar.appendChild(actionGroup);
       }
 
-      // PDF.js Viewer Engine (with iframe fallback)
-      const fallbackToIframe = () => {
+      // PDF.js Viewer Engine (with clean fallback)
+      const fallbackToIframe = (err) => {
+        console.warn('PDF.js loading fallback:', err);
         loadingEl.style.display = 'none';
         contentEl.innerHTML = `
-          <div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:16px;width:100%;height:100%">
-            <div style="display:flex;align-items:center;justify-content:space-between;width:96vw;max-width:1200px;flex-wrap:wrap;gap:10px;">
-              <div style="font-weight:600;font-size:14px;color:var(--label-2)">เปิดเอกสาร PDF ผ่านโปรแกรมของเบราว์เซอร์</div>
-              <div style="display:flex;gap:8px;">
-                <a href="${escHtml(pdfSourceUrl || url)}" download="${escHtml(title)}.pdf" class="btn btn-secondary" style="padding:6px 14px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;text-decoration:none;">📥 ดาวน์โหลด PDF</a>
-                <a href="${escHtml(pdfSourceUrl || url)}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="padding:6px 14px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;text-decoration:none;background:var(--accent);color:#fff;">↗️ เปิดในแท็บใหม่</a>
-              </div>
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:36px 20px;text-align:center;max-width:600px;margin:40px auto;background:var(--bg-1);border-radius:var(--r-m);border:1px solid var(--sep);box-shadow:var(--shadow-2)">
+            <div style="font-size:48px">📄</div>
+            <div style="font-size:16px;font-weight:700;color:var(--label)">${escHtml(title || 'เอกสาร PDF')}</div>
+            <div style="font-size:13px;color:var(--label-2);line-height:1.6">เอกสารพร้อมเปิดใช้งานแล้ว คุณสามารถดาวน์โหลดไฟล์หรือเปิดในแท็บใหม่เพื่อดูผ่านโปรแกรมของระบบได้ทันทีครับ</div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:8px">
+              <a href="${escHtml(pdfSourceUrl || url)}" download="${escHtml(title || 'document')}.pdf" class="btn btn-primary" style="padding:10px 22px;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:6px;text-decoration:none;border-radius:var(--r-pill)">📥 ดาวน์โหลดไฟล์ PDF</a>
+              <a href="${escHtml(pdfSourceUrl || url)}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="padding:10px 20px;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px;text-decoration:none;border-radius:var(--r-pill)">↗️ เปิดในแท็บใหม่</a>
             </div>
-            <iframe src="${escHtml(pdfSourceUrl || url)}" style="width:96vw;height:82vh;border:none;border-radius:var(--r-m);box-shadow:var(--shadow-2);background:#fff"></iframe>
           </div>
         `;
       };
@@ -330,11 +330,29 @@
           const prevBtn = document.getElementById('viewer-prev');
           const nextBtn = document.getElementById('viewer-next');
 
-          const loadTask = pdfjsLib.getDocument({
-            url: pdfSourceUrl || url,
-            cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
-            cMapPacked: true
-          });
+          let pdfParam;
+          const targetPdfUrl = pdfSourceUrl || url;
+          if (targetPdfUrl.startsWith('data:')) {
+            const base64Index = targetPdfUrl.indexOf(';base64,');
+            if (base64Index !== -1) {
+              const b64 = targetPdfUrl.substring(base64Index + 8);
+              const binStr = window.atob(b64);
+              const len = binStr.length;
+              const bytes = new Uint8Array(len);
+              for (let i = 0; i < len; i++) {
+                bytes[i] = binStr.charCodeAt(i);
+              }
+              pdfParam = { data: bytes };
+            } else {
+              pdfParam = { url: targetPdfUrl };
+            }
+          } else {
+            pdfParam = { url: targetPdfUrl };
+          }
+          pdfParam.cMapUrl = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/';
+          pdfParam.cMapPacked = true;
+
+          const loadTask = pdfjsLib.getDocument(pdfParam);
 
           loadTask.promise.then(async (pdf) => {
             pdfDoc = pdf;
@@ -351,7 +369,7 @@
             renderDocument();
           }).catch(err => {
             console.warn('PDF.js loading error:', err);
-            fallbackToIframe();
+            fallbackToIframe(err);
           });
 
           async function renderDocument() {

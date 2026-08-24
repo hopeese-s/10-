@@ -3382,7 +3382,38 @@
 
       pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-      const loadingTask = pdfjsLib.getDocument(url);
+      let pdfParam;
+      if (url.startsWith('data:')) {
+        const base64Index = url.indexOf(';base64,');
+        if (base64Index !== -1) {
+          const b64 = url.substring(base64Index + 8);
+          const binStr = window.atob(b64);
+          const len = binStr.length;
+          const bytes = new Uint8Array(len);
+          for (let i = 0; i < len; i++) {
+            bytes[i] = binStr.charCodeAt(i);
+          }
+          pdfParam = { data: bytes };
+        } else {
+          pdfParam = { url };
+        }
+      } else {
+        let resolvedUrl = url;
+        if (url.startsWith('http://') || url.startsWith('https://')) {
+          const matchR2 = url.match(/\/([a-f0-9]{16}\.[a-z0-9]+)$/i) || url.match(/\/uploads\/([^\/\?#]+)$/i);
+          if (matchR2) {
+            resolvedUrl = `/uploads/${matchR2[1]}`;
+          } else if (!url.startsWith(window.location.origin)) {
+            resolvedUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
+          }
+        }
+        pdfParam = { url: resolvedUrl };
+      }
+
+      pdfParam.cMapUrl = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/';
+      pdfParam.cMapPacked = true;
+
+      const loadingTask = pdfjsLib.getDocument(pdfParam);
       const pdf = await loadingTask.promise;
       const numPages = pdf.numPages;
 
@@ -3686,18 +3717,20 @@
       document.addEventListener('keydown', _pdfKeydownHandler);
 
     } catch (err) {
-      console.warn('PDF.js fallback to iframe:', err);
+      console.warn('PDF.js rendering fallback:', err);
       bodyEl.innerHTML = `
-        <div style="width:100%;height:70vh;display:flex;flex-direction:column">
-          <iframe
-            src="${escHtml(url)}"
-            style="flex:1;border:none;border-radius:0 0 var(--r-m) var(--r-m);width:100%"
-            allow="fullscreen"
-            title="PDF Preview"
-          ></iframe>
-          <div style="padding:10px 16px;font-size:12px;color:var(--label-2);text-align:center;background:var(--bg-2)">
-            <a href="${escHtml(url)}" target="_blank" class="btn btn-primary" style="display:inline-flex;padding:6px 16px;font-size:12.5px;text-decoration:none">
-              🚀 เปิดไฟล์ PDF ในแท็บใหม่
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:36px 20px;gap:14px;min-height:300px;text-align:center">
+          <div style="font-size:44px">📄</div>
+          <div style="font-size:16px;font-weight:700;color:var(--label)">${escHtml(title || 'เอกสาร PDF')}</div>
+          <div style="font-size:13px;color:var(--label-2);max-width:440px;line-height:1.5">
+            บันทึกไฟล์เรียบร้อยแล้ว คุณสามารถกดเปิดอ่านผ่านแท็บใหม่ หรือดาวน์โหลดลงเครื่องได้ทันที
+          </div>
+          <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;justify-content:center">
+            <a href="${escHtml(url)}" download="${escHtml(title || 'document')}.pdf" class="btn btn-secondary" style="display:inline-flex;padding:8px 18px;font-size:12.5px;font-weight:600;text-decoration:none;border-radius:var(--r-pill)">
+              📥 ดาวน์โหลด PDF
+            </a>
+            <a href="viewer.html?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title || 'เอกสาร')}&type=pdf" target="_blank" class="btn btn-primary" style="display:inline-flex;padding:8px 20px;font-size:12.5px;font-weight:700;text-decoration:none;border-radius:var(--r-pill)">
+              🚀 เปิดในโปรแกรมอ่านเต็มจอ
             </a>
           </div>
         </div>`;
