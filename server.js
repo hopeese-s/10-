@@ -853,45 +853,109 @@ async function fetchSalayaWeather() {
   }
 }
 
+// ─── Unified Media & File Storage Adapter ─────────────────────
+async function saveMediaFileToStorage(buffer, originalFilename, ext, contentType, ownerId) {
+  const fileId = crypto.randomBytes(8).toString('hex');
+  const safeExt = ext || '.bin';
+  const filename = `${fileId}${safeExt}`;
+  const filePath = path.join(UPLOAD_DIR, filename);
+  
+  try {
+    fs.writeFileSync(filePath, buffer);
+  } catch (fsErr) {
+    console.warn('⚠️ File write error:', fsErr.message);
+  }
+
+  const size = buffer ? buffer.length : 0;
+  let fileUrl = `${APP_BASE_URL}/uploads/${filename}`;
+  let uploadedToR2 = false;
+
+  if (r2Client) {
+    try {
+      const { PutObjectCommand } = require('@aws-sdk/client-s3');
+      await r2Client.send(new PutObjectCommand({
+        Bucket: R2_BUCKET_NAME,
+        Key: filename,
+        Body: buffer,
+        ContentType: contentType || 'application/octet-stream'
+      }));
+      uploadedToR2 = true;
+    } catch (r2Err) {
+      console.warn('⚠️ Cloudflare R2 upload warning from LINE media:', r2Err.message);
+    }
+  }
+
+  const ownerData = (await dbAdapter.getUserData(ownerId)) || {};
+  if (!ownerData.files) ownerData.files = {};
+  const fileRecord = {
+    id: fileId,
+    name: originalFilename || filename,
+    url: `/uploads/${filename}`,
+    fullUrl: fileUrl,
+    size,
+    uploadedToR2,
+    uploadedAt: new Date().toISOString()
+  };
+  ownerData.files[fileId] = fileRecord;
+  await dbAdapter.saveUserData(ownerId, ownerData);
+
+  return fileRecord;
+}
+
 // ─── Google Gemini AI Client Helpers ─────────────────────────
 async function callGeminiApi(contents, systemInstruction = '') {
   if (!hasGemini) return null;
-  try {
-    const payload = {
-      contents,
-      generationConfig: {
-        temperature: 0.2,
-        maxOutputTokens: 2048,
-        responseMimeType: 'application/json'
-      }
-    };
-    if (systemInstruction) {
-      payload.systemInstruction = {
-        parts: [{ text: systemInstruction }]
+  const models = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp'];
+  for (const m of models) {
+    try {
+      const payload = {
+        contents,
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 2048,
+          responseMimeType: 'application/json'
+        }
       };
+      if (systemInstruction) {
+        payload.systemInstruction = {
+          parts: [{ text: systemInstruction }]
+        };
+      }
+
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${GEMINI_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.warn(`⚠️ Gemini API error on model ${m} (HTTP ${res.status}):`, errText);
+        continue;
+      }
+
+      const json = await res.json();
+      const candidate = json.candidates && json.candidates[0];
+      const textOut = candidate && candidate.content && candidate.content.parts && candidate.content.parts[0] && candidate.content.parts[0].text;
+      if (!textOut) continue;
+
+      let cleaned = textOut.trim();
+      if (cleaned.startsWith('```json')) cleaned = cleaned.slice(7);
+      if (cleaned.startsWith('```')) cleaned = cleaned.slice(3);
+      if (cleaned.endsWith('```')) cleaned = cleaned.slice(0, -3);
+      cleaned = cleaned.trim();
+
+      try {
+        return JSON.parse(cleaned);
+      } catch (pe) {
+        console.warn('⚠️ Gemini JSON parse warning, returning raw text structure');
+        return { summary: cleaned, title: 'AI Response', text: cleaned, solution: cleaned };
+      }
+    } catch (err) {
+      console.warn(`⚠️ Gemini API call failed on ${m}:`, err.message);
     }
-
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      console.warn(`⚠️ Gemini API error (HTTP ${res.status}):`, errText);
-      return null;
-    }
-
-    const json = await res.json();
-    const candidate = json.candidates && json.candidates[0];
-    const textOut = candidate && candidate.content && candidate.content.parts && candidate.content.parts[0] && candidate.content.parts[0].text;
-    if (!textOut) return null;
-    return JSON.parse(textOut);
-  } catch (err) {
-    console.warn('⚠️ Gemini API call failed:', err.message);
-    return null;
   }
+  return null;
 }
 
 async function extractScheduleWithGemini(userText) {
@@ -900,9 +964,9 @@ async function extractScheduleWithGemini(userText) {
   const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
   const todayDay = days[now.getDay()];
 
-  const prompt = `User message in Thai: "${userText}"
-Current Day: ${todayDay}, Date: ${now.toISOString().slice(0, 10)}. Reference Year: 2026.
-Extract schedule events, appointments, tasks, or notes. If multiple events are mentioned, extract all of them into the arrays.
+  const prompt = `User message in Thai/English: "${userText}"
+Current Reference: ${todayDay}, ${now.toISOString().slice(0, 10)}. Year: 2026.
+Extract schedule events, appointments, tasks, or notes.
 Return a JSON object matching this schema:
 {
   "summary": "Short Thai summary",
@@ -932,18 +996,29 @@ Return a JSON object matching this schema:
     {
       parts: [{ text: prompt }]
     }
-  ], 'You are an expert Thai NLP appointment extractor for college students. Always output valid JSON.');
+  ], 'You are an expert bilingual NLP assistant for college students. Always output valid JSON.');
 }
 
 async function analyzeImageWithGemini(imageBuffer, mimeType = 'image/jpeg') {
   if (!hasGemini) return null;
   const base64Data = imageBuffer.toString('base64');
-  const prompt = `Analyze this image (e.g. appointment card, doctor slip, seminar poster, exam schedule, timetable, classroom announcement).
-Extract all schedule events, appointments, tasks, or important dates found in the image.
-Current Reference Year: 2026.
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
+  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const todayDay = days[now.getDay()];
+
+  const prompt = `Analyze this image thoroughly. It may be:
+1. A math / physics / engineering calculation or problem: Solve it step-by-step and provide the final answer clearly in Thai.
+2. A course timetable / exam schedule / appointment card: Extract all events (start, end, day, date, room).
+3. A lecture slide, homework sheet, or document: Summarize the key concepts and list actionable tasks / deadlines.
+4. A general photo: Describe what is in the photo and provide helpful insights.
+
+Current Reference Time: ${todayDay}, ${now.toISOString().slice(0, 10)}. Year: 2026.
 Return a JSON object matching this schema:
 {
-  "summary": "Short Thai description of the document",
+  "type": "math_solution|schedule|task_list|summary|general",
+  "title": "Short descriptive Thai title",
+  "summary": "Clear Thai explanation or solution. If math/physics, include step-by-step solution and final answer in detail",
+  "solution": "Detailed math/calculation steps if applicable",
   "events": [
     {
       "title": "Title in Thai",
@@ -960,6 +1035,9 @@ Return a JSON object matching this schema:
       "title": "Task title in Thai",
       "dueDate": "Due date / time string"
     }
+  ],
+  "notes": [
+    "Important note or memo text"
   ]
 }`;
 
@@ -970,17 +1048,26 @@ Return a JSON object matching this schema:
         { inlineData: { mimeType, data: base64Data } }
       ]
     }
-  ], 'You are an intelligent schedule assistant for university students in Thailand. Always extract accurate Thai dates and 24-hour times.');
+  ], 'You are an intelligent university AI assistant capable of solving math problems, extracting schedules, and analyzing images in Thai and English.');
 }
 
 async function transcribeAudioWithGemini(audioBuffer, mimeType = 'audio/mp4') {
   if (!hasGemini) return null;
   const base64Data = audioBuffer.toString('base64');
-  const prompt = `Listen to this Thai voice audio carefully. Transcribe the user speech and extract any schedule events, appointments, tasks, or reminders.
-Current Reference Year: 2026.
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
+  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const todayDay = days[now.getDay()];
+
+  const prompt = `Listen to this voice audio (Thai or English).
+1. Transcribe the user speech accurately word-for-word.
+2. If the user asks a question, calculation, or math problem, solve and provide the answer.
+3. If the user mentions appointments, schedules, tasks, or memos, extract them into the structured fields.
+
+Current Reference Time: ${todayDay}, ${now.toISOString().slice(0, 10)}. Year: 2026.
 Return a JSON object matching this schema:
 {
-  "transcript": "Full Thai transcription",
+  "transcript": "Full Thai/English transcription",
+  "response": "Helpful AI answer or conversation response if the user asked a question",
   "summary": "Short Thai summary",
   "events": [
     {
@@ -1004,14 +1091,21 @@ Return a JSON object matching this schema:
   ]
 }`;
 
-  return await callGeminiApi([
-    {
-      parts: [
-        { text: prompt },
-        { inlineData: { mimeType, data: base64Data } }
-      ]
+  const audioMimes = [mimeType, 'audio/m4a', 'audio/aac', 'audio/ogg', 'audio/mp4'];
+  for (const m of audioMimes) {
+    const res = await callGeminiApi([
+      {
+        parts: [
+          { text: prompt },
+          { inlineData: { mimeType: m, data: base64Data } }
+        ]
+      }
+    ], 'You are an intelligent Thai & English voice assistant. Accurately transcribe audio and extract events, tasks, or answer questions.');
+    if (res && (res.transcript || res.summary || res.response)) {
+      return res;
     }
-  ], 'You are an intelligent Thai voice assistant. Accurately transcribe Thai spoken appointments and return structured schedule JSON.');
+  }
+  return null;
 }
 
 // ─── Local Rule-Based NLP Appointment Parser (Fallback) ────────
@@ -2370,6 +2464,183 @@ function buildAiEventCreatedFlex(events, summary = '', sourceLabel = 'AI Assista
             color: '#7C3AED',
             height: 'sm'
           }
+        ]
+      }
+    }
+  };
+}
+
+function buildAiSolutionFlex(aiResult, fileRecord) {
+  const fileUrl = fileRecord ? `${APP_BASE_URL}${fileRecord.url}` : APP_BASE_URL;
+  const bodyContents = [];
+
+  if (aiResult.summary || aiResult.solution || aiResult.text) {
+    const rawText = aiResult.solution || aiResult.summary || aiResult.text || '';
+    bodyContents.push({
+      type: 'box',
+      layout: 'vertical',
+      backgroundColor: '#F5F3FF',
+      cornerRadius: 'md',
+      paddingAll: '12px',
+      margin: 'xs',
+      contents: [
+        { type: 'text', text: '💡 คำอธิบาย & การคำนวณ / สรุป:', size: 'xs', weight: 'bold', color: '#6D28D9' },
+        { type: 'text', text: rawText.slice(0, 1000), size: 'xs', color: '#1F2937', wrap: true, margin: 'xs' }
+      ]
+    });
+  }
+
+  if (Array.isArray(aiResult.events) && aiResult.events.length > 0) {
+    bodyContents.push({
+      type: 'box',
+      layout: 'vertical',
+      backgroundColor: '#ECFDF5',
+      cornerRadius: 'md',
+      paddingAll: '10px',
+      margin: 'sm',
+      contents: [
+        { type: 'text', text: `📅 บันทึกลงตาราง (${aiResult.events.length} รายการ):`, size: 'xxs', weight: 'bold', color: '#047857' },
+        ...aiResult.events.slice(0, 3).map(ev => ({
+          type: 'text',
+          text: `• ${ev.title} (${ev.day || ''} ${ev.start || ''}-${ev.end || ''})`,
+          size: 'xxs',
+          color: '#065F46',
+          wrap: true
+        }))
+      ]
+    });
+  }
+
+  if (Array.isArray(aiResult.tasks) && aiResult.tasks.length > 0) {
+    bodyContents.push({
+      type: 'box',
+      layout: 'vertical',
+      backgroundColor: '#FFFBEB',
+      cornerRadius: 'md',
+      paddingAll: '10px',
+      margin: 'sm',
+      contents: [
+        { type: 'text', text: `📝 เพิ่มการบ้าน/งาน (${aiResult.tasks.length} รายการ):`, size: 'xxs', weight: 'bold', color: '#B45309' },
+        ...aiResult.tasks.slice(0, 3).map(t => ({
+          type: 'text',
+          text: `• ${t.title} ${t.dueDate ? `(ส่ง: ${t.dueDate})` : ''}`,
+          size: 'xxs',
+          color: '#92400E',
+          wrap: true
+        }))
+      ]
+    });
+  }
+
+  if (fileRecord) {
+    bodyContents.push({
+      type: 'box',
+      layout: 'horizontal',
+      backgroundColor: '#F8FAFC',
+      cornerRadius: 'md',
+      paddingAll: '8px',
+      margin: 'sm',
+      alignItems: 'center',
+      contents: [
+        { type: 'text', text: `☁️ บันทึกไฟล์แล้ว: ${fileRecord.name.slice(0, 24)}`, size: 'xxs', color: '#64748B', flex: 1 }
+      ]
+    });
+  }
+
+  return {
+    type: 'flex',
+    altText: `✨ AI วิเคราะห์ & คำนวณ: ${aiResult.title || aiResult.summary || 'เสร็จสมบูรณ์'}`,
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#7C3AED',
+        paddingAll: '16px',
+        contents: [
+          { type: 'text', text: 'GEMINI MULTIMODAL AI & CLOUD VAULT', color: '#DDD6FE', size: 'xxs', weight: 'bold' },
+          { type: 'text', text: `🤖 ${aiResult.title || 'AI วิเคราะห์ & คำนวณโจทย์'}`, color: '#FFFFFF', size: 'md', weight: 'bold', margin: 'xs', wrap: true }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '14px',
+        spacing: 'xs',
+        contents: bodyContents
+      },
+      footer: {
+        type: 'box',
+        layout: 'horizontal',
+        spacing: 'sm',
+        contents: [
+          { type: 'button', action: { type: 'uri', label: '📂 ดูไฟล์บนเว็บ', uri: fileUrl }, style: 'primary', color: '#7C3AED', height: 'sm' },
+          { type: 'button', action: { type: 'message', label: '📅 ตารางวันนี้', text: 'ตารางวันนี้' }, style: 'secondary', height: 'sm' }
+        ]
+      }
+    }
+  };
+}
+
+function buildFileSavedFlex(fileRecord, aiSummary) {
+  const fileUrl = `${APP_BASE_URL}${fileRecord.url}`;
+  const sizeKb = fileRecord.size ? `${(fileRecord.size / 1024).toFixed(1)} KB` : '';
+
+  return {
+    type: 'flex',
+    altText: `📁 บันทึกไฟล์เข้าคลังเอกสาร: ${fileRecord.name}`,
+    contents: {
+      type: 'bubble',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#0284C7',
+        paddingAll: '16px',
+        contents: [
+          { type: 'text', text: 'E-CALENDAR CLOUD VAULT', color: '#E0F2FE', size: 'xxs', weight: 'bold' },
+          { type: 'text', text: '📁 บันทึกไฟล์เข้าสู่ระบบสำเร็จ!', color: '#FFFFFF', size: 'md', weight: 'bold' }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '14px',
+        spacing: 'sm',
+        contents: [
+          {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#F0F9FF',
+            cornerRadius: 'md',
+            paddingAll: '12px',
+            contents: [
+              { type: 'text', text: `📄 ${fileRecord.name}`, weight: 'bold', size: 'sm', color: '#0369A1', wrap: true },
+              ...(sizeKb ? [{ type: 'text', text: `ขนาด: ${sizeKb} | อัปโหลดเมื่อ: ${fileRecord.uploadedAt.slice(0, 10)}`, size: 'xxs', color: '#0284C7', margin: 'xs' }] : [])
+            ]
+          },
+          ...(aiSummary ? [
+            {
+              type: 'box',
+              layout: 'vertical',
+              backgroundColor: '#F8FAFC',
+              cornerRadius: 'md',
+              paddingAll: '10px',
+              margin: 'xs',
+              contents: [
+                { type: 'text', text: '📖 สรุปเนื้อหาโดย AI:', size: 'xxs', weight: 'bold', color: '#475569' },
+                { type: 'text', text: aiSummary.slice(0, 600), size: 'xs', color: '#334155', wrap: true, margin: 'xs' }
+              ]
+            }
+          ] : [])
+        ]
+      },
+      footer: {
+        type: 'box',
+        layout: 'horizontal',
+        spacing: 'sm',
+        contents: [
+          { type: 'button', action: { type: 'uri', label: '📖 เปิดดูไฟล์', uri: fileUrl }, style: 'primary', color: '#0284C7', height: 'sm' },
+          { type: 'button', action: { type: 'message', label: '📝 งานค้าง', text: 'งานค้าง' }, style: 'secondary', height: 'sm' }
         ]
       }
     }
@@ -4694,7 +4965,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // ─── Voice / Audio Message Handler (Gemini Voice-to-Schedule) ───
+    // ─── Voice / Audio Message Handler (Gemini Multimodal Voice & Problem Solver) ───
     if (event.type === 'message' && event.message && event.message.type === 'audio') {
       const linkedUserId = (store._lineUsers && store._lineUsers[lineUserId]) || '1';
       const audioBuffer = await getLineMessageContent(event.message.id);
@@ -4703,14 +4974,23 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      // Auto-save audio note in user's Cloud Vault
+      const fileRecord = await saveMediaFileToStorage(
+        audioBuffer,
+        `voice_memo_${new Date().toISOString().slice(0, 10)}_${Date.now().toString().slice(-4)}.m4a`,
+        '.m4a',
+        'audio/mp4',
+        linkedUserId
+      );
+
       if (!hasGemini) {
-        await sendLineReply(replyToken, '🎤 ได้รับข้อความเสียงแล้ว แต่ระบบ AI ถอดเสียงต้องการ GEMINI_API_KEY\n\n💡 วิธีขอ API Key ฟรี 100%:\n1. เข้าเว็บ https://aistudio.google.com\n2. กด "Get API key" -> "Create API key"\n3. นำคีย์ไปใส่ใน Railway (Variables) ในชื่อ GEMINI_API_KEY');
+        await sendLineReply(replyToken, `🎤 บันทึกไฟล์เสียงเข้าสู่คลังเอกสารแล้ว (${fileRecord.url})\n\n💡 หากต้องการให้ AI ถอดเสียงและดึงนัดหมายอัตโนมัติ กรุณาใส่ GEMINI_API_KEY บนเซิร์ฟเวอร์ครับ`);
         return;
       }
 
       const aiResult = await transcribeAudioWithGemini(audioBuffer, 'audio/mp4');
       if (!aiResult) {
-        await sendLineReply(replyToken, '⚠️ ขออภัยครับ AI ไม่สามารถถอดเสียงหรือสกัดข้อมูลนัดหมายจากคลิปนี้ได้ กรุณาลองพูดใหม่อีกครั้งครับ');
+        await sendLineReply(replyToken, `🗣️ บันทึกไฟล์เสียงเรียบร้อยแล้ว (${fileRecord.url})\n\n⚠️ AI ไม่สามารถถอดความชัดเจนได้ กรุณาลองพูดใหม่อีกครั้งครับ`);
         return;
       }
 
@@ -4770,13 +5050,15 @@ const server = http.createServer(async (req, res) => {
 
       if (addedEvents.length > 0) {
         await sendLineReply(replyToken, [buildAiEventCreatedFlex(addedEvents, `🗣️ เสียงของคุณ: "${aiResult.transcript || ''}"`, 'Voice Assistant')]);
+      } else if (aiResult.response || aiResult.solution) {
+        await sendLineReply(replyToken, [buildAiSolutionFlex(aiResult, fileRecord)]);
       } else {
-        await sendLineReply(replyToken, `🗣️ ถอดเสียง: "${aiResult.transcript || ''}"\n\n✅ บันทึกข้อมูลเรียบร้อยแล้วครับ!`);
+        await sendLineReply(replyToken, `🗣️ ถอดเสียง: "${aiResult.transcript || aiResult.summary || ''}"\n\n✅ บันทึกข้อมูลและจัดเก็บไฟล์เสียงเข้าสู่ระบบเรียบร้อยแล้วครับ!`);
       }
       return;
     }
 
-    // ─── Image Message Handler (Gemini Vision OCR to Calendar) ───
+    // ─── Image Message Handler (Gemini Multimodal Math/Vision OCR & Cloud Vault) ───
     if (event.type === 'message' && event.message && event.message.type === 'image') {
       const linkedUserId = (store._lineUsers && store._lineUsers[lineUserId]) || '1';
       const imageBuffer = await getLineMessageContent(event.message.id);
@@ -4785,20 +5067,30 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      // Auto-save image to User's Cloud Vault / File Storage
+      const fileRecord = await saveMediaFileToStorage(
+        imageBuffer,
+        `photo_${new Date().toISOString().slice(0, 10)}_${Date.now().toString().slice(-4)}.jpg`,
+        '.jpg',
+        'image/jpeg',
+        linkedUserId
+      );
+
       if (!hasGemini) {
-        await sendLineReply(replyToken, '🖼️ ได้รับรูปภาพแล้ว แต่ระบบ AI สแกนภาพ (Vision OCR) ต้องการ GEMINI_API_KEY ครับ\n\n💡 วิธีขอ API Key ฟรี 100%:\n1. เข้าเว็บ https://aistudio.google.com\n2. กด "Get API key" -> "Create API key"\n3. นำคีย์ไปใส่ใน Railway (แท็บ Variables) ในชื่อ GEMINI_API_KEY แล้ว Deploy ได้เลยครับ');
+        await sendLineReply(replyToken, `🖼️ บันทึกรูปภาพเข้าสู่คลังเอกสารเรียบร้อยแล้ว (${fileRecord.url})\n\n💡 หากต้องการให้ AI สแกนโจทย์คำนวณหรืออ่านตาราง กรุณาตั้งค่า GEMINI_API_KEY บน Railway ครับ`);
         return;
       }
 
       const aiResult = await analyzeImageWithGemini(imageBuffer, 'image/jpeg');
       if (!aiResult) {
-        await sendLineReply(replyToken, '⚠️ ขออภัยครับ AI ไม่พบข้อมูลวันเวลาหรือนัดหมายในภาพนี้ กรุณาลองส่งภาพที่มีรายละเอียดวันเวลาชัดเจนอีกครั้งครับ');
+        await sendLineReply(replyToken, `🖼️ บันทึกรูปภาพเข้าสู่คลังเอกสารแล้ว (${fileRecord.url})\n\n⚠️ AI ไม่สามารถวิเคราะห์รายละเอียดในภาพนี้ได้`);
         return;
       }
 
       const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
       if (!userData.customBlocks) userData.customBlocks = {};
       if (!userData.tasks) userData.tasks = [];
+      if (!userData.quickNotes) userData.quickNotes = [];
 
       const addedEvents = [];
       if (Array.isArray(aiResult.events)) {
@@ -4833,6 +5125,17 @@ const server = http.createServer(async (req, res) => {
         });
       }
 
+      if (Array.isArray(aiResult.notes)) {
+        aiResult.notes.forEach(n => {
+          if (!n) return;
+          userData.quickNotes.push({
+            id: Date.now().toString(),
+            text: n,
+            createdAt: new Date().toISOString()
+          });
+        });
+      }
+
       await dbAdapter.saveUserData(linkedUserId, userData);
       store[linkedUserId] = userData;
       saveStore();
@@ -4840,8 +5143,54 @@ const server = http.createServer(async (req, res) => {
       if (addedEvents.length > 0) {
         await sendLineReply(replyToken, [buildAiEventCreatedFlex(addedEvents, aiResult.summary || 'สแกนเอกสารและบันทึกลงตารางแล้ว', 'Image OCR Vision')]);
       } else {
-        await sendLineReply(replyToken, `📄 สรุปจากภาพ: ${aiResult.summary || 'ตรวจพบข้อมูล'}\n\n✅ บันทึกรายการลงระบบเรียบร้อยแล้วครับ!`);
+        await sendLineReply(replyToken, [buildAiSolutionFlex(aiResult, fileRecord)]);
       }
+      return;
+    }
+
+    // ─── Document / File Message Handler (PDF / Docs / Cloud Vault) ───
+    if (event.type === 'message' && event.message && event.message.type === 'file') {
+      const linkedUserId = (store._lineUsers && store._lineUsers[lineUserId]) || '1';
+      const originalFileName = event.message.fileName || `document_${Date.now()}.bin`;
+      const fileExt = path.extname(originalFileName).toLowerCase() || '.bin';
+      const fileBuffer = await getLineMessageContent(event.message.id);
+
+      if (!fileBuffer) {
+        await sendLineReply(replyToken, '⚠️ ไม่สามารถดาวน์โหลดไฟล์จาก LINE ได้ กรุณาลองใหม่อีกครั้งครับ');
+        return;
+      }
+
+      const contentType = fileExt === '.pdf' ? 'application/pdf' : 'application/octet-stream';
+      const fileRecord = await saveMediaFileToStorage(
+        fileBuffer,
+        originalFileName,
+        fileExt,
+        contentType,
+        linkedUserId
+      );
+
+      let aiSummary = '';
+      if (hasGemini && fileExt === '.pdf') {
+        try {
+          const prompt = `This is a PDF document titled "${originalFileName}". Provide a concise Thai summary (3-5 bullet points) explaining what this document is about and note any deadlines.`;
+          const base64Data = fileBuffer.toString('base64');
+          const summaryRes = await callGeminiApi([
+            {
+              parts: [
+                { text: prompt },
+                { inlineData: { mimeType: 'application/pdf', data: base64Data } }
+              ]
+            }
+          ], 'You are an academic document summarizer for university students.');
+          if (summaryRes && (summaryRes.summary || summaryRes.text)) {
+            aiSummary = summaryRes.summary || summaryRes.text;
+          }
+        } catch (sumErr) {
+          console.warn('⚠️ PDF Gemini summary warning:', sumErr.message);
+        }
+      }
+
+      await sendLineReply(replyToken, [buildFileSavedFlex(fileRecord, aiSummary)]);
       return;
     }
 
