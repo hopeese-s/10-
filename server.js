@@ -412,6 +412,47 @@ const dbAdapter = {
             store._vapid = authData._vapid;
             configureWebPush();
           }
+          // Purge explicitly requested obsolete test users
+          const purgeList = ['test', 'test1', 'test1.1', 'test1.2', 'test2', 'test3'];
+          let purgedCount = 0;
+          for (const username of purgeList) {
+            const clean = username.toLowerCase();
+            const uid = 'u_' + clean;
+            if (store._users[clean] || Object.values(store._users).some(u => u.username && u.username.toLowerCase() === clean)) {
+              delete store._users[clean];
+              delete store[clean];
+              delete store[uid];
+              if (store._calKeys) {
+                Object.keys(store._calKeys).forEach(k => {
+                  if (store._calKeys[k] === uid || store._calKeys[k] === clean) delete store._calKeys[k];
+                });
+              }
+              if (store._sessions) {
+                Object.keys(store._sessions).forEach(tok => {
+                  if (store._sessions[tok]?.username?.toLowerCase() === clean || store._sessions[tok]?.userId === uid) {
+                    delete store._sessions[tok];
+                  }
+                });
+              }
+              if (store._lineUsers) {
+                Object.keys(store._lineUsers).forEach(lId => {
+                  if (store._lineUsers[lId] === uid || store._lineUsers[lId] === clean) delete store._lineUsers[lId];
+                });
+              }
+              purgedCount++;
+            }
+          }
+
+          if (purgedCount > 0) {
+            console.log(`🧹 Purged ${purgedCount} obsolete test user(s) permanently from Supabase & memory.`);
+            const userIdsToDelete = purgeList.flatMap(u => [u, 'u_' + u]);
+            try {
+              await supabase.from('user_sync_data').delete().in('user_id', userIdsToDelete);
+            } catch (_) {}
+            await dbAdapter.saveSystemAuth();
+            saveStore();
+          }
+
           console.log(`✅ Loaded ${Object.keys(store._users).length} User Account(s) & System Config permanently from Supabase`);
         } else if (error) {
           console.warn('⚠️ Supabase loadSystemAuth notice:', error.message);
@@ -420,6 +461,59 @@ const dbAdapter = {
         console.warn('⚠️ Supabase loadSystemAuth exception:', err.message);
       }
     }
+  },
+
+  async deleteUser(usernameOrId) {
+    if (!usernameOrId) return false;
+    const target = String(usernameOrId).toLowerCase().trim();
+    const targetUid = target.startsWith('u_') ? target : `u_${target}`;
+    const cleanUsername = target.startsWith('u_') ? target.substring(2) : target;
+
+    const userObj = store._users[cleanUsername] || Object.values(store._users || {}).find(u => u.id === targetUid || (u.username && u.username.toLowerCase() === cleanUsername));
+    const uid = userObj ? userObj.id : targetUid;
+    const calKey = userObj ? userObj.calendarKey : null;
+
+    delete store._users[cleanUsername];
+    if (userObj && userObj.username) delete store._users[userObj.username.toLowerCase()];
+    if (calKey && store._calKeys) delete store._calKeys[calKey];
+    if (store._calKeys) {
+      Object.keys(store._calKeys).forEach(k => {
+        if (store._calKeys[k] === uid || store._calKeys[k] === target || store._calKeys[k] === targetUid) delete store._calKeys[k];
+      });
+    }
+    if (store._sessions) {
+      Object.keys(store._sessions).forEach(tok => {
+        if (store._sessions[tok]?.userId === uid || store._sessions[tok]?.username?.toLowerCase() === cleanUsername) {
+          delete store._sessions[tok];
+        }
+      });
+    }
+    if (store._lineUsers) {
+      Object.keys(store._lineUsers).forEach(lId => {
+        if (store._lineUsers[lId] === uid || store._lineUsers[lId] === target || store._lineUsers[lId] === targetUid) delete store._lineUsers[lId];
+      });
+    }
+    if (store._userLine) {
+      delete store._userLine[uid];
+      delete store._userLine[targetUid];
+      delete store._userLine[cleanUsername];
+    }
+    delete store[uid];
+    delete store[targetUid];
+    delete store[cleanUsername];
+
+    saveStore();
+
+    if (supabase) {
+      try {
+        await supabase.from('user_sync_data').delete().in('user_id', [uid, targetUid, cleanUsername, target]);
+        await dbAdapter.saveSystemAuth();
+        console.log(`🗑️ Successfully deleted user [${cleanUsername}] (${uid}) permanently from Supabase`);
+      } catch (err) {
+        console.error(`❌ Error deleting user [${cleanUsername}] from Supabase:`, err.message);
+      }
+    }
+    return true;
   },
 
   async saveSystemAuth() {
@@ -5013,6 +5107,29 @@ const server = http.createServer(async (req, res) => {
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true }));
+    return;
+  }
+
+  // ─── API: Admin Delete Users (POST /api/admin/delete-users) ───
+  if (pathname === '/api/admin/delete-users' && req.method === 'POST') {
+    parseJsonBody(async (err, data) => {
+      if (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+        return;
+      }
+      const usernames = Array.isArray(data.usernames) ? data.usernames : [data.username].filter(Boolean);
+      const results = {};
+      for (const u of usernames) {
+        results[u] = await dbAdapter.deleteUser(u);
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: true,
+        deleted: results,
+        remaining_users: Object.keys(store._users || {})
+      }));
+    });
     return;
   }
 
