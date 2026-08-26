@@ -5087,19 +5087,23 @@
     btn.innerHTML = '⏳ กำลังดาวน์โหลดและบันทึกเข้า Cloud...';
     if (statusEl) statusEl.innerHTML = '⚡ กำลังสั่งการ OmniLoad Engine ดาวน์โหลดมีเดีย...';
 
+    const authHeaders = (window.CloudSync && typeof window.CloudSync.getAuthToken === 'function')
+      ? (window.CloudSync.getAuthToken() ? { 'Authorization': `Bearer ${window.CloudSync.getAuthToken()}` } : {})
+      : (localStorage.getItem('sd-auth-token') ? { 'Authorization': `Bearer ${localStorage.getItem('sd-auth-token')}` } : {});
+
     try {
       const res = await fetch('/api/study-tools/import-media', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(CloudSync.getAuthToken() ? { 'Authorization': `Bearer ${CloudSync.getAuthToken()}` } : {})
+          ...authHeaders
         },
         body: JSON.stringify({
           url,
           formatType,
           courseCode,
           customTitle,
-          syncKey: CloudSync.getSyncKey()
+          syncKey: (window.CloudSync && typeof window.CloudSync.getSyncKey === 'function' ? window.CloudSync.getSyncKey() : (localStorage.getItem('sd-sync-key') || '1'))
         })
       });
 
@@ -5149,18 +5153,22 @@
     if (statusEl) statusEl.innerHTML = '⚡ กำลังประมวลผล PyMuPDF Engine...';
     if (resultsEl) resultsEl.style.display = 'none';
 
+    const authHeaders = (window.CloudSync && typeof window.CloudSync.getAuthToken === 'function')
+      ? (window.CloudSync.getAuthToken() ? { 'Authorization': `Bearer ${window.CloudSync.getAuthToken()}` } : {})
+      : (localStorage.getItem('sd-auth-token') ? { 'Authorization': `Bearer ${localStorage.getItem('sd-auth-token')}` } : {});
+
     try {
       const res = await fetch('/api/study-tools/convert-pdf-to-slides', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(CloudSync.getAuthToken() ? { 'Authorization': `Bearer ${CloudSync.getAuthToken()}` } : {})
+          ...authHeaders
         },
         body: JSON.stringify({
           fileUrl,
           format,
           dpi,
-          syncKey: CloudSync.getSyncKey()
+          syncKey: (window.CloudSync && typeof window.CloudSync.getSyncKey === 'function' ? window.CloudSync.getSyncKey() : (localStorage.getItem('sd-sync-key') || '1'))
         })
       });
 

@@ -526,6 +526,7 @@ const CloudSync = (function () {
     setSyncKey,
     getLastSyncTime,
     getCalendarFeedUrl,
+    getAuthToken: () => authToken || localStorage.getItem('sd-auth-token') || '',
     pushToCloud,
     pullFromCloud,
     startAutoSync,
