@@ -3,7 +3,7 @@
 // E-Calendar for personal use (BME Mahidol)
 // ============================================================
 
-const CACHE_NAME = 'e-calendar-v2';
+const CACHE_NAME = 'e-calendar-v3';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -40,29 +40,27 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch: Stale-while-revalidate for static assets, network-first for APIs
+// Fetch: Network-First strategy (always fresh from server when online, offline cache fallback)
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Skip API requests and cloud sync from service worker caching
+  // Skip API requests and uploads from service worker caching
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/uploads/') || event.request.method !== 'GET') {
     return;
   }
 
   event.respondWith(
-    caches.match(event.request, { ignoreSearch: true }).then((cachedResponse) => {
-      const fetchPromise = fetch(event.request).then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+    fetch(event.request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
           const responseToCache = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, responseToCache);
           });
         }
         return networkResponse;
-      }).catch(() => cachedResponse);
-
-      return cachedResponse || fetchPromise;
-    })
+      })
+      .catch(() => caches.match(event.request, { ignoreSearch: true }))
   );
 });
 
