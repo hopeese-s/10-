@@ -4685,6 +4685,12 @@
   }
 
   // ─── Modal Helpers ───────────────────────────────────────
+  function openModal(id) {
+    const modal = document.getElementById(id);
+    if (modal) modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
   function closeModal(id) {
     const modal = document.getElementById(id);
     if (modal) modal.classList.remove('open');
@@ -4942,10 +4948,9 @@
     });
 
     // ─── Study Toolkit Event Listeners ───
-    document.getElementById('study-toolkit-btn')?.addEventListener('click', async () => {
+    window.openStudyToolkitModal = async function() {
       populateToolkitOptions();
       openModal('study-toolkit-modal');
-      // Check OmniLoad status in background and update the status banner
       const statusBanner = document.getElementById('tk-engine-status-banner');
       if (statusBanner) {
         statusBanner.innerHTML = '<span style="color:var(--label-2);font-size:11.5px">⏳ กำลังตรวจสอบ OmniLoad Engine...</span>';
@@ -4958,7 +4963,8 @@
             statusBanner.innerHTML = '<span style="color:#22c55e;font-weight:700;font-size:11.5px">🟢 OmniLoad Engine พร้อมใช้งาน</span>';
           }
           document.querySelectorAll('.tk-feature-form').forEach(el => el.style.display = '');
-          document.getElementById('tk-offline-fallback')?.style && (document.getElementById('tk-offline-fallback').style.display = 'none');
+          const fallback = document.getElementById('tk-offline-fallback');
+          if (fallback) fallback.style.display = 'none';
         } else {
           throw new Error('offline');
         }
@@ -4970,6 +4976,11 @@
         const fallback = document.getElementById('tk-offline-fallback');
         if (fallback) fallback.style.display = 'block';
       }
+    };
+
+    document.getElementById('study-toolkit-btn')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      window.openStudyToolkitModal();
     });
 
     document.getElementById('study-toolkit-close')?.addEventListener('click', () => closeModal('study-toolkit-modal'));
