@@ -3188,20 +3188,74 @@ function buildFreeTimeFlex(dayTitle, dateStr, freeSlots, todayRoutines) {
 }
 
 function buildQuickNoteFlex(notes) {
-  const items = (!notes || notes.length === 0) ? [
-    { type: 'text', text: 'ยังไม่มีโน้ตที่บันทึกไว้ครับ (พิมพ์ "+โน้ต <ข้อความ>" เพื่อจดโน้ตได้ทันที)', size: 'xs', color: '#6B7280' }
-  ] : notes.slice(0, 6).map((n, i) => ({
+  const hasNotes = Array.isArray(notes) && notes.length > 0;
+
+  const items = !hasNotes ? [
+    {
+      type: 'box',
+      layout: 'vertical',
+      backgroundColor: '#FEF9C3',
+      cornerRadius: 'md',
+      paddingAll: '16px',
+      alignItems: 'center',
+      contents: [
+        { type: 'text', text: '📝 ยังไม่มีโน้ตที่บันทึกไว้', weight: 'bold', size: 'sm', color: '#854D0E' },
+        { type: 'text', text: 'พิมพ์ "+โน้ต <ข้อความ>" เพื่อจดโน้ตกันลืมได้ทันทีครับ', size: 'xs', color: '#A16207', margin: 'xs', align: 'center', wrap: true }
+      ]
+    }
+  ] : notes.slice(0, 8).map((n, i) => ({
     type: 'box',
-    layout: 'vertical',
+    layout: 'horizontal',
     backgroundColor: '#FEF9C3',
     cornerRadius: 'md',
     paddingAll: '10px',
     margin: 'xs',
+    alignItems: 'center',
     contents: [
-      { type: 'text', text: `📌 ${i + 1}. ${n.text || n.title}`, size: 'xs', weight: 'bold', color: '#854D0E', wrap: true },
-      ...(n.createdAt ? [{ type: 'text', text: `${n.createdAt.slice(0, 10)}`, size: 'xxs', color: '#A16207', margin: 'xs' }] : [])
+      {
+        type: 'box',
+        layout: 'vertical',
+        flex: 5,
+        contents: [
+          { type: 'text', text: `📌 ${i + 1}. ${n.text || n.title}`, size: 'xs', weight: 'bold', color: '#854D0E', wrap: true },
+          ...(n.createdAt ? [{ type: 'text', text: `${n.createdAt.slice(0, 10)}`, size: 'xxs', color: '#A16207', margin: 'xs' }] : [])
+        ]
+      },
+      {
+        type: 'button',
+        action: {
+          type: 'message',
+          label: 'ลบ',
+          text: `ลบโน้ต ${i + 1}`
+        },
+        style: 'secondary',
+        height: 'sm',
+        flex: 2,
+        color: '#B45309'
+      }
     ]
   }));
+
+  // Append helpful instructions when notes exist
+  if (hasNotes) {
+    items.push({
+      type: 'box',
+      layout: 'vertical',
+      margin: 'md',
+      paddingTop: '8px',
+      contents: [
+        { type: 'separator', color: '#FDE047' },
+        {
+          type: 'text',
+          text: '💡 วิธีลบโน้ต: กดปุ่ม "ลบ" ด้านขวา หรือพิมพ์ "ลบโน้ต <ลำดับ>" เช่น "ลบโน้ต 1"\n(พิมพ์ "ลบโน้ตทั้งหมด" เพื่อล้างโน้ตทั้งหมด)',
+          size: 'xxs',
+          color: '#854D0E',
+          wrap: true,
+          margin: 'sm'
+        }
+      ]
+    });
+  }
 
   return {
     type: 'flex',
@@ -5866,17 +5920,38 @@ const server = http.createServer(async (req, res) => {
       }
 
       // ─── 5. Command: โน้ตด่วน / Memo (delnote <num> / notes / note / โน้ต) ───
-      const deleteNoteMatch = text.match(/^(ลบโน้ต|delnote|deletenote)\s*(\d+)/i);
+      const deleteNoteMatch = text.match(/^(ลบโน้ต|delnote|deletenote|ลบ\s*โน้ต|ลบข้อความ|ลบโน๊ต|วิธีลบโน้ต|ล้างโน้ต)\s*(\d+|ทั้งหมด|all)?/i);
       if (deleteNoteMatch) {
-        const targetIdx = parseInt(deleteNoteMatch[2], 10) - 1;
+        const arg = (deleteNoteMatch[2] || '').trim().toLowerCase();
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
-        if (userData.quickNotes && targetIdx >= 0 && targetIdx < userData.quickNotes.length) {
-          const removed = userData.quickNotes.splice(targetIdx, 1)[0];
+        if (!userData.quickNotes) userData.quickNotes = [];
+
+        if (arg === 'ทั้งหมด' || arg === 'all' || text.includes('ล้างโน้ต')) {
+          userData.quickNotes = [];
           await dbAdapter.saveUserData(linkedUserId, userData);
-          await sendLineReply(replyToken, `🗑️ ลบโน้ต "${removed.text}" เรียบร้อยแล้วครับ (Note deleted)`);
-        } else {
-          await sendLineReply(replyToken, `❌ Note #${deleteNoteMatch[2]} not found / ไม่พบลำดับโน้ตที่ ${deleteNoteMatch[2]} ครับ`);
+          store[linkedUserId] = userData;
+          saveStore();
+          await sendLineReply(replyToken, [buildQuickNoteFlex([])]);
+          return;
         }
+
+        if (arg && /^\d+$/.test(arg)) {
+          const targetIdx = parseInt(arg, 10) - 1;
+          if (targetIdx >= 0 && targetIdx < userData.quickNotes.length) {
+            const removed = userData.quickNotes.splice(targetIdx, 1)[0];
+            await dbAdapter.saveUserData(linkedUserId, userData);
+            store[linkedUserId] = userData;
+            saveStore();
+            await sendLineReply(replyToken, [buildQuickNoteFlex(userData.quickNotes)]);
+            return;
+          } else {
+            await sendLineReply(replyToken, `❌ ไม่พบลำดับโน้ตที่ ${arg} ครับ (พิมพ์ "โน้ต" เพื่อดูลำดับปัจจุบัน)`);
+            return;
+          }
+        }
+
+        // If user typed "ลบโน้ต" without an index, show the notes list with inline delete buttons & guidance
+        await sendLineReply(replyToken, [buildQuickNoteFlex(userData.quickNotes)]);
         return;
       }
 
