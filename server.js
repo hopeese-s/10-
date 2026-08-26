@@ -19,10 +19,10 @@ if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
 
-// ─── Environment & Cloud Configuration ────────────────────────
 const IS_PRODUCTION = process.env.NODE_ENV === 'production' || Boolean(process.env.RAILWAY_ENVIRONMENT) || Boolean(process.env.RENDER);
 const STRICT_CLOUD_MODE = process.env.STRICT_CLOUD_MODE === 'true';
 const APP_BASE_URL = (process.env.APP_BASE_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : 'https://e-calen.up.railway.app')).replace(/\/$/, '');
+const OMNILOAD_API_URL = (process.env.OMNILOAD_API_URL || (IS_PRODUCTION ? 'http://omniload.railway.internal:8000' : 'http://127.0.0.1:8000')).replace(/\/$/, '');
 
 // ─── Cloudflare R2 S3 Storage Adapter ─────────────────────────
 let r2Client = null;
@@ -4594,6 +4594,315 @@ const server = http.createServer(async (req, res) => {
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, file: fileRecord, studyLink: studyEntry }));
+    });
+    return;
+  }
+
+  // ─── API: Study Tools - OmniLoad Engine Status (GET /api/study-tools/status) ───
+  if (pathname === '/api/study-tools/status' && req.method === 'GET') {
+    res.setHeader('Cache-Control', 'no-store');
+    try {
+      const response = await fetch(`${OMNILOAD_API_URL}/api/system-status`, { signal: AbortSignal.timeout(4000) });
+      if (response.ok) {
+        const data = await response.json();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ connected: true, omniload_url: OMNILOAD_API_URL, ...data }));
+        return;
+      }
+    } catch (e) {
+      // OmniLoad service offline or not reachable
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ connected: false, omniload_url: OMNILOAD_API_URL, message: 'OmniLoad service is currently offline or unreachable' }));
+    return;
+  }
+
+  // ─── API: Study Tools - Extract Media Info (POST /api/study-tools/media-info) ───
+  if (pathname === '/api/study-tools/media-info' && req.method === 'POST') {
+    parseJsonBody(async (err, data) => {
+      if (err || !data || !data.url) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Missing media URL' }));
+        return;
+      }
+      try {
+        const response = await fetch(`${OMNILOAD_API_URL}/api/info`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: data.url }),
+          signal: AbortSignal.timeout(15000)
+        });
+        const result = await response.json();
+        res.writeHead(response.status, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } catch (e) {
+        res.writeHead(502, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Failed to communicate with OmniLoad engine', detail: e.message }));
+      }
+    });
+    return;
+  }
+
+  // ─── API: Study Tools - Import Media to Course/Vault (POST /api/study-tools/import-media) ───
+  if (pathname === '/api/study-tools/import-media' && req.method === 'POST') {
+    parseJsonBody(async (err, data) => {
+      if (err || !data || !data.url) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Missing media URL' }));
+        return;
+      }
+
+      const ownerId = resolveOwnerId(data);
+      const { url: mediaUrl, formatType = 'mp4', quality = 'best', courseCode = '', customTitle = '', folderId = 'f-uploads' } = data;
+
+      try {
+        // 1. Trigger download on OmniLoad
+        const dlRes = await fetch(`${OMNILOAD_API_URL}/api/download`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: mediaUrl,
+            format_type: formatType === 'mp3' ? 'mp3' : 'mp4',
+            quality: quality,
+            custom_title: customTitle
+          }),
+          signal: AbortSignal.timeout(10000)
+        });
+
+        const dlData = await dlRes.json();
+        if (!dlRes.ok || !dlData.success) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: dlData.detail || dlData.error || 'Download failed to start' }));
+          return;
+        }
+
+        const taskId = dlData.task_id;
+        
+        // 2. Poll OmniLoad until download task completes (max 180s)
+        let completedTask = null;
+        const startTime = Date.now();
+
+        while (Date.now() - startTime < 180000) {
+          await new Promise(r => setTimeout(r, 1500));
+          try {
+            const taskRes = await fetch(`${OMNILOAD_API_URL}/api/tasks/${taskId}`);
+            if (taskRes.ok) {
+              const taskInfo = await taskRes.json();
+              if (taskInfo.status === 'completed') {
+                completedTask = taskInfo;
+                break;
+              } else if (taskInfo.status === 'error') {
+                throw new Error(taskInfo.error || 'Download task failed');
+              }
+            }
+          } catch (tErr) {
+            console.warn('Task polling warning:', tErr.message);
+          }
+        }
+
+        if (!completedTask || !completedTask.filename) {
+          throw new Error('Download timed out or failed to complete on media engine');
+        }
+
+        // 3. Fetch downloaded binary from OmniLoad
+        const fileStreamRes = await fetch(`${OMNILOAD_API_URL}/downloads/${encodeURIComponent(completedTask.filename)}`);
+        if (!fileStreamRes.ok) {
+          throw new Error('Could not retrieve downloaded file from engine');
+        }
+
+        const fileBuffer = Buffer.from(await fileStreamRes.arrayBuffer());
+        const fileId = crypto.randomBytes(8).toString('hex');
+        const rawExt = path.extname(completedTask.filename) || (formatType === 'mp3' ? '.mp3' : '.mp4');
+        const targetFilename = `${fileId}${rawExt}`;
+        const localFilePath = path.join(UPLOAD_DIR, targetFilename);
+
+        fs.writeFileSync(localFilePath, fileBuffer);
+
+        let fileUrl = `/uploads/${targetFilename}`;
+        let uploadedToR2 = false;
+
+        // 4. Save to Cloudflare R2 if configured
+        if (r2Client) {
+          try {
+            const { PutObjectCommand } = require('@aws-sdk/client-s3');
+            const contentType = rawExt === '.mp3' ? 'audio/mpeg' : 'video/mp4';
+            await r2Client.send(new PutObjectCommand({
+              Bucket: R2_BUCKET_NAME,
+              Key: targetFilename,
+              Body: fileBuffer,
+              ContentType: contentType
+            }));
+            uploadedToR2 = true;
+          } catch (r2Err) {
+            console.warn('⚠️ Cloudflare R2 media upload warning:', r2Err.message);
+          }
+        }
+
+        // 5. Store file & study link in Project 10 User Data
+        const ownerData = (await dbAdapter.getUserData(ownerId)) || {};
+        if (!ownerData.files) ownerData.files = {};
+        
+        const displayName = customTitle || completedTask.title || completedTask.filename;
+        const fileRecord = {
+          id: fileId,
+          name: displayName,
+          filename: targetFilename,
+          url: fileUrl,
+          size: fileBuffer.length,
+          uploadedToR2,
+          uploadedAt: new Date().toISOString()
+        };
+        ownerData.files[fileId] = fileRecord;
+
+        if (!ownerData.studyLinks) ownerData.studyLinks = [];
+        const studyEntry = {
+          id: `media-${fileId}`,
+          title: displayName,
+          sub: courseCode ? `วิชา ${courseCode} (${(fileBuffer.length / (1024 * 1024)).toFixed(1)} MB)` : `Media Import (${(fileBuffer.length / (1024 * 1024)).toFixed(1)} MB)`,
+          type: formatType === 'mp3' ? 'audio' : 'video',
+          url: fileUrl,
+          courseCode: courseCode || null,
+          sourceUrl: mediaUrl,
+          desc: `นำเข้าจาก ${completedTask.platform || 'Online URL'} เมื่อ ${new Date().toLocaleString('th-TH')}`,
+          folderId: folderId || 'f-uploads',
+          createdAt: new Date().toISOString()
+        };
+        ownerData.studyLinks.unshift(studyEntry);
+
+        ownerData.version = (parseInt(ownerData.version, 10) || 0) + 1;
+        ownerData.updatedAt = new Date().toISOString();
+
+        await dbAdapter.saveUserData(ownerId, ownerData);
+        store[ownerId] = ownerData;
+        saveStore();
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          file: fileRecord,
+          studyLink: studyEntry,
+          title: displayName,
+          url: fileUrl
+        }));
+
+      } catch (e) {
+        console.error('Import media error:', e);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message || 'Import media failed' }));
+      }
+    });
+    return;
+  }
+
+  // ─── API: Study Tools - Convert PDF to Slide Images (POST /api/study-tools/convert-pdf-to-slides) ───
+  if (pathname === '/api/study-tools/convert-pdf-to-slides' && req.method === 'POST') {
+    parseJsonBody(async (err, data) => {
+      if (err || !data || (!data.fileUrl && !data.fileId)) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Missing fileUrl or fileId of PDF' }));
+        return;
+      }
+
+      const ownerId = resolveOwnerId(data);
+      const { fileUrl, format = 'jpg', dpi = 150, quality = 90 } = data;
+
+      try {
+        // Resolve local file path or stream from R2
+        let pdfBuffer = null;
+        const filename = path.basename(fileUrl);
+        const localPath = path.join(UPLOAD_DIR, filename);
+
+        if (fs.existsSync(localPath)) {
+          pdfBuffer = fs.readFileSync(localPath);
+        } else if (r2Client) {
+          const { GetObjectCommand } = require('@aws-sdk/client-s3');
+          const r2Res = await r2Client.send(new GetObjectCommand({
+            Bucket: R2_BUCKET_NAME,
+            Key: filename
+          }));
+          const chunks = [];
+          for await (const chunk of r2Res.Body) chunks.push(chunk);
+          pdfBuffer = Buffer.concat(chunks);
+        } else {
+          throw new Error('PDF file not found on server storage');
+        }
+
+        // Send Multipart Form Data to OmniLoad /api/convert/pdf-to-images
+        const boundary = '----WebKitFormBoundary' + crypto.randomBytes(16).toString('hex');
+        const formBuffers = [];
+
+        formBuffers.push(Buffer.from(
+          `--${boundary}\r\n` +
+          `Content-Disposition: form-data; name="file"; filename="${filename}"\r\n` +
+          `Content-Type: application/pdf\r\n\r\n`
+        ));
+        formBuffers.push(pdfBuffer);
+        formBuffers.push(Buffer.from(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="output_format"\r\n\r\n${format}`));
+        formBuffers.push(Buffer.from(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="dpi"\r\n\r\n${dpi}`));
+        formBuffers.push(Buffer.from(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="quality"\r\n\r\n${quality}`));
+        formBuffers.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+
+        const fullBody = Buffer.concat(formBuffers);
+
+        const convRes = await fetch(`${OMNILOAD_API_URL}/api/convert/pdf-to-images`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': `multipart/form-data; boundary=${boundary}`,
+            'Content-Length': fullBody.length.toString()
+          },
+          body: fullBody,
+          signal: AbortSignal.timeout(60000)
+        });
+
+        const convData = await convRes.json();
+        if (!convRes.ok || !convData.success) {
+          throw new Error(convData.detail || 'PDF Conversion failed on engine');
+        }
+
+        // Save generated page images into Project 10 storage
+        const savedPages = [];
+        for (const page of (convData.pages || [])) {
+          const imgRes = await fetch(`${OMNILOAD_API_URL}/downloads/${encodeURIComponent(page.filename)}`);
+          if (imgRes.ok) {
+            const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+            const imgTargetName = `${crypto.randomBytes(6).toString('hex')}_${page.filename}`;
+            const imgLocalPath = path.join(UPLOAD_DIR, imgTargetName);
+            fs.writeFileSync(imgLocalPath, imgBuffer);
+
+            if (r2Client) {
+              try {
+                const { PutObjectCommand } = require('@aws-sdk/client-s3');
+                await r2Client.send(new PutObjectCommand({
+                  Bucket: R2_BUCKET_NAME,
+                  Key: imgTargetName,
+                  Body: imgBuffer,
+                  ContentType: format === 'png' ? 'image/png' : 'image/jpeg'
+                }));
+              } catch (_) {}
+            }
+
+            savedPages.push({
+              page: page.page,
+              url: `/uploads/${imgTargetName}`,
+              filename: imgTargetName,
+              width: page.width,
+              height: page.height
+            });
+          }
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          totalPages: convData.total_pages,
+          pages: savedPages
+        }));
+
+      } catch (e) {
+        console.error('PDF to slides error:', e);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message || 'PDF slide extraction failed' }));
+      }
     });
     return;
   }
