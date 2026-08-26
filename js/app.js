@@ -4937,9 +4937,220 @@
         closeModal('sync-modal');
         closeModal('preview-modal');
         closeModal('resource-modal');
+        closeModal('study-toolkit-modal');
       }
     });
+
+    // ─── Study Toolkit Event Listeners ───
+    document.getElementById('study-toolkit-btn')?.addEventListener('click', async () => {
+      populateToolkitOptions();
+      openModal('study-toolkit-modal');
+      // Check OmniLoad status in background and update the status banner
+      const statusBanner = document.getElementById('tk-engine-status-banner');
+      if (statusBanner) {
+        statusBanner.innerHTML = '<span style="color:var(--label-2);font-size:11.5px">⏳ กำลังตรวจสอบ OmniLoad Engine...</span>';
+      }
+      try {
+        const r = await fetch('/api/study-tools/status', { signal: AbortSignal.timeout(5000) });
+        const d = await r.json();
+        if (d.connected) {
+          if (statusBanner) {
+            statusBanner.innerHTML = '<span style="color:#22c55e;font-weight:700;font-size:11.5px">🟢 OmniLoad Engine พร้อมใช้งาน</span>';
+          }
+          document.querySelectorAll('.tk-feature-form').forEach(el => el.style.display = '');
+          document.getElementById('tk-offline-fallback')?.style && (document.getElementById('tk-offline-fallback').style.display = 'none');
+        } else {
+          throw new Error('offline');
+        }
+      } catch (_) {
+        if (statusBanner) {
+          statusBanner.innerHTML = '<span style="color:#f59e0b;font-weight:700;font-size:11.5px">🔴 OmniLoad Engine ออฟไลน์ (local ยังไม่เปิด)</span>';
+        }
+        document.querySelectorAll('.tk-feature-form').forEach(el => el.style.display = 'none');
+        const fallback = document.getElementById('tk-offline-fallback');
+        if (fallback) fallback.style.display = 'block';
+      }
+    });
+
+    document.getElementById('study-toolkit-close')?.addEventListener('click', () => closeModal('study-toolkit-modal'));
+    document.getElementById('study-toolkit-cancel-btn')?.addEventListener('click', () => closeModal('study-toolkit-modal'));
+    document.getElementById('study-toolkit-modal')?.addEventListener('click', e => {
+      if (e.target === e.currentTarget) closeModal('study-toolkit-modal');
+    });
   }
+
+  // ─── Study Toolkit (OmniLoad Engine Integration) ───────────
+  window.switchToolkitTab = function(tab) {
+    const mediaTabBtn = document.getElementById('tk-tab-media-btn');
+    const pdfTabBtn = document.getElementById('tk-tab-pdf-btn');
+    const mediaPanel = document.getElementById('tk-panel-media');
+    const pdfPanel = document.getElementById('tk-panel-pdf');
+
+    if (tab === 'media') {
+      if (mediaTabBtn) { mediaTabBtn.style.background = 'var(--accent)'; mediaTabBtn.style.color = '#fff'; }
+      if (pdfTabBtn) { pdfTabBtn.style.background = 'transparent'; pdfTabBtn.style.color = 'var(--label-2)'; }
+      if (mediaPanel) mediaPanel.style.display = 'block';
+      if (pdfPanel) pdfPanel.style.display = 'none';
+    } else {
+      if (pdfTabBtn) { pdfTabBtn.style.background = 'var(--accent)'; pdfTabBtn.style.color = '#fff'; }
+      if (mediaTabBtn) { mediaTabBtn.style.background = 'transparent'; mediaTabBtn.style.color = 'var(--label-2)'; }
+      if (pdfPanel) pdfPanel.style.display = 'block';
+      if (mediaPanel) mediaPanel.style.display = 'none';
+    }
+  };
+
+  function populateToolkitOptions() {
+    // 1. Populate Course dropdown
+    const courseSelect = document.getElementById('tk-media-course');
+    if (courseSelect) {
+      const curriculum = state.curriculum || [];
+      const seen = new Set();
+      let opts = '<option value="">(ไฟล์ทั่วไป / คลังรวม)</option>';
+      curriculum.forEach(c => {
+        if (c && c.code && !seen.has(c.code)) {
+          seen.add(c.code);
+          opts += `<option value="${escHtml(c.code)}">${escHtml(c.code)}: ${escHtml(c.name || '')}</option>`;
+        }
+      });
+      courseSelect.innerHTML = opts;
+    }
+
+    // 2. Populate PDF source dropdown
+    const pdfSelect = document.getElementById('tk-pdf-source');
+    if (pdfSelect) {
+      const links = state.studyLinks || [];
+      const pdfs = links.filter(l => (l.url && l.url.toLowerCase().endsWith('.pdf')) || l.type === 'pdf');
+      if (pdfs.length === 0) {
+        pdfSelect.innerHTML = '<option value="">-- ยังไม่มีไฟล์ PDF ในระบบ (อัปโหลดที่แท็บ Study ก่อน) --</option>';
+      } else {
+        pdfSelect.innerHTML = pdfs.map(p => `<option value="${escHtml(p.url)}">${escHtml(p.title || p.url)}</option>`).join('');
+      }
+    }
+  }
+
+  window.startToolkitMediaImport = async function() {
+    const urlInput = document.getElementById('tk-media-url');
+    const url = urlInput?.value.trim();
+    const formatType = document.getElementById('tk-media-format')?.value || 'mp4';
+    const courseCode = document.getElementById('tk-media-course')?.value || '';
+    const customTitle = document.getElementById('tk-media-title')?.value.trim() || '';
+    const statusEl = document.getElementById('tk-media-status');
+    const btn = document.getElementById('tk-import-btn');
+
+    if (!url) {
+      showToast('กรุณาวางลิงก์วิดีโอหรือเสียงที่ต้องการนำเข้า', 'warning');
+      return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '⏳ กำลังดาวน์โหลดและบันทึกเข้า Cloud...';
+    if (statusEl) statusEl.innerHTML = '⚡ กำลังสั่งการ OmniLoad Engine ดาวน์โหลดมีเดีย...';
+
+    try {
+      const res = await fetch('/api/study-tools/import-media', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(CloudSync.getAuthToken() ? { 'Authorization': `Bearer ${CloudSync.getAuthToken()}` } : {})
+        },
+        body: JSON.stringify({
+          url,
+          formatType,
+          courseCode,
+          customTitle,
+          syncKey: CloudSync.getSyncKey()
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'นำเข้าสื่อไม่สำเร็จ');
+      }
+
+      showToast(`🎉 บันทึกสื่อ "${data.title}" เข้าคลังเรียบร้อยแล้ว!`, 'success');
+      if (statusEl) statusEl.innerHTML = `<span style="color:var(--accent);font-weight:700">✅ สำเร็จ: บันทึกเข้าคลังไฟล์แล้ว</span>`;
+
+      // Refresh Study / Resource view
+      if (data.studyLink) {
+        if (!state.studyLinks) state.studyLinks = [];
+        state.studyLinks.unshift(data.studyLink);
+        if (state.currentTopView === 'study') renderStudyView();
+      }
+
+      urlInput.value = '';
+      setTimeout(() => closeModal('study-toolkit-modal'), 1200);
+
+    } catch (err) {
+      showToast(`เกิดข้อผิดพลาด: ${err.message}`, 'error');
+      if (statusEl) statusEl.innerHTML = `<span style="color:#ef4444">❌ ${err.message}</span>`;
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '🚀 เริ่มดาวน์โหลดและบันทึกเข้าคลังวิชา';
+    }
+  };
+
+  window.startToolkitPdfConversion = async function() {
+    const pdfSelect = document.getElementById('tk-pdf-source');
+    const fileUrl = pdfSelect?.value;
+    const format = document.getElementById('tk-pdf-format')?.value || 'jpg';
+    const dpi = document.getElementById('tk-pdf-dpi')?.value || '150';
+    const statusEl = document.getElementById('tk-pdf-status');
+    const resultsEl = document.getElementById('tk-pdf-results');
+    const btn = document.getElementById('tk-convert-pdf-btn');
+
+    if (!fileUrl) {
+      showToast('กรุณาเลือกไฟล์ PDF ที่ต้องการแปลง', 'warning');
+      return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '⏳ กำลังแปลงหน้าสไลด์...';
+    if (statusEl) statusEl.innerHTML = '⚡ กำลังประมวลผล PyMuPDF Engine...';
+    if (resultsEl) resultsEl.style.display = 'none';
+
+    try {
+      const res = await fetch('/api/study-tools/convert-pdf-to-slides', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(CloudSync.getAuthToken() ? { 'Authorization': `Bearer ${CloudSync.getAuthToken()}` } : {})
+        },
+        body: JSON.stringify({
+          fileUrl,
+          format,
+          dpi,
+          syncKey: CloudSync.getSyncKey()
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'การแปลง PDF ล้มเหลว');
+      }
+
+      showToast(`📑 แปลงเสร็จสิ้น ${data.totalPages} หน้า!`, 'success');
+      if (statusEl) statusEl.innerHTML = `<span style="color:var(--accent);font-weight:700">✅ แปลงสำเร็จ ${data.totalPages} หน้า:</span>`;
+
+      if (resultsEl && data.pages) {
+        resultsEl.style.display = 'grid';
+        resultsEl.innerHTML = data.pages.map(p => `
+          <div style="border:1px solid var(--sep);border-radius:var(--r-s);overflow:hidden;background:var(--bg-1);text-align:center">
+            <a href="${p.url}" target="_blank">
+              <img src="${p.url}" alt="Page ${p.page}" style="width:100%;height:60px;object-fit:contain;background:#000" />
+            </a>
+            <div style="font-size:10px;font-weight:700;padding:2px;color:var(--label)">หน้า ${p.page}</div>
+          </div>
+        `).join('');
+      }
+
+    } catch (err) {
+      showToast(`เกิดข้อผิดพลาด: ${err.message}`, 'error');
+      if (statusEl) statusEl.innerHTML = `<span style="color:#ef4444">❌ ${err.message}</span>`;
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '📑 แปลง PDF เป็นภาพสไลด์เดี๋ยวนี้';
+    }
+  };
 
   // ─── Escape HTML ─────────────────────────────────────────
   function escHtml(str) {

@@ -71,6 +71,9 @@
         <div class="online-pill" title="System Online">
           <span class="online-dot"></span>ONLINE
         </div>
+        <button class="btn-pill" id="study-toolkit-btn" title="🧰 Study Toolkit: ดาวน์โหลดคลิป/เสียง & แปลงสไลด์ PDF" style="font-size:11.5px;font-weight:700;background:linear-gradient(135deg, rgba(99,102,241,0.2), rgba(168,85,247,0.2));border:1px solid rgba(99,102,241,0.4);color:var(--label);display:flex;align-items:center;gap:4px">
+          <span>🧰</span><span class="hidden-xs">Toolkit</span>
+        </button>
         <button class="btn-pill icon-only-btn" id="push-notify-btn" title="แจ้งเตือนคาบเรียนล่วงหน้า 15 นาที">🔔</button>
         <button class="btn-pill icon-only-btn" id="calendar-sync-btn" title="เชื่อมต่อ Apple &amp; Google Calendar">📅</button>
         <button class="btn-pill icon-only-btn" id="auth-user-btn" title="บัญชีผู้ใช้งาน">👤</button>
@@ -683,73 +686,135 @@
             <div>👤 บัญชี: <strong id="push-current-account" style="color:var(--label)">กำลังตรวจสอบ...</strong></div>
             <button class="btn btn-secondary" id="push-switch-acc-btn" style="font-size:11px;padding:4px 8px;cursor:pointer">จัดการบัญชี</button>
           </div>
-
-          <!-- Status Banner -->
-          <div id="push-device-status-banner" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--bg-3);border-radius:var(--r-m);border:1px solid var(--sep);margin-bottom:14px">
-            <div style="display:flex;align-items:center;gap:10px">
-              <span style="font-size:22px" id="push-status-icon">🔔</span>
-              <div>
-                <div style="font-size:13px;font-weight:700;color:var(--label)" id="push-status-heading">สถานะการแจ้งเตือน</div>
-                <div style="font-size:11.5px;color:var(--label-2)" id="push-status-desc">กำลังตรวจสอบ...</div>
-              </div>
-            </div>
-            <button class="btn btn-secondary" id="push-enable-device-btn" style="font-size:11.5px;padding:6px 12px;display:none">
-              เปิดบนเครื่องนี้
-            </button>
-          </div>
-
-          <!-- Broadcast Action Card -->
-          <div style="background:linear-gradient(135deg, rgba(224,122,56,0.12), rgba(224,122,56,0.04));border:1px solid rgba(224,122,56,0.28);border-radius:var(--r-m);padding:16px;margin-bottom:14px;text-align:center">
-            <div style="font-size:13.5px;font-weight:700;color:var(--label);margin-bottom:4px">
-              🚀 ทดสอบยิงแจ้งเตือนทุกอุปกรณ์ (Cross-Device)
-            </div>
-            <p style="font-size:11.5px;color:var(--label-2);line-height:1.45;margin-bottom:12px">
-              กดปุ่มนี้เพื่อส่งการแจ้งเตือนไปยัง <strong>ทุกอุปกรณ์</strong> (iPhone, iPad, Mac, PC) ที่ผูกกับบัญชีนี้พร้อมกันทันที
-            </p>
-            <button class="btn btn-primary" id="push-broadcast-test-btn" style="width:100%;padding:10px 18px;font-size:13px;font-weight:700;box-shadow:0 4px 14px rgba(224,122,56,0.3);cursor:pointer">
-              ⚡ ยิงแจ้งเตือนทดสอบทุกเครื่องเดี๋ยวนี้
-            </button>
-            <div id="push-broadcast-result" style="font-size:11.5px;font-weight:600;color:var(--accent);margin-top:8px;min-height:16px"></div>
-          </div>
-
-          <!-- LINE Bot Integration Card -->
-          <div style="background:linear-gradient(135deg, rgba(6,199,85,0.12), rgba(6,199,85,0.04));border:1px solid rgba(6,199,85,0.28);border-radius:var(--r-m);padding:14px;margin-bottom:14px">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-              <div style="display:flex;align-items:center;gap:8px">
-                <span style="font-size:18px">💬</span>
-                <div style="font-size:13px;font-weight:700;color:var(--label)">LINE Bot แจ้งเตือนผ่านแชท</div>
-              </div>
-              <span id="line-status-badge" style="font-size:10.5px;padding:3px 8px;border-radius:12px;background:rgba(6,199,85,0.15);color:#06c755;font-weight:700">กำลังโหลด...</span>
-            </div>
-            <p style="font-size:11.5px;color:var(--label-2);line-height:1.45;margin-bottom:10px" id="line-status-desc">
-              ผูกบัญชีกับ LINE Official เพื่อรับแจ้งเตือนคาบเรียนล่วงหน้า 15 นาที และขอดูตารางเรียนในแชทได้ตลอดเวลา
-            </p>
-            <div id="line-link-guide" style="background:var(--bg-card);border:1px dashed rgba(6,199,85,0.4);border-radius:var(--r-s);padding:8px 12px;font-size:11.5px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">
-              <div>
-                <span style="color:var(--label-2)">คำสั่งผูกบัญชี:</span> <code id="line-link-command" style="font-weight:700;color:#06c755;user-select:all">/link ...</code>
-              </div>
-              <button class="btn btn-secondary" id="line-copy-cmd-btn" style="font-size:10.5px;padding:3px 8px;cursor:pointer">คัดลอก</button>
-            </div>
-            <div style="display:flex;gap:8px">
-              <button class="btn btn-secondary" id="line-test-btn" style="flex:1;padding:7px 12px;font-size:12px;border-color:rgba(6,199,85,0.4);color:#06c755;font-weight:600;cursor:pointer">
-                📲 ทดสอบยิงเข้า LINE
-              </button>
-            </div>
-            <div id="line-test-result" style="font-size:11px;font-weight:600;color:#06c755;margin-top:6px;min-height:14px;text-align:center"></div>
-          </div>
-
-          <!-- Feature Description -->
-          <div style="font-size:12px;color:var(--label-2);line-height:1.5;background:var(--bg-2);padding:12px 14px;border-radius:var(--r-m);border:1px solid var(--sep)">
-            <div style="font-weight:700;color:var(--label);margin-bottom:4px">⏰ ตารางการแจ้งเตือนอัตโนมัติ:</div>
-            <ul style="padding-left:18px;margin:0">
-              <li>ระบบส่ง Push Notification แจ้งเตือนล่วงหน้า <strong>15 นาที</strong> ก่อนเริ่มคาบเรียน</li>
-              <li>ระบุชื่อวิชา รหัสวิชา และห้องเรียนครบถ้วน</li>
-              <li>ทำงานในพื้นหลังแบบ Real-Time แม้ปิดหน้าเว็บ</li>
-            </ul>
-          </div>
         </div>
         <div class="modal-actions">
           <button class="btn btn-secondary" id="push-modal-cancel-btn">ปิด</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── Study Toolkit Modal (OmniLoad Media & PDF Converter Engine) ─── -->
+    <div class="modal-overlay" id="study-toolkit-modal" role="dialog" aria-modal="true" aria-labelledby="study-toolkit-title">
+      <div class="modal-box" style="max-width:560px">
+        <div class="modal-header">
+          <span class="modal-title" id="study-toolkit-title">🧰 Study Toolkit</span>
+          <button class="modal-close" id="study-toolkit-close" aria-label="ปิด">✕</button>
+        </div>
+        <div class="modal-body">
+
+          <!-- Engine Status Banner -->
+          <div id="tk-engine-status-banner" style="display:flex;align-items:center;justify-content:space-between;background:var(--bg-2);border:1px solid var(--sep);border-radius:var(--r-m);padding:8px 12px;margin-bottom:12px">
+            <span style="color:var(--label-2);font-size:11.5px">⏳ กำลังตรวจสอบ OmniLoad Engine...</span>
+            <a href="http://localhost:8000" target="_blank" rel="noopener" style="font-size:11px;color:var(--accent);font-weight:600;text-decoration:none" title="เปิด OmniLoad standalone">↗ localhost:8000</a>
+          </div>
+
+          <!-- Offline Fallback (shown when OmniLoad is not running) -->
+          <div id="tk-offline-fallback" style="display:none;text-align:center;padding:20px 12px">
+            <div style="font-size:32px;margin-bottom:8px">🔌</div>
+            <div style="font-size:14px;font-weight:700;color:var(--label);margin-bottom:6px">OmniLoad Engine ยังไม่ได้เปิด</div>
+            <p style="font-size:12px;color:var(--label-2);margin-bottom:16px;line-height:1.5">
+              สำหรับใช้งาน Toolkit นี้ ต้องเปิด OmniLoad (Project 12) ก่อน<br/>
+              <strong>Local:</strong> รัน <code style="background:var(--bg-3);padding:1px 5px;border-radius:4px">start.bat</code> หรือ <code style="background:var(--bg-3);padding:1px 5px;border-radius:4px">python run.py</code>
+            </p>
+            <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+              <a href="http://localhost:8000" target="_blank" rel="noopener"
+                style="display:inline-flex;align-items:center;gap:6px;padding:9px 16px;background:linear-gradient(135deg,#6366f1,#a855f7);color:#fff;border-radius:var(--r-m);font-size:13px;font-weight:700;text-decoration:none;box-shadow:0 4px 14px rgba(99,102,241,0.35)">
+                🚀 เปิด OmniLoad (localhost:8000)
+              </a>
+              <button onclick="document.getElementById('study-toolkit-btn').click()" class="btn btn-secondary" style="font-size:12px">
+                🔄 ลองใหม่
+              </button>
+            </div>
+            <p style="font-size:11px;color:var(--label-3);margin-top:14px">
+              เมื่อ deploy บน Railway แล้ว ระบบจะเชื่อมต่ออัตโนมัติผ่าน Private Network
+            </p>
+          </div>
+
+          <!-- Tab Navigation -->
+          <div class="tk-feature-form" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--bg-3);padding:4px;border-radius:var(--r-m);margin-bottom:14px;border:1px solid var(--sep)">
+            <button id="tk-tab-media-btn" onclick="switchToolkitTab('media')" class="btn" style="background:var(--accent);color:#fff;font-size:12px;font-weight:700;padding:8px">
+              📥 นำเข้าสื่อจาก URL
+            </button>
+            <button id="tk-tab-pdf-btn" onclick="switchToolkitTab('pdf')" class="btn" style="background:transparent;color:var(--label-2);font-size:12px;font-weight:600;padding:8px">
+              📄 แปลงสไลด์ PDF ➔ รูปภาพ
+            </button>
+          </div>
+
+          <!-- TAB 1: MEDIA IMPORTER -->
+          <div id="tk-panel-media" class="tk-feature-form" style="display:block">
+            <p style="font-size:12px;color:var(--label-2);margin-bottom:12px;line-height:1.4">
+              วางลิงก์วิดีโอหรือเสียง (YouTube, TikTok, SoundCloud, X, Facebook) เพื่อดาวน์โหลดเก็บไว้ในคลังไฟล์วิชาเรียนอัตโนมัติ
+            </p>
+            <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">
+              <div>
+                <label style="font-size:11.5px;font-weight:600;color:var(--label-2);display:block;margin-bottom:4px">ลิงก์สื่อ (Media URL):</label>
+                <input id="tk-media-url" type="text" class="form-input" placeholder="https://www.youtube.com/watch?v=... หรือ TikTok, X, SoundCloud" style="font-size:12px" />
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <div>
+                  <label style="font-size:11.5px;font-weight:600;color:var(--label-2);display:block;margin-bottom:4px">ประเภทไฟล์:</label>
+                  <select id="tk-media-format" class="form-input" style="font-size:12px">
+                    <option value="mp4">วิดีโอ MP4 (ความชัดสูงสุด)</option>
+                    <option value="mp3">เสียงเพลง/บรรยาย MP3 (320kbps)</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:11.5px;font-weight:600;color:var(--label-2);display:block;margin-bottom:4px">ผูกเข้ากับวิชา:</label>
+                  <select id="tk-media-course" class="form-input" style="font-size:12px">
+                    <option value="">(ไฟล์ทั่วไป / ทั่วไป)</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label style="font-size:11.5px;font-weight:600;color:var(--label-2);display:block;margin-bottom:4px">ชื่อบันทึก (ระบุเองหรือไม่ระบุก็ได้):</label>
+                <input id="tk-media-title" type="text" class="form-input" placeholder="เช่น คลิปติวบทที่ 3 หรือ ชื่อคลิปเดิม" style="font-size:12px" />
+              </div>
+            </div>
+            <button id="tk-import-btn" onclick="startToolkitMediaImport()" class="btn btn-primary" style="width:100%;padding:10px;font-size:13px;font-weight:700;box-shadow:0 4px 14px rgba(224,122,56,0.3)">
+              🚀 เริ่มดาวน์โหลดและบันทึกเข้าคลังวิชา
+            </button>
+            <div id="tk-media-status" style="font-size:11.5px;color:var(--label-2);margin-top:10px;text-align:center;min-height:18px"></div>
+          </div>
+
+          <!-- TAB 2: PDF SLIDE CONVERTER -->
+          <div id="tk-panel-pdf" class="tk-feature-form" style="display:none">
+            <p style="font-size:12px;color:var(--label-2);margin-bottom:12px;line-height:1.4">
+              เลือกไฟล์สไลด์ PDF เพื่อแปลงทุกหน้าเป็นรูปภาพ JPG สำหรับอ่านทบทวนหรือทำ Flashcards
+            </p>
+            <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">
+              <div>
+                <label style="font-size:11.5px;font-weight:600;color:var(--label-2);display:block;margin-bottom:4px">เลือกไฟล์ PDF ในระบบ:</label>
+                <select id="tk-pdf-source" class="form-input" style="font-size:12px">
+                  <option value="">-- กำลังโหลดไฟล์ PDF... --</option>
+                </select>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <div>
+                  <label style="font-size:11.5px;font-weight:600;color:var(--label-2);display:block;margin-bottom:4px">ความคมชัด (DPI):</label>
+                  <select id="tk-pdf-dpi" class="form-input" style="font-size:12px">
+                    <option value="150">150 DPI (มาตรฐานหน้าจอ)</option>
+                    <option value="300">300 DPI (ความละเอียดสูง)</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:11.5px;font-weight:600;color:var(--label-2);display:block;margin-bottom:4px">ฟอร์แมต:</label>
+                  <select id="tk-pdf-format" class="form-input" style="font-size:12px">
+                    <option value="jpg">JPG (ภาพสไลด์)</option>
+                    <option value="png">PNG (คมชัดสูงสุด)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <button id="tk-convert-pdf-btn" onclick="startToolkitPdfConversion()" class="btn btn-primary" style="width:100%;padding:10px;font-size:13px;font-weight:700;box-shadow:0 4px 14px rgba(224,122,56,0.3)">
+              📑 แปลง PDF เป็นภาพสไลด์เดี๋ยวนี้
+            </button>
+            <div id="tk-pdf-status" style="font-size:11.5px;color:var(--label-2);margin-top:10px;text-align:center;min-height:18px"></div>
+            <div id="tk-pdf-results" style="margin-top:12px;max-height:180px;overflow-y:auto;display:none;grid-template-columns:repeat(auto-fill, minmax(80px, 1fr));gap:6px;padding:6px;background:var(--bg-2);border-radius:var(--r-m);border:1px solid var(--sep)"></div>
+          </div>
+
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="study-toolkit-cancel-btn">ปิด</button>
         </div>
       </div>
     </div>
