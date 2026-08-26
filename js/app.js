@@ -4952,29 +4952,52 @@
       populateToolkitOptions();
       openModal('study-toolkit-modal');
       const statusBanner = document.getElementById('tk-engine-status-banner');
+      const fallback = document.getElementById('tk-offline-fallback');
+
       if (statusBanner) {
         statusBanner.innerHTML = '<span style="color:var(--label-2);font-size:11.5px">⏳ กำลังตรวจสอบ OmniLoad Engine...</span>';
       }
+
       try {
         const r = await fetch('/api/study-tools/status', { signal: AbortSignal.timeout(5000) });
         const d = await r.json();
+
         if (d.connected) {
           if (statusBanner) {
-            statusBanner.innerHTML = '<span style="color:#22c55e;font-weight:700;font-size:11.5px">🟢 OmniLoad Engine พร้อมใช้งาน</span>';
+            statusBanner.innerHTML = '<span style="color:#22c55e;font-weight:700;font-size:11.5px">🟢 OmniLoad Engine พร้อมใช้งาน</span>' +
+              (d.isProduction ? '<span style="font-size:11px;color:var(--label-2);background:var(--bg-3);padding:2px 8px;border-radius:12px;border:1px solid var(--sep)">☁️ Railway Cloud</span>' : '<a href="http://localhost:8000" target="_blank" rel="noopener" style="font-size:11px;color:var(--accent);font-weight:600;text-decoration:none">↗ localhost:8000</a>');
           }
           document.querySelectorAll('.tk-feature-form').forEach(el => el.style.display = '');
-          const fallback = document.getElementById('tk-offline-fallback');
           if (fallback) fallback.style.display = 'none';
         } else {
-          throw new Error('offline');
+          throw d;
         }
-      } catch (_) {
+      } catch (err) {
+        const isProd = err && err.isProduction;
         if (statusBanner) {
-          statusBanner.innerHTML = '<span style="color:#f59e0b;font-weight:700;font-size:11.5px">🔴 OmniLoad Engine ออฟไลน์ (local ยังไม่เปิด)</span>';
+          statusBanner.innerHTML = isProd
+            ? '<span style="color:#f59e0b;font-weight:700;font-size:11.5px">🟡 กำลังรอเชื่อมต่อ OmniLoad บน Railway...</span>'
+            : '<span style="color:#f59e0b;font-weight:700;font-size:11.5px">🔴 OmniLoad Engine ออฟไลน์ (local ยังไม่เปิด)</span>';
         }
         document.querySelectorAll('.tk-feature-form').forEach(el => el.style.display = 'none');
-        const fallback = document.getElementById('tk-offline-fallback');
-        if (fallback) fallback.style.display = 'block';
+        if (fallback) {
+          fallback.style.display = 'block';
+          if (isProd) {
+            fallback.innerHTML = `
+              <div style="font-size:32px;margin-bottom:8px">☁️</div>
+              <div style="font-size:14px;font-weight:700;color:var(--label);margin-bottom:6px">กำลังรอเชื่อมต่อ OmniLoad บน Railway</div>
+              <p style="font-size:12px;color:var(--label-2);margin-bottom:16px;line-height:1.5">
+                ระบบกำลังเชื่อมต่อกับ <strong>Service 12</strong> ผ่าน Railway Private Network<br/>
+                หากเพิ่งกด Deploy โปรดรอ 1-2 นาทีให้ Service 12 บูตเสร็จสมบูรณ์ แล้วกดปุ่มลองใหม่
+              </p>
+              <div style="display:flex;gap:8px;justify-content:center">
+                <button onclick="window.openStudyToolkitModal()" class="btn btn-primary" style="font-size:12px;padding:8px 16px">
+                  🔄 ลองใหม่ (Recheck Status)
+                </button>
+              </div>
+            `;
+          }
+        }
       }
     };
 

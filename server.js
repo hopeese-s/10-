@@ -4606,14 +4606,14 @@ const server = http.createServer(async (req, res) => {
       if (response.ok) {
         const data = await response.json();
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ connected: true, omniload_url: OMNILOAD_API_URL, ...data }));
+        res.end(JSON.stringify({ connected: true, isProduction: IS_PRODUCTION, omniload_url: OMNILOAD_API_URL, ...data }));
         return;
       }
     } catch (e) {
       // OmniLoad service offline or not reachable
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ connected: false, omniload_url: OMNILOAD_API_URL, message: 'OmniLoad service is currently offline or unreachable' }));
+    res.end(JSON.stringify({ connected: false, isProduction: IS_PRODUCTION, omniload_url: OMNILOAD_API_URL, message: 'OmniLoad service is currently offline or unreachable' }));
     return;
   }
 
