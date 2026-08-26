@@ -4967,8 +4967,10 @@
             statusBanner.innerHTML = '<span style="color:#22c55e;font-weight:700;font-size:11.5px">🟢 OmniLoad Engine พร้อมใช้งาน</span>' +
               (d.isProduction ? '<span style="font-size:11px;color:var(--label-2);background:var(--bg-3);padding:2px 8px;border-radius:12px;border:1px solid var(--sep)">☁️ Railway Cloud</span>' : '<a href="http://localhost:8000" target="_blank" rel="noopener" style="font-size:11px;color:var(--accent);font-weight:600;text-decoration:none">↗ localhost:8000</a>');
           }
-          document.querySelectorAll('.tk-feature-form').forEach(el => el.style.display = '');
+          const tabNav = document.querySelector('.tk-tab-nav');
+          if (tabNav) tabNav.style.display = 'grid';
           if (fallback) fallback.style.display = 'none';
+          window.switchToolkitTab('media');
         } else {
           throw d;
         }
@@ -4979,7 +4981,12 @@
             ? '<span style="color:#f59e0b;font-weight:700;font-size:11.5px">🟡 กำลังรอเชื่อมต่อ OmniLoad บน Railway...</span>'
             : '<span style="color:#f59e0b;font-weight:700;font-size:11.5px">🔴 OmniLoad Engine ออฟไลน์ (local ยังไม่เปิด)</span>';
         }
-        document.querySelectorAll('.tk-feature-form').forEach(el => el.style.display = 'none');
+        const tabNav = document.querySelector('.tk-tab-nav');
+        if (tabNav) tabNav.style.display = 'none';
+        const mediaPanel = document.getElementById('tk-panel-media');
+        const pdfPanel = document.getElementById('tk-panel-pdf');
+        if (mediaPanel) mediaPanel.style.display = 'none';
+        if (pdfPanel) pdfPanel.style.display = 'none';
         if (fallback) {
           fallback.style.display = 'block';
           if (isProd) {
