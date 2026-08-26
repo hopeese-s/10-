@@ -22,7 +22,33 @@ if (!fs.existsSync(UPLOAD_DIR)) {
 const IS_PRODUCTION = process.env.NODE_ENV === 'production' || Boolean(process.env.RAILWAY_ENVIRONMENT) || Boolean(process.env.RENDER);
 const STRICT_CLOUD_MODE = process.env.STRICT_CLOUD_MODE === 'true';
 const APP_BASE_URL = (process.env.APP_BASE_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : 'https://e-calen.up.railway.app')).replace(/\/$/, '');
-const OMNILOAD_API_URL = (process.env.OMNILOAD_API_URL || (IS_PRODUCTION ? 'http://omniload.railway.internal:8000' : 'http://127.0.0.1:8000')).replace(/\/$/, '');
+let activeOmniLoadUrl = (process.env.OMNILOAD_API_URL || (IS_PRODUCTION ? 'http://12.railway.internal:8000' : 'http://127.0.0.1:8000')).replace(/\/$/, '');
+
+async function probeOmniLoadUrl() {
+  const candidates = [
+    process.env.OMNILOAD_API_URL,
+    activeOmniLoadUrl,
+    'http://12.railway.internal:8000',
+    'http://12.railway.internal:8080',
+    'http://omniload.railway.internal:8000',
+    'http://omniload.railway.internal:8080',
+    'http://127.0.0.1:8000',
+    'http://localhost:8000'
+  ].filter(Boolean).map(u => u.replace(/\/$/, ''));
+
+  const unique = Array.from(new Set(candidates));
+  for (const targetUrl of unique) {
+    try {
+      const r = await fetch(`${targetUrl}/api/system-status`, { signal: AbortSignal.timeout(2500) });
+      if (r.ok) {
+        const data = await r.json();
+        activeOmniLoadUrl = targetUrl;
+        return { connected: true, url: targetUrl, data };
+      }
+    } catch (_) {}
+  }
+  return { connected: false, url: activeOmniLoadUrl, data: null };
+}
 
 // ─── Cloudflare R2 S3 Storage Adapter ─────────────────────────
 let r2Client = null;
@@ -4601,19 +4627,14 @@ const server = http.createServer(async (req, res) => {
   // ─── API: Study Tools - OmniLoad Engine Status (GET /api/study-tools/status) ───
   if (pathname === '/api/study-tools/status' && req.method === 'GET') {
     res.setHeader('Cache-Control', 'no-store');
-    try {
-      const response = await fetch(`${OMNILOAD_API_URL}/api/system-status`, { signal: AbortSignal.timeout(4000) });
-      if (response.ok) {
-        const data = await response.json();
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ connected: true, isProduction: IS_PRODUCTION, omniload_url: OMNILOAD_API_URL, ...data }));
-        return;
-      }
-    } catch (e) {
-      // OmniLoad service offline or not reachable
-    }
+    const probe = await probeOmniLoadUrl();
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ connected: false, isProduction: IS_PRODUCTION, omniload_url: OMNILOAD_API_URL, message: 'OmniLoad service is currently offline or unreachable' }));
+    res.end(JSON.stringify({
+      connected: probe.connected,
+      isProduction: IS_PRODUCTION,
+      omniload_url: probe.url,
+      ...(probe.data || {})
+    }));
     return;
   }
 
@@ -4626,7 +4647,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       try {
-        const response = await fetch(`${OMNILOAD_API_URL}/api/info`, {
+        const response = await fetch(`${activeOmniLoadUrl}/api/info`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: data.url }),
@@ -4657,7 +4678,7 @@ const server = http.createServer(async (req, res) => {
 
       try {
         // 1. Trigger download on OmniLoad
-        const dlRes = await fetch(`${OMNILOAD_API_URL}/api/download`, {
+        const dlRes = await fetch(`${activeOmniLoadUrl}/api/download`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -4685,7 +4706,7 @@ const server = http.createServer(async (req, res) => {
         while (Date.now() - startTime < 180000) {
           await new Promise(r => setTimeout(r, 1500));
           try {
-            const taskRes = await fetch(`${OMNILOAD_API_URL}/api/tasks/${taskId}`);
+            const taskRes = await fetch(`${activeOmniLoadUrl}/api/tasks/${taskId}`);
             if (taskRes.ok) {
               const taskInfo = await taskRes.json();
               if (taskInfo.status === 'completed') {
@@ -4705,7 +4726,7 @@ const server = http.createServer(async (req, res) => {
         }
 
         // 3. Fetch downloaded binary from OmniLoad
-        const fileStreamRes = await fetch(`${OMNILOAD_API_URL}/downloads/${encodeURIComponent(completedTask.filename)}`);
+        const fileStreamRes = await fetch(`${activeOmniLoadUrl}/downloads/${encodeURIComponent(completedTask.filename)}`);
         if (!fileStreamRes.ok) {
           throw new Error('Could not retrieve downloaded file from engine');
         }
@@ -4844,7 +4865,7 @@ const server = http.createServer(async (req, res) => {
 
         const fullBody = Buffer.concat(formBuffers);
 
-        const convRes = await fetch(`${OMNILOAD_API_URL}/api/convert/pdf-to-images`, {
+        const convRes = await fetch(`${activeOmniLoadUrl}/api/convert/pdf-to-images`, {
           method: 'POST',
           headers: {
             'Content-Type': `multipart/form-data; boundary=${boundary}`,
@@ -4862,7 +4883,7 @@ const server = http.createServer(async (req, res) => {
         // Save generated page images into Project 10 storage
         const savedPages = [];
         for (const page of (convData.pages || [])) {
-          const imgRes = await fetch(`${OMNILOAD_API_URL}/downloads/${encodeURIComponent(page.filename)}`);
+          const imgRes = await fetch(`${activeOmniLoadUrl}/downloads/${encodeURIComponent(page.filename)}`);
           if (imgRes.ok) {
             const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
             const imgTargetName = `${crypto.randomBytes(6).toString('hex')}_${page.filename}`;
