@@ -45,8 +45,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
-  <!-- PDF.js Multi-Page Viewer for iPadOS & Modern Browsers -->
+  <!-- PDF.js Multi-Page Viewer & JSZip for Instant Client-Side Processing -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body>
 
@@ -773,6 +774,19 @@
             <button id="tk-import-btn" onclick="startToolkitMediaImport()" class="btn btn-primary" style="width:100%;padding:10px;font-size:13px;font-weight:700;box-shadow:0 4px 14px rgba(224,122,56,0.3)">
               🚀 เริ่มดาวน์โหลดและบันทึกเข้าคลังวิชา
             </button>
+            <div id="tk-media-progress-box" style="display:none;margin-top:12px;background:var(--bg-3);border:1px solid var(--sep);border-radius:var(--r-m);padding:10px">
+              <div style="display:flex;justify-content:space-between;font-size:11.5px;font-weight:700;margin-bottom:6px">
+                <span id="tk-media-progress-title" style="color:var(--label);max-width:70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">กำลังดาวน์โหลด...</span>
+                <span id="tk-media-progress-pct" style="color:var(--accent)">0%</span>
+              </div>
+              <div style="height:6px;background:var(--bg-2);border-radius:3px;overflow:hidden;margin-bottom:6px">
+                <div id="tk-media-progress-fill" style="height:100%;width:0%;background:var(--accent);transition:width 300ms ease;border-radius:3px"></div>
+              </div>
+              <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--label-2)">
+                <span id="tk-media-progress-bytes">0 MB</span>
+                <span id="tk-media-progress-speed">-- MB/s</span>
+              </div>
+            </div>
             <div id="tk-media-status" style="font-size:11.5px;color:var(--label-2);margin-top:10px;text-align:center;min-height:18px"></div>
           </div>
 
@@ -792,7 +806,7 @@
                 <div>
                   <label style="font-size:11.5px;font-weight:600;color:var(--label-2);display:block;margin-bottom:4px">ความคมชัด (DPI):</label>
                   <select id="tk-pdf-dpi" class="form-input" style="font-size:12px">
-                    <option value="150">150 DPI (มาตรฐานหน้าจอ)</option>
+                    <option value="150">150 DPI (มาตรฐานหน้าจอ - เร็วมาก)</option>
                     <option value="300">300 DPI (ความละเอียดสูง)</option>
                   </select>
                 </div>
@@ -808,6 +822,15 @@
             <button id="tk-convert-pdf-btn" onclick="startToolkitPdfConversion()" class="btn btn-primary" style="width:100%;padding:10px;font-size:13px;font-weight:700;box-shadow:0 4px 14px rgba(224,122,56,0.3)">
               📑 แปลง PDF เป็นภาพสไลด์เดี๋ยวนี้
             </button>
+            <div id="tk-pdf-progress-box" style="display:none;margin-top:12px;background:var(--bg-3);border:1px solid var(--sep);border-radius:var(--r-m);padding:10px">
+              <div style="display:flex;justify-content:space-between;font-size:11.5px;font-weight:700;margin-bottom:6px">
+                <span id="tk-pdf-progress-title" style="color:var(--label)">กำลังแปลงหน้าสไลด์...</span>
+                <span id="tk-pdf-progress-pct" style="color:#10b981">0%</span>
+              </div>
+              <div style="height:6px;background:var(--bg-2);border-radius:3px;overflow:hidden">
+                <div id="tk-pdf-progress-fill" style="height:100%;width:0%;background:#10b981;transition:width 150ms ease;border-radius:3px"></div>
+              </div>
+            </div>
             <div id="tk-pdf-status" style="font-size:11.5px;color:var(--label-2);margin-top:10px;text-align:center;min-height:18px"></div>
             <div id="tk-pdf-results" style="margin-top:12px;max-height:180px;overflow-y:auto;display:none;grid-template-columns:repeat(auto-fill, minmax(80px, 1fr));gap:6px;padding:6px;background:var(--bg-2);border-radius:var(--r-m);border:1px solid var(--sep)"></div>
           </div>

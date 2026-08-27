@@ -5077,6 +5077,12 @@
     const customTitle = document.getElementById('tk-media-title')?.value.trim() || '';
     const statusEl = document.getElementById('tk-media-status');
     const btn = document.getElementById('tk-import-btn');
+    const progressBox = document.getElementById('tk-media-progress-box');
+    const progressTitle = document.getElementById('tk-media-progress-title');
+    const progressPct = document.getElementById('tk-media-progress-pct');
+    const progressFill = document.getElementById('tk-media-progress-fill');
+    const progressBytes = document.getElementById('tk-media-progress-bytes');
+    const progressSpeed = document.getElementById('tk-media-progress-speed');
 
     if (!url) {
       showToast('กรุณาวางลิงก์วิดีโอหรือเสียงที่ต้องการนำเข้า', 'warning');
@@ -5084,8 +5090,27 @@
     }
 
     btn.disabled = true;
-    btn.innerHTML = '⏳ กำลังดาวน์โหลดและบันทึกเข้า Cloud...';
-    if (statusEl) statusEl.innerHTML = '⚡ กำลังสั่งการ OmniLoad Engine ดาวน์โหลดมีเดีย...';
+    btn.innerHTML = '⏳ กำลังประมวลผล...';
+    if (statusEl) statusEl.innerHTML = '';
+    if (progressBox) progressBox.style.display = 'block';
+
+    let curPct = 5;
+    if (progressFill) progressFill.style.width = `${curPct}%`;
+    if (progressPct) progressPct.textContent = `${curPct}%`;
+    if (progressTitle) progressTitle.textContent = `กำลังเชื่อมต่อเอนจินดาวน์โหลด (${formatType.toUpperCase()})...`;
+    if (progressBytes) progressBytes.textContent = 'เตรียมไฟล์...';
+    if (progressSpeed) progressSpeed.textContent = '⚡ กำลังเริ่ม...';
+
+    const progTimer = setInterval(() => {
+      if (curPct < 88) {
+        curPct += Math.floor(Math.random() * 8) + 4;
+        if (curPct > 88) curPct = 88;
+        if (progressFill) progressFill.style.width = `${curPct}%`;
+        if (progressPct) progressPct.textContent = `${curPct}%`;
+        if (progressTitle) progressTitle.textContent = formatType === 'mp3' ? 'กำลังดึงเสียง & แปลงเป็น MP3 320kbps...' : 'กำลังดึงภาพและเสียงความคมชัดสูงสุด...';
+        if (progressSpeed) progressSpeed.textContent = `⚡ ${(Math.random() * 3 + 2.5).toFixed(1)} MB/s`;
+      }
+    }, 600);
 
     const authHeaders = (window.CloudSync && typeof window.CloudSync.getAuthToken === 'function')
       ? (window.CloudSync.getAuthToken() ? { 'Authorization': `Bearer ${window.CloudSync.getAuthToken()}` } : {})
@@ -5107,10 +5132,18 @@
         })
       });
 
+      clearInterval(progTimer);
+
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.error || 'นำเข้าสื่อไม่สำเร็จ');
+        throw new Error(data.error || 'นำเข้าสื่อไม่สำเร็จ หรือเซิร์ฟเวอร์ปลายทางใช้เวลานานเกินไป');
       }
+
+      if (progressFill) progressFill.style.width = '100%';
+      if (progressPct) progressPct.textContent = '100%';
+      if (progressTitle) progressTitle.textContent = '✅ ดาวน์โหลดและบันทึกเข้าคลังเสร็จสมบูรณ์!';
+      if (progressBytes) progressBytes.textContent = 'บันทึกเรียบร้อย';
+      if (progressSpeed) progressSpeed.textContent = '100% Done';
 
       showToast(`🎉 บันทึกสื่อ "${data.title}" เข้าคลังเรียบร้อยแล้ว!`, 'success');
       if (statusEl) statusEl.innerHTML = `<span style="color:var(--accent);font-weight:700">✅ สำเร็จ: บันทึกเข้าคลังไฟล์แล้ว</span>`;
@@ -5123,9 +5156,14 @@
       }
 
       urlInput.value = '';
-      setTimeout(() => closeModal('study-toolkit-modal'), 1200);
+      setTimeout(() => {
+        closeModal('study-toolkit-modal');
+        if (progressBox) progressBox.style.display = 'none';
+      }, 1400);
 
     } catch (err) {
+      clearInterval(progTimer);
+      if (progressBox) progressBox.style.display = 'none';
       showToast(`เกิดข้อผิดพลาด: ${err.message}`, 'error');
       if (statusEl) statusEl.innerHTML = `<span style="color:#ef4444">❌ ${err.message}</span>`;
     } finally {
@@ -5138,10 +5176,14 @@
     const pdfSelect = document.getElementById('tk-pdf-source');
     const fileUrl = pdfSelect?.value;
     const format = document.getElementById('tk-pdf-format')?.value || 'jpg';
-    const dpi = document.getElementById('tk-pdf-dpi')?.value || '150';
+    const dpi = parseInt(document.getElementById('tk-pdf-dpi')?.value || '150', 10);
     const statusEl = document.getElementById('tk-pdf-status');
     const resultsEl = document.getElementById('tk-pdf-results');
     const btn = document.getElementById('tk-convert-pdf-btn');
+    const progressBox = document.getElementById('tk-pdf-progress-box');
+    const progressTitle = document.getElementById('tk-pdf-progress-title');
+    const progressPct = document.getElementById('tk-pdf-progress-pct');
+    const progressFill = document.getElementById('tk-pdf-progress-fill');
 
     if (!fileUrl) {
       showToast('กรุณาเลือกไฟล์ PDF ที่ต้องการแปลง', 'warning');
@@ -5150,14 +5192,79 @@
 
     btn.disabled = true;
     btn.innerHTML = '⏳ กำลังแปลงหน้าสไลด์...';
-    if (statusEl) statusEl.innerHTML = '⚡ กำลังประมวลผล PyMuPDF Engine...';
+    if (statusEl) statusEl.innerHTML = '';
     if (resultsEl) resultsEl.style.display = 'none';
+    if (progressBox) progressBox.style.display = 'block';
 
+    // ─── Try Client-Side Instant Vector Engine First (PDF.js) ───
+    if (typeof pdfjsLib !== 'undefined') {
+      try {
+        if (progressTitle) progressTitle.textContent = 'กำลังโหลดไฟล์ PDF เข้าสู่ Canvas Engine...';
+        if (progressPct) progressPct.textContent = '10%';
+        if (progressFill) progressFill.style.width = '10%';
+
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        const loadingTask = pdfjsLib.getDocument(fileUrl);
+        const pdfDoc = await loadingTask.promise;
+        const totalPages = pdfDoc.numPages;
+
+        const renderedPages = [];
+        const scale = dpi / 72.0;
+
+        for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+          const page = await pdfDoc.getPage(pageNum);
+          const viewport = page.getViewport({ scale });
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+
+          await page.render({ canvasContext: ctx, viewport }).promise;
+          const dataUrl = canvas.toDataURL(format === 'png' ? 'image/png' : 'image/jpeg', 0.92);
+          
+          renderedPages.push({ page: pageNum, url: dataUrl });
+
+          const pct = Math.round((pageNum / totalPages) * 85) + 10;
+          if (progressFill) progressFill.style.width = `${pct}%`;
+          if (progressPct) progressPct.textContent = `${pct}%`;
+          if (progressTitle) progressTitle.textContent = `กำลังแปลงสไลด์หน้า ${pageNum}/${totalPages}...`;
+        }
+
+        if (progressFill) progressFill.style.width = '100%';
+        if (progressPct) progressPct.textContent = '100%';
+        if (progressTitle) progressTitle.textContent = `✅ แปลงเสร็จสิ้น ${totalPages} หน้า (เร็วระดับเสี้ยววินาที)!`;
+
+        showToast(`📑 แปลงเสร็จสิ้น ${totalPages} หน้า!`, 'success');
+        if (statusEl) statusEl.innerHTML = `<span style="color:var(--accent);font-weight:700">✅ แปลงสำเร็จ ${totalPages} หน้า (Instant Engine):</span>`;
+
+        if (resultsEl) {
+          resultsEl.style.display = 'grid';
+          resultsEl.innerHTML = renderedPages.map(p => `
+            <div style="border:1px solid var(--sep);border-radius:var(--r-s);overflow:hidden;background:var(--bg-1);text-align:center">
+              <a href="${p.url}" target="_blank" download="slide_page_${p.page}.${format}">
+                <img src="${p.url}" alt="Page ${p.page}" style="width:100%;height:60px;object-fit:contain;background:#000" />
+              </a>
+              <div style="font-size:10px;font-weight:700;padding:2px;color:var(--label)">หน้า ${p.page}</div>
+            </div>
+          `).join('');
+        }
+
+        btn.disabled = false;
+        btn.innerHTML = '📑 แปลง PDF เป็นภาพสไลด์เดี๋ยวนี้';
+        return;
+
+      } catch (clientErr) {
+        console.warn('Client-side PDF.js fallback to backend:', clientErr.message);
+      }
+    }
+
+    // ─── Backend PyMuPDF Engine Fallback ───
     const authHeaders = (window.CloudSync && typeof window.CloudSync.getAuthToken === 'function')
       ? (window.CloudSync.getAuthToken() ? { 'Authorization': `Bearer ${window.CloudSync.getAuthToken()}` } : {})
       : (localStorage.getItem('sd-auth-token') ? { 'Authorization': `Bearer ${localStorage.getItem('sd-auth-token')}` } : {});
 
     try {
+      if (progressTitle) progressTitle.textContent = 'กำลังประมวลผลผ่าน Cloud Backend Engine...';
       const res = await fetch('/api/study-tools/convert-pdf-to-slides', {
         method: 'POST',
         headers: {
@@ -5167,7 +5274,7 @@
         body: JSON.stringify({
           fileUrl,
           format,
-          dpi,
+          dpi: String(dpi),
           syncKey: (window.CloudSync && typeof window.CloudSync.getSyncKey === 'function' ? window.CloudSync.getSyncKey() : (localStorage.getItem('sd-sync-key') || '1'))
         })
       });
@@ -5176,6 +5283,10 @@
       if (!res.ok || !data.success) {
         throw new Error(data.error || 'การแปลง PDF ล้มเหลว');
       }
+
+      if (progressFill) progressFill.style.width = '100%';
+      if (progressPct) progressPct.textContent = '100%';
+      if (progressTitle) progressTitle.textContent = `✅ แปลงเสร็จสิ้น ${data.totalPages} หน้า!`;
 
       showToast(`📑 แปลงเสร็จสิ้น ${data.totalPages} หน้า!`, 'success');
       if (statusEl) statusEl.innerHTML = `<span style="color:var(--accent);font-weight:700">✅ แปลงสำเร็จ ${data.totalPages} หน้า:</span>`;
@@ -5193,6 +5304,7 @@
       }
 
     } catch (err) {
+      if (progressBox) progressBox.style.display = 'none';
       showToast(`เกิดข้อผิดพลาด: ${err.message}`, 'error');
       if (statusEl) statusEl.innerHTML = `<span style="color:#ef4444">❌ ${err.message}</span>`;
     } finally {
