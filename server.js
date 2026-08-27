@@ -4699,12 +4699,13 @@ const server = http.createServer(async (req, res) => {
 
         const taskId = dlData.task_id;
         
-        // 2. Poll OmniLoad until download task completes (max 180s)
+        // 2. Poll OmniLoad until download task completes (max 60s)
         let completedTask = null;
+        let taskError = null;
         const startTime = Date.now();
 
-        while (Date.now() - startTime < 180000) {
-          await new Promise(r => setTimeout(r, 1500));
+        while (Date.now() - startTime < 60000) {
+          await new Promise(r => setTimeout(r, 1000));
           try {
             const taskRes = await fetch(`${activeOmniLoadUrl}/api/tasks/${taskId}`);
             if (taskRes.ok) {
@@ -4713,12 +4714,17 @@ const server = http.createServer(async (req, res) => {
                 completedTask = taskInfo;
                 break;
               } else if (taskInfo.status === 'error') {
-                throw new Error(taskInfo.error || 'Download task failed');
+                taskError = taskInfo.error || 'Download task failed on engine';
+                break;
               }
             }
           } catch (tErr) {
             console.warn('Task polling warning:', tErr.message);
           }
+        }
+
+        if (taskError) {
+          throw new Error(taskError);
         }
 
         if (!completedTask || !completedTask.filename) {
