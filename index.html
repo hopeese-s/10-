@@ -72,9 +72,7 @@
         <div class="online-pill" title="System Online">
           <span class="online-dot"></span>ONLINE
         </div>
-        <button class="btn-pill" id="study-toolkit-btn" onclick="openStudyToolkitModalDirect()" title="🧰 Study Toolkit: ดาวน์โหลดคลิป/เสียง & แปลงสไลด์ PDF" style="font-size:11.5px;font-weight:700;background:linear-gradient(135deg, rgba(99,102,241,0.2), rgba(168,85,247,0.2));border:1px solid rgba(99,102,241,0.4);color:var(--label);display:flex;align-items:center;gap:4px">
-          <span>🧰</span><span class="hidden-xs">Toolkit</span>
-        </button>
+        <button class="btn-pill icon-only-btn" id="study-toolkit-btn" onclick="openStudyToolkitModalDirect()" title="🧰 Study Toolkit: ดาวน์โหลดคลิป/เสียง & แปลงสไลด์ PDF">🧰</button>
         <button class="btn-pill icon-only-btn" id="push-notify-btn" title="แจ้งเตือนคาบเรียนล่วงหน้า 15 นาที">🔔</button>
         <button class="btn-pill icon-only-btn" id="calendar-sync-btn" title="เชื่อมต่อ Apple &amp; Google Calendar">📅</button>
         <button class="btn-pill icon-only-btn" id="auth-user-btn" title="บัญชีผู้ใช้งาน">👤</button>
@@ -678,14 +676,56 @@
     <div class="modal-overlay" id="push-modal" role="dialog" aria-modal="true" aria-labelledby="push-modal-title">
       <div class="modal-box" style="max-width:480px">
         <div class="modal-header">
-          <span class="modal-title" id="push-modal-title">🔔 ระบบแจ้งเตือน (Web Push)</span>
+          <span class="modal-title" id="push-modal-title">🔔 ระบบแจ้งเตือน (Web Push & LINE)</span>
           <button class="modal-close" id="push-modal-close" aria-label="ปิด">✕</button>
         </div>
-        <div class="modal-body">
+        <div class="modal-body" style="display:flex;flex-direction:column;gap:12px">
           <!-- Account Banner -->
-          <div id="push-account-badge" style="font-size:12px;color:var(--label-2);background:var(--bg-3);padding:8px 12px;border-radius:var(--r-s);border:1px solid var(--sep);margin-bottom:12px;display:flex;align-items:center;justify-content:space-between">
+          <div id="push-account-badge" style="font-size:12px;color:var(--label-2);background:var(--bg-3);padding:8px 12px;border-radius:var(--r-s);border:1px solid var(--sep);display:flex;align-items:center;justify-content:space-between">
             <div>👤 บัญชี: <strong id="push-current-account" style="color:var(--label)">กำลังตรวจสอบ...</strong></div>
             <button class="btn btn-secondary" id="push-switch-acc-btn" style="font-size:11px;padding:4px 8px;cursor:pointer">จัดการบัญชี</button>
+          </div>
+
+          <!-- Section 1: Browser Web Push (iPhone / Mac / PC / Android) -->
+          <div style="background:var(--bg-2);border:1px solid var(--sep);border-radius:var(--r-m);padding:12px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <div style="font-size:13px;font-weight:700;color:var(--label);display:flex;align-items:center;gap:6px">
+                <span id="push-status-icon">⚪</span> <span id="push-status-heading">สถานะ Web Push</span>
+              </div>
+              <button class="btn btn-primary" id="push-enable-device-btn" style="font-size:11.5px;padding:5px 12px;font-weight:600">เปิดบนเครื่องนี้</button>
+            </div>
+            <p id="push-status-desc" style="font-size:11.5px;color:var(--label-2);line-height:1.4;margin:0">
+              แจ้งเตือนคาบเรียนล่วงหน้า 15 นาที ผ่านเบราว์เซอร์ทุกอุปกรณ์
+            </p>
+            <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
+              <button class="btn btn-secondary" id="push-broadcast-test-btn" style="width:100%;font-size:12px;padding:7px;font-weight:600">
+                ⚡ ยิงแจ้งเตือนทดสอบทุกเครื่องเดี๋ยวนี้
+              </button>
+              <div id="push-broadcast-result" style="font-size:11px;color:var(--accent);text-align:center"></div>
+            </div>
+          </div>
+
+          <!-- Section 2: LINE Official Bot Notifications -->
+          <div style="background:var(--bg-2);border:1px solid var(--sep);border-radius:var(--r-m);padding:12px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <div style="font-size:13px;font-weight:700;color:var(--label);display:flex;align-items:center;gap:6px">
+                <span>💬</span> <span>แจ้งเตือนผ่าน LINE Official</span>
+              </div>
+              <span id="line-status-badge" style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:10px;background:rgba(156,163,175,0.2);color:var(--label-2)">กำลังโหลด...</span>
+            </div>
+            <p id="line-status-desc" style="font-size:11.5px;color:var(--label-2);line-height:1.4;margin:0 0 8px 0">
+              พิมพ์คำสั่งด้านล่างนี้ในแชท LINE Official Account ของคุณเพื่อเชื่อมต่อบัญชี:
+            </p>
+            <div style="display:flex;align-items:center;gap:6px;background:var(--bg-3);padding:6px 10px;border-radius:var(--r-s);border:1px solid var(--sep);margin-bottom:8px">
+              <code id="line-link-command" style="font-family:monospace;font-size:12px;font-weight:700;color:var(--accent);flex:1">/link 1</code>
+              <button class="btn btn-secondary" id="line-copy-cmd-btn" style="font-size:10.5px;padding:3px 8px;cursor:pointer">คัดลอก</button>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <button class="btn btn-secondary" id="line-test-btn" style="width:100%;font-size:12px;padding:7px;font-weight:600">
+                📲 ทดสอบยิงเข้า LINE
+              </button>
+              <div id="line-test-result" style="font-size:11px;color:#06c755;text-align:center"></div>
+            </div>
           </div>
         </div>
         <div class="modal-actions">
