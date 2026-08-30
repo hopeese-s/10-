@@ -4664,7 +4664,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // ─── API: Study Tools - Import Media to Course/Vault (POST /api/study-tools/import-media) ───
+  // ─── API: Study Tools - Import Media (Non-blocking) ───────────────────────
   if (pathname === '/api/study-tools/import-media' && req.method === 'POST') {
     parseJsonBody(async (err, data) => {
       if (err || !data || !data.url) {
@@ -4677,7 +4677,7 @@ const server = http.createServer(async (req, res) => {
       const { url: mediaUrl, formatType = 'mp4', quality = 'best', courseCode = '', customTitle = '', folderId = 'f-uploads' } = data;
 
       try {
-        // 1. Trigger download on OmniLoad
+        // 1. Trigger download on OmniLoad — return task_id immediately, no blocking wait
         const dlRes = await fetch(`${activeOmniLoadUrl}/api/download`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -4697,125 +4697,119 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        const taskId = dlData.task_id;
-        
-        // 2. Poll OmniLoad until download task completes (max 60s)
-        let completedTask = null;
-        let taskError = null;
-        const startTime = Date.now();
+        // Return the task_id immediately — frontend polls /api/study-tools/import-media-poll
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          task_id: dlData.task_id,
+          pending: true,
+          ownerId,
+          formatType,
+          courseCode,
+          customTitle,
+          folderId,
+          mediaUrl
+        }));
 
-        while (Date.now() - startTime < 60000) {
-          await new Promise(r => setTimeout(r, 1000));
-          try {
-            const taskRes = await fetch(`${activeOmniLoadUrl}/api/tasks/${taskId}`);
-            if (taskRes.ok) {
-              const taskInfo = await taskRes.json();
-              if (taskInfo.status === 'completed') {
-                completedTask = taskInfo;
-                break;
-              } else if (taskInfo.status === 'error') {
-                taskError = taskInfo.error || 'Download task failed on engine';
-                break;
-              }
-            }
-          } catch (tErr) {
-            console.warn('Task polling warning:', tErr.message);
-          }
+      } catch (e) {
+        console.error('Import media trigger error:', e);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message || 'Import media failed to start' }));
+      }
+    });
+    return;
+  }
+
+  // ─── API: Study Tools - Poll Import Task & Finalize ────────────────────────
+  if (pathname === '/api/study-tools/import-media-poll' && req.method === 'POST') {
+    parseJsonBody(async (err, data) => {
+      if (err || !data || !data.task_id) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Missing task_id' }));
+        return;
+      }
+
+      const { task_id: taskId, ownerId: rawOwnerId, formatType = 'mp4', courseCode = '', customTitle = '', folderId = 'f-uploads', mediaUrl = '' } = data;
+      const ownerId = rawOwnerId || resolveOwnerId(data);
+
+      try {
+        const taskRes = await fetch(`${activeOmniLoadUrl}/api/tasks/${taskId}`, { signal: AbortSignal.timeout(5000) });
+        if (!taskRes.ok) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'pending', percent: 0 }));
+          return;
         }
 
-        if (taskError) {
-          throw new Error(taskError);
+        const taskInfo = await taskRes.json();
+
+        // Still running — return live progress to frontend
+        if (taskInfo.status !== 'completed' && taskInfo.status !== 'error') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            status: taskInfo.status || 'downloading',
+            percent: taskInfo.percent || 0,
+            speed_str: taskInfo.speed_str || '--',
+            eta_str: taskInfo.eta_str || '--',
+            downloaded_str: taskInfo.downloaded_str || '0 B',
+            total_str: taskInfo.total_str || '--'
+          }));
+          return;
         }
 
-        if (!completedTask || !completedTask.filename) {
-          throw new Error('Download timed out or failed to complete on media engine');
+        // Error
+        if (taskInfo.status === 'error') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'error', error: taskInfo.error || 'Download failed' }));
+          return;
         }
 
-        // 3. Fetch downloaded binary from OmniLoad
-        const fileStreamRes = await fetch(`${activeOmniLoadUrl}/downloads/${encodeURIComponent(completedTask.filename)}`);
-        if (!fileStreamRes.ok) {
-          throw new Error('Could not retrieve downloaded file from engine');
+        // Completed — provide direct download URL from OmniLoad, no re-buffering needed
+        const filename = taskInfo.filename || '';
+        const directDownloadUrl = `${activeOmniLoadUrl}/downloads/${encodeURIComponent(filename)}`;
+        const displayName = customTitle || taskInfo.title || filename;
+        const fileSizeMb = taskInfo.size_str || taskInfo.filesize_formatted || 'N/A';
+
+        // Save a study link record (no file buffer needed — point to OmniLoad URL)
+        try {
+          const ownerData = (await dbAdapter.getUserData(ownerId)) || {};
+          if (!ownerData.studyLinks) ownerData.studyLinks = [];
+          const studyEntry = {
+            id: `media-${taskId.substring(0, 8)}`,
+            title: displayName,
+            sub: courseCode ? `วิชา ${courseCode} (${fileSizeMb})` : `Media Import (${fileSizeMb})`,
+            type: formatType === 'mp3' ? 'audio' : 'video',
+            url: directDownloadUrl,
+            courseCode: courseCode || null,
+            sourceUrl: mediaUrl,
+            desc: `นำเข้าจาก ${taskInfo.platform || 'Online URL'} เมื่อ ${new Date().toLocaleString('th-TH')}`,
+            folderId: folderId || 'f-uploads',
+            createdAt: new Date().toISOString()
+          };
+          ownerData.studyLinks.unshift(studyEntry);
+          ownerData.version = (parseInt(ownerData.version, 10) || 0) + 1;
+          ownerData.updatedAt = new Date().toISOString();
+          await dbAdapter.saveUserData(ownerId, ownerData);
+          store[ownerId] = ownerData;
+          saveStore();
+        } catch (dbErr) {
+          console.warn('Study link save warning:', dbErr.message);
         }
-
-        const fileBuffer = Buffer.from(await fileStreamRes.arrayBuffer());
-        const fileId = crypto.randomBytes(8).toString('hex');
-        const rawExt = path.extname(completedTask.filename) || (formatType === 'mp3' ? '.mp3' : '.mp4');
-        const targetFilename = `${fileId}${rawExt}`;
-        const localFilePath = path.join(UPLOAD_DIR, targetFilename);
-
-        fs.writeFileSync(localFilePath, fileBuffer);
-
-        let fileUrl = `/uploads/${targetFilename}`;
-        let uploadedToR2 = false;
-
-        // 4. Save to Cloudflare R2 if configured
-        if (r2Client) {
-          try {
-            const { PutObjectCommand } = require('@aws-sdk/client-s3');
-            const contentType = rawExt === '.mp3' ? 'audio/mpeg' : 'video/mp4';
-            await r2Client.send(new PutObjectCommand({
-              Bucket: R2_BUCKET_NAME,
-              Key: targetFilename,
-              Body: fileBuffer,
-              ContentType: contentType
-            }));
-            uploadedToR2 = true;
-          } catch (r2Err) {
-            console.warn('⚠️ Cloudflare R2 media upload warning:', r2Err.message);
-          }
-        }
-
-        // 5. Store file & study link in Project 10 User Data
-        const ownerData = (await dbAdapter.getUserData(ownerId)) || {};
-        if (!ownerData.files) ownerData.files = {};
-        
-        const displayName = customTitle || completedTask.title || completedTask.filename;
-        const fileRecord = {
-          id: fileId,
-          name: displayName,
-          filename: targetFilename,
-          url: fileUrl,
-          size: fileBuffer.length,
-          uploadedToR2,
-          uploadedAt: new Date().toISOString()
-        };
-        ownerData.files[fileId] = fileRecord;
-
-        if (!ownerData.studyLinks) ownerData.studyLinks = [];
-        const studyEntry = {
-          id: `media-${fileId}`,
-          title: displayName,
-          sub: courseCode ? `วิชา ${courseCode} (${(fileBuffer.length / (1024 * 1024)).toFixed(1)} MB)` : `Media Import (${(fileBuffer.length / (1024 * 1024)).toFixed(1)} MB)`,
-          type: formatType === 'mp3' ? 'audio' : 'video',
-          url: fileUrl,
-          courseCode: courseCode || null,
-          sourceUrl: mediaUrl,
-          desc: `นำเข้าจาก ${completedTask.platform || 'Online URL'} เมื่อ ${new Date().toLocaleString('th-TH')}`,
-          folderId: folderId || 'f-uploads',
-          createdAt: new Date().toISOString()
-        };
-        ownerData.studyLinks.unshift(studyEntry);
-
-        ownerData.version = (parseInt(ownerData.version, 10) || 0) + 1;
-        ownerData.updatedAt = new Date().toISOString();
-
-        await dbAdapter.saveUserData(ownerId, ownerData);
-        store[ownerId] = ownerData;
-        saveStore();
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
           success: true,
-          file: fileRecord,
-          studyLink: studyEntry,
+          status: 'completed',
+          percent: 100,
           title: displayName,
-          url: fileUrl
+          filename,
+          directDownloadUrl,
+          size_str: fileSizeMb
         }));
 
       } catch (e) {
-        console.error('Import media error:', e);
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message || 'Import media failed' }));
+        console.error('Import media poll error:', e);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'pending', percent: 0 }));
       }
     });
     return;

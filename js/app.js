@@ -5090,86 +5090,133 @@
     }
 
     btn.disabled = true;
-    btn.innerHTML = '⏳ กำลังประมวลผล...';
+    btn.innerHTML = '⏳ กำลังเริ่มต้น...';
     if (statusEl) statusEl.innerHTML = '';
     if (progressBox) progressBox.style.display = 'block';
-
-    let curPct = 5;
-    if (progressFill) progressFill.style.width = `${curPct}%`;
-    if (progressPct) progressPct.textContent = `${curPct}%`;
-    if (progressTitle) progressTitle.textContent = `กำลังเชื่อมต่อเอนจินดาวน์โหลด (${formatType.toUpperCase()})...`;
-    if (progressBytes) progressBytes.textContent = 'เตรียมไฟล์...';
-    if (progressSpeed) progressSpeed.textContent = '⚡ กำลังเริ่ม...';
-
-    const progTimer = setInterval(() => {
-      if (curPct < 88) {
-        curPct += Math.floor(Math.random() * 8) + 4;
-        if (curPct > 88) curPct = 88;
-        if (progressFill) progressFill.style.width = `${curPct}%`;
-        if (progressPct) progressPct.textContent = `${curPct}%`;
-        if (progressTitle) progressTitle.textContent = formatType === 'mp3' ? 'กำลังดึงเสียง & แปลงเป็น MP3 320kbps...' : 'กำลังดึงภาพและเสียงความคมชัดสูงสุด...';
-        if (progressSpeed) progressSpeed.textContent = `⚡ ${(Math.random() * 3 + 2.5).toFixed(1)} MB/s`;
-      }
-    }, 600);
+    if (progressFill) progressFill.style.width = '5%';
+    if (progressPct) progressPct.textContent = '5%';
+    if (progressTitle) progressTitle.textContent = `กำลังเชื่อมต่อ OmniLoad Engine (${formatType.toUpperCase()})...`;
+    if (progressBytes) progressBytes.textContent = 'กำลังเริ่ม...';
+    if (progressSpeed) progressSpeed.textContent = '⚡ รอสักครู่...';
 
     const authHeaders = (window.CloudSync && typeof window.CloudSync.getAuthToken === 'function')
       ? (window.CloudSync.getAuthToken() ? { 'Authorization': `Bearer ${window.CloudSync.getAuthToken()}` } : {})
       : (localStorage.getItem('sd-auth-token') ? { 'Authorization': `Bearer ${localStorage.getItem('sd-auth-token')}` } : {});
+    const syncKey = (window.CloudSync && typeof window.CloudSync.getSyncKey === 'function' ? window.CloudSync.getSyncKey() : (localStorage.getItem('sd-sync-key') || '1'));
+
+    let taskId = null, pendingMeta = null;
 
     try {
+      // Stage 1: Trigger download — returns task_id immediately (no blocking)
       const res = await fetch('/api/study-tools/import-media', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...authHeaders
-        },
-        body: JSON.stringify({
-          url,
-          formatType,
-          courseCode,
-          customTitle,
-          syncKey: (window.CloudSync && typeof window.CloudSync.getSyncKey === 'function' ? window.CloudSync.getSyncKey() : (localStorage.getItem('sd-sync-key') || '1'))
-        })
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ url, formatType, courseCode, customTitle, syncKey })
       });
-
-      clearInterval(progTimer);
-
       const data = await res.json();
+
       if (!res.ok || !data.success) {
-        throw new Error(data.error || 'นำเข้าสื่อไม่สำเร็จ หรือเซิร์ฟเวอร์ปลายทางใช้เวลานานเกินไป');
+        throw new Error(data.error || 'ไม่สามารถเริ่มดาวน์โหลดได้');
       }
 
-      if (progressFill) progressFill.style.width = '100%';
-      if (progressPct) progressPct.textContent = '100%';
-      if (progressTitle) progressTitle.textContent = '✅ ดาวน์โหลดและบันทึกเข้าคลังเสร็จสมบูรณ์!';
-      if (progressBytes) progressBytes.textContent = 'บันทึกเรียบร้อย';
-      if (progressSpeed) progressSpeed.textContent = '100% Done';
-
-      showToast(`🎉 บันทึกสื่อ "${data.title}" เข้าคลังเรียบร้อยแล้ว!`, 'success');
-      if (statusEl) statusEl.innerHTML = `<span style="color:var(--accent);font-weight:700">✅ สำเร็จ: บันทึกเข้าคลังไฟล์แล้ว</span>`;
-
-      // Refresh Study / Resource view
-      if (data.studyLink) {
-        if (!state.studyLinks) state.studyLinks = [];
-        state.studyLinks.unshift(data.studyLink);
-        if (state.currentTopView === 'study') renderStudyView();
+      if (!data.pending) {
+        // Old path — completed synchronously (shouldn't happen but handle gracefully)
+        if (progressFill) progressFill.style.width = '100%';
+        if (progressPct) progressPct.textContent = '100%';
+        if (progressTitle) progressTitle.textContent = '✅ เสร็จสมบูรณ์!';
+        showToast(`🎉 บันทึกสื่อเข้าคลังเรียบร้อยแล้ว!`, 'success');
+        if (statusEl) statusEl.innerHTML = `<span style="color:var(--accent);font-weight:700">✅ สำเร็จ!</span>`;
+        urlInput.value = '';
+        setTimeout(() => { closeModal('study-toolkit-modal'); if (progressBox) progressBox.style.display = 'none'; }, 1400);
+        btn.disabled = false;
+        btn.innerHTML = '🚀 เริ่มดาวน์โหลดและบันทึกเข้าคลังวิชา';
+        return;
       }
 
-      urlInput.value = '';
-      setTimeout(() => {
-        closeModal('study-toolkit-modal');
-        if (progressBox) progressBox.style.display = 'none';
-      }, 1400);
+      taskId = data.task_id;
+      pendingMeta = {
+        ownerId: data.ownerId,
+        formatType: data.formatType,
+        courseCode: data.courseCode,
+        customTitle: data.customTitle,
+        folderId: data.folderId,
+        mediaUrl: data.mediaUrl,
+        syncKey
+      };
+
+      if (progressTitle) progressTitle.textContent = formatType === 'mp3' ? 'กำลังดึงเสียงและแปลงเป็น MP3 320kbps...' : 'กำลังดาวน์โหลดวิดีโอความชัดสูงสุด...';
+      btn.innerHTML = '⏳ กำลังดาวน์โหลด...';
 
     } catch (err) {
-      clearInterval(progTimer);
       if (progressBox) progressBox.style.display = 'none';
-      showToast(`เกิดข้อผิดพลาด: ${err.message}`, 'error');
+      showToast(`❌ ${err.message}`, 'error');
       if (statusEl) statusEl.innerHTML = `<span style="color:#ef4444">❌ ${err.message}</span>`;
-    } finally {
       btn.disabled = false;
       btn.innerHTML = '🚀 เริ่มดาวน์โหลดและบันทึกเข้าคลังวิชา';
+      return;
     }
+
+    // Stage 2: Poll every 1 second until done
+    let pollTimer = null;
+    async function doPoll() {
+      try {
+        const pollRes = await fetch('/api/study-tools/import-media-poll', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
+          body: JSON.stringify({ task_id: taskId, ...pendingMeta })
+        });
+        const p = await pollRes.json();
+
+        if (p.status === 'error') {
+          clearTimeout(pollTimer);
+          if (progressBox) progressBox.style.display = 'none';
+          showToast(`❌ ${p.error || 'ดาวน์โหลดล้มเหลว'}`, 'error');
+          if (statusEl) statusEl.innerHTML = `<span style="color:#ef4444">❌ ${p.error || 'ดาวน์โหลดล้มเหลว'}</span>`;
+          btn.disabled = false;
+          btn.innerHTML = '🚀 เริ่มดาวน์โหลดและบันทึกเข้าคลังวิชา';
+          return;
+        }
+
+        if (p.success && p.status === 'completed') {
+          clearTimeout(pollTimer);
+          if (progressFill) progressFill.style.width = '100%';
+          if (progressPct) progressPct.textContent = '100%';
+          if (progressTitle) progressTitle.textContent = `✅ ดาวน์โหลดเสร็จสมบูรณ์! (${p.size_str || ''})`;
+          if (progressBytes) progressBytes.textContent = p.size_str || 'เสร็จแล้ว';
+          if (progressSpeed) progressSpeed.textContent = '✅ Done';
+
+          showToast(`🎉 "${p.title}" ดาวน์โหลดเสร็จ พร้อมโหลดได้เลย!`, 'success');
+
+          // Show download button directly inside the progress box
+          if (p.directDownloadUrl && progressBox) {
+            const dlBtnHtml = `<div style="margin-top:10px;text-align:center"><a href="${p.directDownloadUrl}" target="_blank" download class="btn btn-primary" style="display:inline-block;padding:9px 20px;font-size:13px;font-weight:700;text-decoration:none;box-shadow:0 4px 14px rgba(224,122,56,0.3)">💾 ดาวน์โหลดไฟล์เดี๋ยวนี้</a></div>`;
+            progressBox.insertAdjacentHTML('beforeend', dlBtnHtml);
+          }
+
+          if (statusEl) statusEl.innerHTML = `<span style="color:var(--accent);font-weight:700">✅ สำเร็จ! บันทึกลิงก์เข้าคลังวิชาแล้ว</span>`;
+          urlInput.value = '';
+          btn.disabled = false;
+          btn.innerHTML = '🚀 เริ่มดาวน์โหลดและบันทึกเข้าคลังวิชา';
+          return;
+        }
+
+        // Still in progress — update bar
+        const pct = Math.min(p.percent || 0, 96);
+        if (progressFill) progressFill.style.width = `${pct}%`;
+        if (progressPct) progressPct.textContent = `${pct}%`;
+        if (p.speed_str && p.speed_str !== '--') {
+          if (progressSpeed) progressSpeed.textContent = `⚡ ${p.speed_str}`;
+        }
+        if (p.downloaded_str && p.downloaded_str !== '0 B') {
+          if (progressBytes) progressBytes.textContent = `${p.downloaded_str} / ${p.total_str || '--'}`;
+        }
+
+      } catch (_) {}
+
+      pollTimer = setTimeout(doPoll, 1000);
+    }
+
+    pollTimer = setTimeout(doPoll, 1000);
   };
 
   window.startToolkitPdfConversion = async function() {
