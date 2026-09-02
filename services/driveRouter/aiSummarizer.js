@@ -1,11 +1,12 @@
 // services/driveRouter/aiSummarizer.js
-// Multi-Provider AI Summarizer (OpenRouter / DeepSeek / OpenAI / Groq / Google Gemini)
+// Multi-Provider AI Summarizer (OpenRouter / OpenCode / DeepSeek / OpenAI / Groq / Google Gemini)
 
 const fs = require('fs');
 const {
   GEMINI_API_KEY,
   GEMINI_MODEL,
   OPENROUTER_API_KEY,
+  OPENROUTER_BASE_URL,
   DEEPSEEK_API_KEY,
   OPENAI_API_KEY,
   GROQ_API_KEY,
@@ -20,6 +21,8 @@ const SUMMARY_PROMPT = `ช่วยสรุปเนื้อหาคร่�
 2. สรุปสาระสำคัญ 3-5 ข้อ
 3. สูตร กฎ หรือคำศัพท์สำคัญ (ถ้ามี)
 ตอบสั้นๆ กระชับ ได้ใจความ ภาษาไทย`;
+
+let _lastAiError = null;
 
 /**
  * Extracts readable text from PDF or text binary buffer
@@ -66,13 +69,16 @@ async function callOpenRouter(prompt, contextText) {
     'google/gemini-flash-1.5',
     'openai/gpt-4o-mini',
     'qwen/qwen-2.5-72b-instruct',
-    'meta-llama/llama-3.3-70b-instruct'
+    'meta-llama/llama-3.3-70b-instruct',
+    'deepseek-chat',
+    'gemini-2.0-flash',
+    'gpt-4o-mini'
   ];
-  const baseUrl = (process.env.OPENROUTER_BASE_URL || process.env.OPENCODE_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/$/, '');
+  const baseUrl = (OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/$/, '');
 
   for (const model of models) {
     try {
-      console.log(`🤖 [AISummarizer] Trying OpenRouter model [${model}]...`);
+      console.log(`🤖 [AISummarizer] Calling OpenCode/OpenRouter model [${model}]...`);
       const res = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -89,8 +95,10 @@ async function callOpenRouter(prompt, contextText) {
           ],
           temperature: 0.2,
           max_tokens: 1500
-        })
+        }),
+        signal: AbortSignal.timeout(8000)
       });
+
       if (res.ok) {
         const json = await res.json();
         const text = json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content;
@@ -99,9 +107,15 @@ async function callOpenRouter(prompt, contextText) {
           return text.trim();
         }
       } else {
-        console.warn(`⚠️ OpenRouter model ${model} failed (${res.status}):`, await res.text());
+        const errBody = await res.text();
+        _lastAiError = `OpenCode HTTP ${res.status}: ${errBody.slice(0, 150)}`;
+        console.warn(`⚠️ OpenRouter model ${model} failed (${res.status}):`, errBody);
+        if (res.status === 401 || res.status === 402 || res.status === 403) {
+          break; // Key or billing issue — no point trying other models
+        }
       }
     } catch (e) {
+      _lastAiError = `OpenCode network error: ${e.message}`;
       console.warn(`⚠️ OpenRouter error on ${model}:`, e.message);
     }
   }
@@ -128,16 +142,20 @@ async function callDeepSeek(prompt, contextText) {
         ],
         temperature: 0.2,
         max_tokens: 1500
-      })
+      }),
+      signal: AbortSignal.timeout(8000)
     });
     if (res.ok) {
       const json = await res.json();
       const text = json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content;
       if (text) return text.trim();
     } else {
-      console.warn('⚠️ DeepSeek API failed:', res.status, await res.text());
+      const errBody = await res.text();
+      _lastAiError = `DeepSeek HTTP ${res.status}: ${errBody.slice(0, 150)}`;
+      console.warn('⚠️ DeepSeek API failed:', res.status, errBody);
     }
   } catch (e) {
+    _lastAiError = `DeepSeek error: ${e.message}`;
     console.warn('⚠️ DeepSeek API error:', e.message);
   }
   return null;
@@ -163,16 +181,20 @@ async function callOpenAI(prompt, contextText) {
         ],
         temperature: 0.2,
         max_tokens: 1500
-      })
+      }),
+      signal: AbortSignal.timeout(8000)
     });
     if (res.ok) {
       const json = await res.json();
       const text = json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content;
       if (text) return text.trim();
     } else {
-      console.warn('⚠️ OpenAI API failed:', res.status, await res.text());
+      const errBody = await res.text();
+      _lastAiError = `OpenAI HTTP ${res.status}: ${errBody.slice(0, 150)}`;
+      console.warn('⚠️ OpenAI API failed:', res.status, errBody);
     }
   } catch (e) {
+    _lastAiError = `OpenAI error: ${e.message}`;
     console.warn('⚠️ OpenAI API error:', e.message);
   }
   return null;
@@ -198,16 +220,20 @@ async function callGroq(prompt, contextText) {
         ],
         temperature: 0.2,
         max_tokens: 1500
-      })
+      }),
+      signal: AbortSignal.timeout(8000)
     });
     if (res.ok) {
       const json = await res.json();
       const text = json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content;
       if (text) return text.trim();
     } else {
-      console.warn('⚠️ Groq API failed:', res.status, await res.text());
+      const errBody = await res.text();
+      _lastAiError = `Groq HTTP ${res.status}: ${errBody.slice(0, 150)}`;
+      console.warn('⚠️ Groq API failed:', res.status, errBody);
     }
   } catch (e) {
+    _lastAiError = `Groq error: ${e.message}`;
     console.warn('⚠️ Groq API error:', e.message);
   }
   return null;
@@ -239,7 +265,8 @@ async function callGemini(prompt, parts, contextText) {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(8000)
         });
         if (res.ok) {
           const json = await res.json();
@@ -249,9 +276,12 @@ async function callGemini(prompt, parts, contextText) {
             if (text) return text.trim();
           }
         } else {
+          const errBody = await res.text();
+          _lastAiError = `Gemini HTTP ${res.status}: ${errBody.slice(0, 150)}`;
           console.warn(`⚠️ Gemini multimodal failed on ${model} (${res.status})`);
         }
       } catch (err) {
+        _lastAiError = `Gemini error: ${err.message}`;
         console.warn(`⚠️ Gemini error on ${model}:`, err.message);
       }
     }
@@ -268,7 +298,8 @@ async function callGemini(prompt, parts, contextText) {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(8000)
         });
         if (res.ok) {
           const json = await res.json();
@@ -279,6 +310,7 @@ async function callGemini(prompt, parts, contextText) {
           }
         }
       } catch (err) {
+        _lastAiError = `Gemini error: ${err.message}`;
         console.warn(`⚠️ Gemini text fallback error on ${model}:`, err.message);
       }
     }
@@ -294,9 +326,11 @@ async function callGemini(prompt, parts, contextText) {
  * @returns {Promise<{ shortSummary: string, fullMarkdown: string }>}
  */
 async function summarizeSession(files, sessionLabel) {
+  _lastAiError = null;
+
   if (!hasAnyAi) {
     const errorText = 'ยังไม่ได้ตั้งค่า API Key สำหรับ AI (ไฟล์ต้นฉบับถูกอัปโหลดขึ้น Drive เรียบร้อยแล้ว)';
-    const fullMarkdown = `# สรุปคาบเรียน: ${sessionLabel}\n\n*หมายเหตุ: สามารถใส่ OPENROUTER_API_KEY, DEEPSEEK_API_KEY, หรือ GEMINI_API_KEY บน Railway เพื่อเปิดใช้งาน AI สรุปเนื้อหา*\n`;
+    const fullMarkdown = `# สรุปคาบเรียน: ${sessionLabel}\n\n*หมายเหตุ: สามารถใส่ OPENROUTER_API_KEY / OPENCODE_API_KEY หรือ GEMINI_API_KEY บน Railway เพื่อเปิดใช้งาน AI สรุปเนื้อหา*\n`;
     return { shortSummary: errorText, fullMarkdown };
   }
 
@@ -368,7 +402,7 @@ async function summarizeSession(files, sessionLabel) {
 
     // Final check
     if (!responseText) {
-      throw new Error('ไม่สามารถดึงข้อมูลสรุปจาก AI ได้ (All configured AI providers exhausted)');
+      throw new Error(_lastAiError || 'ไม่สามารถดึงข้อมูลสรุปจาก AI ได้ (All configured AI providers exhausted)');
     }
 
     const shortSummary = responseText.trim();
@@ -378,7 +412,7 @@ async function summarizeSession(files, sessionLabel) {
 
   } catch (err) {
     console.error('❌ summarizeSession error:', err.message);
-    const errorText = `⚠️ สรุปเนื้อหาไม่สำเร็จ: ${err.message}\n(ไฟล์ต้นฉบับอัปโหลดเข้า Google Drive เรียบร้อยแล้ว กรุณาตรวจสอบ OPENCODE_API_KEY หรือ GEMINI_API_KEY บน Railway)`;
+    const errorText = `⚠️ สรุปเนื้อหาไม่สำเร็จ: ${err.message}\n(ไฟล์ต้นฉบับอัปโหลดเข้า Google Drive เรียบร้อยแล้ว)`;
     const fullMarkdown = `# สรุปคาบเรียน: ${sessionLabel}\n\n> ⚠️ เกิดข้อผิดพลาดขณะสรุปเนื้อหา: ${err.message}\n> ไฟล์ต้นฉบับการเรียนทั้งหมดของคาบนี้ถูกอัปโหลดขึ้น Google Drive เรียบร้อยแล้ว\n`;
     return { shortSummary: errorText, fullMarkdown };
   }
@@ -388,4 +422,5 @@ module.exports = {
   summarizeSession,
   extractTextFromBuffer
 };
+
 
