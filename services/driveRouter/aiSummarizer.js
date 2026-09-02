@@ -38,9 +38,10 @@ async function summarizeSession(files, sessionLabel) {
       if (buf) {
         // Only include inlineData if file is <= 25MB (Gemini payload limit)
         if (buf.length <= 25 * 1024 * 1024) {
+          const mime = file.mimeType || 'application/octet-stream';
           parts.push({
-            inlineData: {
-              mimeType: file.mimeType || 'application/octet-stream',
+            inline_data: {
+              mime_type: mime,
               data: buf.toString('base64')
             }
           });
@@ -52,14 +53,18 @@ async function summarizeSession(files, sessionLabel) {
       }
     }
 
-    parts.push({ text: SUMMARY_PROMPT });
+    const fullPromptText = `${SYSTEM_INSTRUCTION}\n\n${SUMMARY_PROMPT}`;
+    parts.push({ text: fullPromptText });
 
     const models = [
       GEMINI_MODEL,
+      'gemini-1.5-flash',
       'gemini-2.0-flash',
       'gemini-1.5-flash-latest',
-      'gemini-1.5-flash'
-    ].filter((v, i, a) => a.indexOf(v) === i); // unique
+      'gemini-2.0-flash-exp',
+      'gemini-1.5-pro',
+      'gemini-1.5-flash-8b'
+    ].filter((v, i, a) => v && a.indexOf(v) === i); // unique
 
     let responseText = null;
 
@@ -70,9 +75,6 @@ async function summarizeSession(files, sessionLabel) {
           generationConfig: {
             temperature: 0.2,
             maxOutputTokens: 2048
-          },
-          systemInstruction: {
-            parts: [{ text: SYSTEM_INSTRUCTION }]
           }
         };
 

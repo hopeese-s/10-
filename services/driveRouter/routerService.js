@@ -66,9 +66,9 @@ async function handleIncomingMedia({ message, buffer, lineUserId, userId, curric
 
   const { ext, typeLabel, mimeType, originalName } = inferMediaMeta(message);
 
-  // 1. Resolve active course with 30-min grace period
-  const subjectInfo = scheduleService.resolveCurrentSubject(curriculum);
-  console.log(`📂 [DriveRouter] Resolved subject: [${subjectInfo.matchedCode}] → ${subjectInfo.category} at ${subjectInfo.timeStr}`);
+  // 1. Resolve active course with 30-min grace period AND filename keyword inference
+  const subjectInfo = scheduleService.resolveCurrentSubject(curriculum, null, originalName || message.fileName);
+  console.log(`📂 [DriveRouter] Resolved subject: [${subjectInfo.matchedCode}] → ${subjectInfo.category} (inferredFrom: ${subjectInfo.inferredFrom || 'schedule'}) at ${subjectInfo.timeStr}`);
 
   // 2. Resolve target subject folder in Google Drive (Flat structure v2)
   let folderId = null;

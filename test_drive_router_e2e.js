@@ -46,12 +46,18 @@ assert.strictEqual(monGrace.matchedCode, 'PHY');
 assert.strictEqual(monGrace.category, 'Physics');
 console.log('✅ 15m post-class Grace Period match:', monGrace.category);
 
-// Test Monday 13:10 -> Outside grace period (ended 12:30, +40m passed)
+// Test Monday 13:10 -> Outside grace period (ended 12:30, +40m passed) without filename
 const monOutTime = new Date('2026-08-31T13:10:00+07:00');
 const monOut = scheduleService.resolveCurrentSubject(sampleCurriculum, monOutTime);
 assert.strictEqual(monOut.matchedCode, 'UNSORTED');
 assert.strictEqual(monOut.category, '00_General_Unsorted');
-console.log('✅ Post-grace period falls to 00_General_Unsorted');
+console.log('✅ Post-grace period falls to 00_General_Unsorted (when no filename keyword)');
+
+// Test 23:42 night upload with Note_6_Capacitors.pdf -> Inferred to Physics!
+const nightCapacitors = scheduleService.resolveCurrentSubject(sampleCurriculum, monOutTime, 'Note_6_Capacitors.pdf');
+assert.strictEqual(nightCapacitors.matchedCode, 'PHY');
+assert.strictEqual(nightCapacitors.category, 'Physics');
+console.log('✅ Night upload "Note_6_Capacitors.pdf" correctly classified to:', nightCapacitors.category);
 
 // Test Friday 10:30 -> Lab / Physics_Lab
 const friLabTime = new Date('2026-09-04T10:30:00+07:00');

@@ -1,7 +1,7 @@
 // services/driveRouter/scheduleService.js
 // Resolves student's active class with Asia/Bangkok timezone & 30-min post-class grace period
 
-const { CATEGORY_MAP, COURSE_CODE_ALIASES, UNSORTED, GRACE_PERIOD_MINUTES, TIMEZONE } = require('./config');
+const { CATEGORY_MAP, COURSE_CODE_ALIASES, SUBJECT_KEYWORDS, UNSORTED, GRACE_PERIOD_MINUTES, TIMEZONE } = require('./config');
 
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
@@ -34,8 +34,9 @@ function normalizeCurriculum(curriculum) {
  * Resolves the subject corresponding to the current time, with grace period
  * @param {Array} curriculum - Array of course objects
  * @param {Date} [customNow] - Optional custom Date for testing
+ * @param {string} [filename] - Optional filename for keyword-based course inference
  */
-function resolveCurrentSubject(curriculum = [], customNow = null) {
+function resolveCurrentSubject(curriculum = [], customNow = null, filename = '') {
   const now = customNow || getBangkokNow();
   const dayStr = DAY_NAMES[now.getDay()];
   const hours = String(now.getHours()).padStart(2, '0');
@@ -72,6 +73,51 @@ function resolveCurrentSubject(curriculum = [], customNow = null) {
         if (diff >= 0 && diff <= GRACE_PERIOD_MINUTES) {
           matchedCourse = cls;
           break;
+        }
+      }
+    }
+  }
+
+  // 3. Filename & Keyword Inference (crucial for files uploaded outside class hours)
+  if (!matchedCourse && filename) {
+    const cleanFn = filename.toLowerCase().replace(/[._-]/g, ' ');
+
+    // 3a. Check direct course code aliases (e.g. SCPY161, SCMA101, EGBI122)
+    for (const [alias, code] of Object.entries(COURSE_CODE_ALIASES)) {
+      if (cleanFn.includes(alias.toLowerCase())) {
+        const courseInfo = CATEGORY_MAP[code] || { category: code, sub: null, name: code };
+        const foundCls = normalized.find(c => (COURSE_CODE_ALIASES[c.code] || c.code) === code);
+        return {
+          category: courseInfo.category,
+          subCategory: courseInfo.sub,
+          matchedCode: code,
+          originalCode: alias,
+          courseName: (foundCls && foundCls.name) || courseInfo.name || code,
+          dateStr,
+          timeStr,
+          sessionTime: hours + minutes,
+          inferredFrom: 'filename_code'
+        };
+      }
+    }
+
+    // 3b. Check subject keywords (e.g. capacitor, calculus, titration, etc.)
+    for (const [code, keywords] of Object.entries(SUBJECT_KEYWORDS)) {
+      for (const kw of keywords) {
+        if (cleanFn.includes(kw.toLowerCase())) {
+          const courseInfo = CATEGORY_MAP[code] || { category: code, sub: null, name: code };
+          const foundCls = normalized.find(c => (COURSE_CODE_ALIASES[c.code] || c.code) === code);
+          return {
+            category: courseInfo.category,
+            subCategory: courseInfo.sub,
+            matchedCode: code,
+            originalCode: code,
+            courseName: (foundCls && foundCls.name) || courseInfo.name || code,
+            dateStr,
+            timeStr,
+            sessionTime: hours + minutes,
+            inferredFrom: 'filename_keyword'
+          };
         }
       }
     }

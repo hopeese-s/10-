@@ -10,8 +10,18 @@ const LINE_CHANNEL_SECRET = (process.env.LINE_CHANNEL_SECRET || '').replace(/['"
 const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || '').replace(/['"]/g, '').trim();
 const GEMINI_MODEL = (process.env.GEMINI_MODEL || 'gemini-2.0-flash').replace(/['"]/g, '').trim();
 
+function extractFolderId(input) {
+  if (!input) return '';
+  const cleaned = input.replace(/['"]/g, '').trim();
+  const folderMatch = cleaned.match(/folders\/([a-zA-Z0-9_-]+)/);
+  if (folderMatch) return folderMatch[1];
+  const idMatch = cleaned.match(/id=([a-zA-Z0-9_-]+)/);
+  if (idMatch) return idMatch[1];
+  return cleaned;
+}
+
 const GOOGLE_SERVICE_ACCOUNT_JSON = (process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '').trim();
-const GOOGLE_DRIVE_PARENT_ID = (process.env.GOOGLE_DRIVE_PARENT_ID || '').replace(/['"]/g, '').trim();
+const GOOGLE_DRIVE_PARENT_ID = extractFolderId(process.env.GOOGLE_DRIVE_PARENT_ID || '');
 
 const SESSION_DEBOUNCE_SECONDS = parseInt(process.env.SESSION_DEBOUNCE_SECONDS || '150', 10);
 const GRACE_PERIOD_MINUTES = parseInt(process.env.GRACE_PERIOD_MINUTES || '30', 10);
@@ -19,15 +29,53 @@ const TIMEZONE = process.env.TIMEZONE || 'Asia/Bangkok';
 
 // Flat Category Mapping (Subject Folder -> Subfolder if applicable)
 const CATEGORY_MAP = {
-  MATH: { category: 'Mathematics', sub: null },
-  PHY: { category: 'Physics', sub: null },
-  CHEM: { category: 'Chemistry', sub: null },
-  BIO: { category: 'Biology', sub: null },
-  EGBI100: { category: 'EGBI100', sub: null },
-  COMPRO: { category: 'Computer_Programming', sub: null },
-  PHY_LAB: { category: 'Lab', sub: 'Physics_Lab' },
-  CHEM_LAB: { category: 'Lab', sub: 'Chemistry_Lab' },
-  BIO_LAB: { category: 'Lab', sub: 'Biology_Lab' },
+  MATH: { category: 'Mathematics', sub: null, name: 'Mathematics I' },
+  PHY: { category: 'Physics', sub: null, name: 'General Physics I' },
+  CHEM: { category: 'Chemistry', sub: null, name: 'General Chemistry' },
+  BIO: { category: 'Biology', sub: null, name: 'General Biology' },
+  EGBI100: { category: 'EGBI100', sub: null, name: 'Introduction to BME' },
+  COMPRO: { category: 'Computer_Programming', sub: null, name: 'Computer Programming' },
+  PHY_LAB: { category: 'Lab', sub: 'Physics_Lab', name: 'Physics Laboratory I' },
+  CHEM_LAB: { category: 'Lab', sub: 'Chemistry_Lab', name: 'Chemistry Laboratory I' },
+  BIO_LAB: { category: 'Lab', sub: 'Biology_Lab', name: 'General Biology Laboratory 1' },
+};
+
+// Subject Keyword Matcher for files uploaded outside class hours
+const SUBJECT_KEYWORDS = {
+  PHY: [
+    'physics', 'capacitor', 'capacitors', 'capacitance', 'electric', 'magnetic',
+    'field', 'optics', 'mechanics', 'thermo', 'kinematics', 'velocity', 'force',
+    'newton', 'circuit', 'resistor', 'inductance', 'current', 'voltage', 'scpy'
+  ],
+  MATH: [
+    'math', 'mathematics', 'calculus', 'calc', 'matrix', 'vector', 'derivative',
+    'integral', 'integration', 'differentiation', 'differential', 'limit', 'algebra',
+    'scma', 'eigen', 'eigenvalue', 'series', 'taylor'
+  ],
+  CHEM: [
+    'chem', 'chemistry', 'acid', 'base', 'titration', 'organic', 'stoichiometry',
+    'equilibrium', 'scch', 'molecule', 'periodic', 'reaction', 'orbital', 'thermodynamic'
+  ],
+  BIO: [
+    'bio', 'biology', 'cell', 'genetics', 'dna', 'rna', 'gene', 'photosynthesis',
+    'scbe', 'scsl', 'enzyme', 'organism', 'evolution', 'ecology', 'protein', 'mitosis'
+  ],
+  COMPRO: [
+    'compro', 'programming', 'python', 'code', 'algorithm', 'egbi122', 'function',
+    'loop', 'array', 'pointer', 'java', 'c++', 'datastructure'
+  ],
+  EGBI100: [
+    'egbi100', 'biomedical', 'bme intro', 'introduction to bme', 'biomedical engineering'
+  ],
+  PHY_LAB: [
+    'scpy111', 'physic lab', 'physics lab', 'phy lab', 'แลปฟิสิกส์', 'แล็บฟิสิกส์'
+  ],
+  CHEM_LAB: [
+    'scch169', 'scch189', 'chem lab', 'chemistry lab', 'แลปเคมี', 'แล็บเคมี'
+  ],
+  BIO_LAB: [
+    'scbe102', 'bio lab', 'biology lab', 'แลปชีวะ', 'แล็บชีวะ'
+  ]
 };
 
 // Course Code Aliases to Canonical Categories
@@ -90,6 +138,8 @@ module.exports = {
   TIMEZONE,
   CATEGORY_MAP,
   COURSE_CODE_ALIASES,
+  SUBJECT_KEYWORDS,
   UNSORTED,
+  extractFolderId,
   hasDriveConfig: Boolean(GOOGLE_DRIVE_PARENT_ID && (GOOGLE_SERVICE_ACCOUNT_JSON || fs.existsSync(path.join(__dirname, '../../service_account.json'))))
 };

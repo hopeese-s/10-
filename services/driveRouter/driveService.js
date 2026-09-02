@@ -27,6 +27,12 @@ function getDriveClient() {
       const credentials = typeof GOOGLE_SERVICE_ACCOUNT_JSON === 'object'
         ? GOOGLE_SERVICE_ACCOUNT_JSON
         : JSON.parse(GOOGLE_SERVICE_ACCOUNT_JSON);
+      if (credentials && credentials.private_key) {
+        credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
+      }
+      if (credentials && credentials.client_email) {
+        console.log(`🔑 [DriveService] Authenticated with Service Account: ${credentials.client_email}`);
+      }
       auth = new google.auth.GoogleAuth({
         credentials,
         scopes: SCOPES
@@ -69,6 +75,8 @@ async function findOrCreateFolder(name, parentId) {
   const res = await drive.files.list({
     q: query,
     fields: 'files(id, name, webViewLink)',
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
     spaces: 'drive'
   });
 
@@ -86,7 +94,8 @@ async function findOrCreateFolder(name, parentId) {
       mimeType: 'application/vnd.google-apps.folder',
       parents: [parentId]
     },
-    fields: 'id, webViewLink'
+    fields: 'id, webViewLink',
+    supportsAllDrives: true
   });
 
   const newFolderId = createRes.data.id;
@@ -128,7 +137,8 @@ async function uploadBuffer(buffer, driveFilename, mimeType, folderId) {
           mimeType,
           body: stream
         },
-        fields: 'id, name, webViewLink, webContentLink'
+        fields: 'id, name, webViewLink, webContentLink',
+        supportsAllDrives: true
       });
 
       return {
