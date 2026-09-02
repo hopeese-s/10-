@@ -5143,6 +5143,48 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ─── API: Normalized Class Schedule for AI Router (GET /api/schedule) ───
+  if (pathname === '/api/schedule' && req.method === 'GET') {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    const qKey = reqUrl.searchParams.get('sync_key') || reqUrl.searchParams.get('key') || '1';
+    let targetData = store[qKey] || store['1'] || null;
+    if (!targetData) {
+      const adminUser = Object.values(store._users || {}).find(u => u && u.role === 'admin');
+      if (adminUser) targetData = store[adminUser.id];
+    }
+    targetData = targetData || {};
+
+    const rawCurriculum = (targetData.curriculum && Array.isArray(targetData.curriculum) && targetData.curriculum.length > 0)
+      ? targetData.curriculum
+      : DEFAULT_BME_CURRICULUM;
+
+    const dayNameMap = {
+      monday: 'Monday', tuesday: 'Tuesday', wednesday: 'Wednesday',
+      thursday: 'Thursday', friday: 'Friday', saturday: 'Saturday', sunday: 'Sunday'
+    };
+
+    const normalized = rawCurriculum.map(c => {
+      const cleanDay = (c.day || '').toLowerCase().trim();
+      return {
+        code: c.code || c.subject_code || c.title || 'UNKNOWN',
+        name: c.name || c.title || c.code || '',
+        day: dayNameMap[cleanDay] || (cleanDay ? cleanDay.charAt(0).toUpperCase() + cleanDay.slice(1) : 'Monday'),
+        start: c.start || '09:00',
+        end: c.end || '12:00',
+        room: c.room || ''
+      };
+    });
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      curriculum: normalized,
+      timezone: 'Asia/Bangkok',
+      totalCourses: normalized.length,
+      updatedAt: targetData.updatedAt || new Date().toISOString()
+    }));
+    return;
+  }
+
   // ─── API: Create Share Bundle (POST /api/share) ───
   if (pathname === '/api/share' && req.method === 'POST') {
     parseJsonBody((err, data) => {
