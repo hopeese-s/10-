@@ -378,7 +378,7 @@ async function summarizeSession(files, sessionLabel) {
 
   } catch (err) {
     console.error('❌ summarizeSession error:', err.message);
-    const errorText = 'ไม่สามารถสรุปไฟล์อัตโนมัติได้ (ไฟล์ต้นฉบับยังอยู่ครบใน Drive)';
+    const errorText = `⚠️ สรุปเนื้อหาไม่สำเร็จ: ${err.message}\n(ไฟล์ต้นฉบับอัปโหลดเข้า Google Drive เรียบร้อยแล้ว กรุณาตรวจสอบ OPENCODE_API_KEY หรือ GEMINI_API_KEY บน Railway)`;
     const fullMarkdown = `# สรุปคาบเรียน: ${sessionLabel}\n\n> ⚠️ เกิดข้อผิดพลาดขณะสรุปเนื้อหา: ${err.message}\n> ไฟล์ต้นฉบับการเรียนทั้งหมดของคาบนี้ถูกอัปโหลดขึ้น Google Drive เรียบร้อยแล้ว\n`;
     return { shortSummary: errorText, fullMarkdown };
   }
