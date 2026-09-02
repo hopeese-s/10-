@@ -74,8 +74,8 @@ async function handleIncomingMedia({ message, buffer, lineUserId, userId, curric
   let folderId = null;
   if (config.hasDriveConfig) {
     try {
-      folderId = await driveService.resolveSubjectFolder(subjectInfo.category, subjectInfo.subCategory);
-      console.log(`📁 [DriveRouter] Resolved Drive folder ID: ${folderId} for category: ${subjectInfo.category}`);
+      folderId = await driveService.resolveSubjectFolder(subjectInfo.category, subjectInfo.subCategory, subjectInfo.dateStr);
+      console.log(`📁 [DriveRouter] Resolved Drive folder ID: ${folderId} for category: ${subjectInfo.category}/${subjectInfo.dateStr}`);
     } catch (driveErr) {
       console.error('⚠️ Could not resolve Google Drive subject folder:', driveErr.message);
       // Re-throw so caller sees real error reason

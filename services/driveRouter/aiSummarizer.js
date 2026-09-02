@@ -60,16 +60,26 @@ function extractTextFromBuffer(buffer, mimeType, filename = '') {
  */
 async function callOpenRouter(prompt, contextText) {
   if (!OPENROUTER_API_KEY) return null;
-  const models = ['google/gemini-2.0-flash-001', 'deepseek/deepseek-chat', 'openai/gpt-4o-mini', 'meta-llama/llama-3.3-70b-instruct'];
+  const models = [
+    'deepseek/deepseek-chat',
+    'google/gemini-2.0-flash-001',
+    'google/gemini-flash-1.5',
+    'openai/gpt-4o-mini',
+    'qwen/qwen-2.5-72b-instruct',
+    'meta-llama/llama-3.3-70b-instruct'
+  ];
+  const baseUrl = (process.env.OPENROUTER_BASE_URL || process.env.OPENCODE_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/$/, '');
+
   for (const model of models) {
     try {
-      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      console.log(`🤖 [AISummarizer] Trying OpenRouter model [${model}]...`);
+      const res = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
           'HTTP-Referer': 'https://e-calendar.app',
-          'X-Title': 'E-Calendar'
+          'X-Title': 'E-Calendar Study Space'
         },
         body: JSON.stringify({
           model,
@@ -84,7 +94,10 @@ async function callOpenRouter(prompt, contextText) {
       if (res.ok) {
         const json = await res.json();
         const text = json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content;
-        if (text) return text.trim();
+        if (text) {
+          console.log(`✅ [AISummarizer] OpenRouter summary generated with ${model}!`);
+          return text.trim();
+        }
       } else {
         console.warn(`⚠️ OpenRouter model ${model} failed (${res.status}):`, await res.text());
       }

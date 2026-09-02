@@ -11,13 +11,29 @@ const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || '').replace(/['"]/g, '').t
 const GEMINI_MODEL = (process.env.GEMINI_MODEL || 'gemini-2.0-flash').replace(/['"]/g, '').trim();
 
 // Multi-provider AI Support (OpenRouter / OpenCode / DeepSeek / OpenAI / Groq / Gemini)
-const OPENROUTER_API_KEY = (process.env.OPENROUTER_API_KEY || process.env.OPENCODE_API_KEY || '').replace(/['"]/g, '').trim();
+const OPENROUTER_API_KEY = (
+  process.env.OPENROUTER_API_KEY ||
+  process.env.OPENCODE_API_KEY ||
+  process.env.OPEN_CODE_API_KEY ||
+  process.env.OPENCODE_KEY ||
+  process.env.OPENROUTER_KEY ||
+  process.env.OPEN_CODE_KEY ||
+  ''
+).replace(/['"]/g, '').trim();
+
+const OPENROUTER_BASE_URL = (
+  process.env.OPENROUTER_BASE_URL ||
+  process.env.OPENCODE_BASE_URL ||
+  'https://openrouter.ai/api/v1'
+).replace(/['"]/g, '').trim().replace(/\/$/, '');
+
 const DEEPSEEK_API_KEY = (process.env.DEEPSEEK_API_KEY || '').replace(/['"]/g, '').trim();
 const OPENAI_API_KEY = (process.env.OPENAI_API_KEY || '').replace(/['"]/g, '').trim();
 const GROQ_API_KEY = (process.env.GROQ_API_KEY || '').replace(/['"]/g, '').trim();
 const AI_PROVIDER = (process.env.AI_PROVIDER || '').toLowerCase().trim();
 
 const hasAnyAi = Boolean(OPENROUTER_API_KEY || DEEPSEEK_API_KEY || OPENAI_API_KEY || GROQ_API_KEY || GEMINI_API_KEY);
+
 
 
 function extractFolderId(input) {
@@ -42,7 +58,7 @@ const GOOGLE_REFRESH_TOKEN = (process.env.GOOGLE_REFRESH_TOKEN || '').replace(/[
 const hasOAuthConfig = Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET && GOOGLE_REFRESH_TOKEN);
 
 
-const SESSION_DEBOUNCE_SECONDS = parseInt(process.env.SESSION_DEBOUNCE_SECONDS || '45', 10);
+const SESSION_DEBOUNCE_SECONDS = parseInt(process.env.SESSION_DEBOUNCE_SECONDS || '30', 10);
 const GRACE_PERIOD_MINUTES = parseInt(process.env.GRACE_PERIOD_MINUTES || '30', 10);
 const TIMEZONE = process.env.TIMEZONE || 'Asia/Bangkok';
 

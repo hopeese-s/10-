@@ -181,13 +181,17 @@ async function getRootParentFolderId() {
 }
 
 /**
- * Resolves or creates subject folder in Google Drive (Flat structure v2)
+ * Resolves or creates subject folder in Google Drive with daily subfolder (e.g. Physics/2026-09-03)
  */
-async function resolveSubjectFolder(category, subCategory = null) {
+async function resolveSubjectFolder(category, subCategory = null, dateStr = null) {
   const rootId = await getRootParentFolderId();
   let folderId = await findOrCreateFolder(category, rootId);
   if (subCategory) {
     folderId = await findOrCreateFolder(subCategory, folderId);
+  }
+  if (dateStr) {
+    // Daily subfolder: creates e.g. "Physics/2026-09-03"
+    folderId = await findOrCreateFolder(dateStr, folderId);
   }
   return folderId;
 }
