@@ -59,66 +59,85 @@ function extractTextFromBuffer(buffer, mimeType, filename = '') {
 }
 
 /**
- * OpenRouter / OpenCode API caller
+ * Universal OpenAI-compatible Chat Completion caller
+ */
+async function callOpenAiCompatible(apiKey, baseUrl, model, prompt, contextText, providerName = 'AI Provider') {
+  if (!apiKey) return null;
+  try {
+    const url = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
+    console.log(`🤖 [AISummarizer] Trying ${providerName} [${model}] at ${url}...`);
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': 'https://e-calendar.app',
+        'X-Title': 'E-Calendar Study Space'
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: SYSTEM_INSTRUCTION },
+          { role: 'user', content: `${prompt}\n\n--- เนื้อหาเอกสาร ---\n${contextText}` }
+        ],
+        temperature: 0.2,
+        max_tokens: 1500
+      }),
+      signal: AbortSignal.timeout(8000)
+    });
+
+    if (res.ok) {
+      const json = await res.json();
+      const text = json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content;
+      if (text) {
+        console.log(`✅ [AISummarizer] ${providerName} (${model}) summary generated successfully!`);
+        return text.trim();
+      }
+    } else {
+      const errBody = await res.text();
+      _lastAiError = `${providerName} (${model}) HTTP ${res.status}: ${errBody.slice(0, 150)}`;
+      console.warn(`⚠️ ${providerName} (${model}) failed (${res.status}):`, errBody);
+    }
+  } catch (e) {
+    _lastAiError = `${providerName} (${model}) error: ${e.message}`;
+    console.warn(`⚠️ ${providerName} (${model}) exception:`, e.message);
+  }
+  return null;
+}
+
+/**
+ * OpenRouter / OpenCode API caller — cascades across multiple endpoints if needed
  */
 async function callOpenRouter(prompt, contextText) {
   if (!OPENROUTER_API_KEY) return null;
-  const models = [
+
+  // 1. OpenRouter endpoint
+  const openRouterModels = [
     'deepseek/deepseek-chat',
     'google/gemini-2.0-flash-001',
     'google/gemini-flash-1.5',
     'openai/gpt-4o-mini',
-    'qwen/qwen-2.5-72b-instruct',
-    'meta-llama/llama-3.3-70b-instruct',
-    'deepseek-chat',
-    'gemini-2.0-flash',
-    'gpt-4o-mini'
+    'qwen/qwen-2.5-72b-instruct'
   ];
-  const baseUrl = (OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/$/, '');
-
-  for (const model of models) {
-    try {
-      console.log(`🤖 [AISummarizer] Calling OpenCode/OpenRouter model [${model}]...`);
-      const res = await fetch(`${baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-          'HTTP-Referer': 'https://e-calendar.app',
-          'X-Title': 'E-Calendar Study Space'
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: 'system', content: SYSTEM_INSTRUCTION },
-            { role: 'user', content: `${prompt}\n\n--- เนื้อหาเอกสาร ---\n${contextText}` }
-          ],
-          temperature: 0.2,
-          max_tokens: 1500
-        }),
-        signal: AbortSignal.timeout(8000)
-      });
-
-      if (res.ok) {
-        const json = await res.json();
-        const text = json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content;
-        if (text) {
-          console.log(`✅ [AISummarizer] OpenRouter summary generated with ${model}!`);
-          return text.trim();
-        }
-      } else {
-        const errBody = await res.text();
-        _lastAiError = `OpenCode HTTP ${res.status}: ${errBody.slice(0, 150)}`;
-        console.warn(`⚠️ OpenRouter model ${model} failed (${res.status}):`, errBody);
-        if (res.status === 401 || res.status === 402 || res.status === 403) {
-          break; // Key or billing issue — no point trying other models
-        }
-      }
-    } catch (e) {
-      _lastAiError = `OpenCode network error: ${e.message}`;
-      console.warn(`⚠️ OpenRouter error on ${model}:`, e.message);
-    }
+  for (const model of openRouterModels) {
+    const result = await callOpenAiCompatible(OPENROUTER_API_KEY, OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1', model, prompt, contextText, 'OpenRouter');
+    if (result) return result;
+    if (_lastAiError && (_lastAiError.includes('HTTP 401') || _lastAiError.includes('HTTP 402'))) break;
   }
+
+  // 2. Direct DeepSeek fallback with same key (in case user pasted DeepSeek key into OPENCODE_API_KEY)
+  const dsResult = await callOpenAiCompatible(OPENROUTER_API_KEY, 'https://api.deepseek.com', 'deepseek-chat', prompt, contextText, 'DeepSeek-Fallback');
+  if (dsResult) return dsResult;
+
+  // 3. Direct OpenAI fallback with same key (in case user pasted OpenAI key into OPENCODE_API_KEY)
+  const oaiResult = await callOpenAiCompatible(OPENROUTER_API_KEY, 'https://api.openai.com/v1', 'gpt-4o-mini', prompt, contextText, 'OpenAI-Fallback');
+  if (oaiResult) return oaiResult;
+
+  // 4. Direct Groq fallback with same key
+  const groqResult = await callOpenAiCompatible(OPENROUTER_API_KEY, 'https://api.groq.com/openai/v1', 'llama-3.3-70b-versatile', prompt, contextText, 'Groq-Fallback');
+  if (groqResult) return groqResult;
+
   return null;
 }
 
