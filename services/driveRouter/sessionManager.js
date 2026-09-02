@@ -28,13 +28,15 @@ function addFileToSession(subjectInfo, fileEntry, meta, onFlush) {
       files: [],
       subjectInfo,
       meta,
-      timer: null
+      timer: null,
+      onFlush
     };
     _sessions.set(key, session);
   }
 
   session.files.push(fileEntry);
   session.meta = { ...session.meta, ...meta }; // update meta if provided
+  if (onFlush && !session.onFlush) session.onFlush = onFlush;
 
   if (session.timer) {
     clearTimeout(session.timer);
@@ -46,7 +48,9 @@ function addFileToSession(subjectInfo, fileEntry, meta, onFlush) {
     _sessions.delete(key);
     console.log(`🚀 [DriveRouter] Debounce expired for [${key}]. Processing combined session with ${session.files.length} file(s)...`);
     try {
-      await onFlush(key, session.subjectInfo, session.files, session.meta);
+      if (session.onFlush) {
+        await session.onFlush(key, session.subjectInfo, session.files, session.meta);
+      }
     } catch (err) {
       console.error(`❌ [DriveRouter] Error during session flush for [${key}]:`, err);
     }
@@ -54,14 +58,38 @@ function addFileToSession(subjectInfo, fileEntry, meta, onFlush) {
 }
 
 /**
- * Flushes a session immediately (useful for testing or manual flush)
+ * Flushes a session immediately (useful for manual trigger or speed-up)
  */
-async function flushSessionImmediately(key, onFlush) {
+async function flushSessionImmediately(key, fallbackOnFlush = null) {
   const session = _sessions.get(key);
-  if (!session) return;
+  if (!session) return null;
   if (session.timer) clearTimeout(session.timer);
   _sessions.delete(key);
-  await onFlush(key, session.subjectInfo, session.files, session.meta);
+  const cb = fallbackOnFlush || session.onFlush;
+  if (cb) {
+    await cb(key, session.subjectInfo, session.files, session.meta);
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Cancels a session (stops debounce timer and discards AI summary)
+ */
+function cancelSession(key) {
+  const session = _sessions.get(key);
+  if (!session) return false;
+  if (session.timer) clearTimeout(session.timer);
+  _sessions.delete(key);
+  console.log(`🛑 [DriveRouter] Debounce session cancelled for [${key}]`);
+  return true;
+}
+
+/**
+ * Gets session info if active
+ */
+function getSession(key) {
+  return _sessions.get(key) || null;
 }
 
 /**
@@ -75,5 +103,7 @@ module.exports = {
   getSessionKey,
   addFileToSession,
   flushSessionImmediately,
+  cancelSession,
+  getSession,
   getActiveSessionCount
 };

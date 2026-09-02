@@ -16,5 +16,6 @@ module.exports = {
   sessionManager,
   routerService,
   handleIncomingMedia: routerService.handleIncomingMedia,
-  resolveCurrentSubject: scheduleService.resolveCurrentSubject
+  resolveCurrentSubject: scheduleService.resolveCurrentSubject,
+  buildDriveUploadFlex: routerService.buildDriveUploadFlex
 };

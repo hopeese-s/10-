@@ -5727,6 +5727,33 @@ const server = http.createServer(async (req, res) => {
       const linkedUserId = (store._lineUsers && store._lineUsers[lineUserId]) || '1';
       const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
 
+      // ─── Drive Router Actions: Speed-up AI Summary or Drive Only ───
+      if (action === 'summarize_now') {
+        const sessionKey = params.get('key');
+        if (!sessionKey) {
+          await sendLineReply(replyToken, '⚠️ ไม่พบรหัสคาบเรียนที่ต้องการสรุป');
+          return;
+        }
+
+        await sendLineReply(replyToken, '⚡ กำลังเริ่มสรุปเนื้อหาทันทีด้วย Gemini AI กรุณารอสักครู่ครับ...');
+
+        if (driveRouter && driveRouter.sessionManager) {
+          driveRouter.sessionManager.flushSessionImmediately(sessionKey).catch(e => {
+            console.error('❌ flushSessionImmediately error:', e);
+          });
+        }
+        return;
+      }
+
+      if (action === 'drive_only') {
+        const sessionKey = params.get('key');
+        if (driveRouter && driveRouter.sessionManager && sessionKey) {
+          driveRouter.sessionManager.cancelSession(sessionKey);
+        }
+        await sendLineReply(replyToken, '✅ บันทึกไฟล์ขึ้น Google Drive เรียบร้อยแล้ว (ไม่มีการสรุป AI ครับ 👍)');
+        return;
+      }
+
       if (action === 'snooze') {
         const min = parseInt(params.get('min') || '15', 10);
         if (!userData.notiSettings) userData.notiSettings = { enabled: true, offsets: [15] };
@@ -5796,50 +5823,62 @@ const server = http.createServer(async (req, res) => {
     if (event.type === 'message' && event.message && ['file', 'audio', 'image'].includes(event.message.type)) {
       if (driveRouter && driveRouter.config && driveRouter.config.hasDriveConfig) {
         const linkedUserId = (store._lineUsers && store._lineUsers[lineUserId]) || '1';
-        
-        // Stage 1: Send immediate acknowledgement reply (<30s token expiration guarantee)
-        await sendLineReply(replyToken, '📥 รับไฟล์แล้ว กำลังจับวิชาและสรุปให้อยู่นะ...');
 
-        // Background download and routing
-        (async () => {
-          try {
-            const buffer = await getLineMessageContent(event.message.id);
-            if (!buffer) {
-              console.warn(`⚠️ Failed to download LINE media content: message id ${event.message.id}`);
-              return;
-            }
-
-            const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
-            const userObj = Object.values(store._users || {}).find(u => u.id === linkedUserId || (u.username && u.username.toLowerCase() === linkedUserId.toLowerCase()));
-            const isBmeUserObj = userObj ? userObj.isBme !== false : (linkedUserId === '1');
-            const curriculum = (userData.curriculum && Array.isArray(userData.curriculum) && userData.curriculum.length > 0)
-              ? userData.curriculum
-              : (isBmeUserObj ? DEFAULT_BME_CURRICULUM : []);
-
-            // Also mirror save to E-Calendar's local vault in parallel
-            try {
-              const { ext, mimeType } = driveRouter.routerService.inferMediaMeta(event.message);
-              const safeName = event.message.fileName || `media_${Date.now()}.${ext}`;
-              await saveMediaFileToStorage(buffer, safeName, `.${ext}`, mimeType, linkedUserId);
-            } catch (vErr) {
-              console.warn('⚠️ Vault mirror save warning:', vErr.message);
-            }
-
-            // Route to Google Drive + Debounce Session + AI Summarizer + LINE Push
-            await driveRouter.handleIncomingMedia({
-              message: event.message,
-              buffer,
-              lineUserId,
-              userId: linkedUserId,
-              curriculum,
-              sendPush: sendLinePush
-            });
-          } catch (routerErr) {
-            console.error('❌ Error handling incoming media with driveRouter:', routerErr);
+        try {
+          const buffer = await getLineMessageContent(event.message.id);
+          if (!buffer) {
+            await sendLineReply(replyToken, '⚠️ ไม่สามารถดาวน์โหลดไฟล์จาก LINE ได้ กรุณาลองใหม่อีกครั้งครับ');
+            return;
           }
-        })();
 
-        return;
+          const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+          const userObj = Object.values(store._users || {}).find(u => u.id === linkedUserId || (u.username && u.username.toLowerCase() === linkedUserId.toLowerCase()));
+          const isBmeUserObj = userObj ? userObj.isBme !== false : (linkedUserId === '1');
+          const curriculum = (userData.curriculum && Array.isArray(userData.curriculum) && userData.curriculum.length > 0)
+            ? userData.curriculum
+            : (isBmeUserObj ? DEFAULT_BME_CURRICULUM : []);
+
+          const isDriveOnly = userData.driveMode === 'drive_only';
+
+          // Also mirror save to E-Calendar's local vault in parallel
+          try {
+            const { ext, mimeType } = driveRouter.routerService.inferMediaMeta(event.message);
+            const safeName = event.message.fileName || `media_${Date.now()}.${ext}`;
+            await saveMediaFileToStorage(buffer, safeName, `.${ext}`, mimeType, linkedUserId);
+          } catch (vErr) {
+            console.warn('⚠️ Vault mirror save warning:', vErr.message);
+          }
+
+          // Route to Google Drive (uploads original file immediately)
+          const routeResult = await driveRouter.handleIncomingMedia({
+            message: event.message,
+            buffer,
+            lineUserId,
+            userId: linkedUserId,
+            curriculum,
+            sendPush: sendLinePush,
+            driveOnly: isDriveOnly
+          });
+
+          // Send interactive Flex Message with direct Drive link + action buttons!
+          const flexMsg = driveRouter.buildDriveUploadFlex({
+            driveFilename: routeResult.driveFilename,
+            courseName: routeResult.subjectInfo.courseName,
+            matchedCode: routeResult.subjectInfo.matchedCode,
+            category: routeResult.subjectInfo.category,
+            webViewLink: routeResult.fileUploadResult ? routeResult.fileUploadResult.webViewLink : null,
+            sessionKey: routeResult.sessionKey,
+            driveOnlyMode: isDriveOnly
+          });
+
+          await sendLineReply(replyToken, [flexMsg]);
+          return;
+
+        } catch (routerErr) {
+          console.error('❌ Error handling incoming media with driveRouter:', routerErr);
+          await sendLineReply(replyToken, `⚠️ เกิดข้อผิดพลาดในการอัปโหลดเข้า Drive: ${routerErr.message}`);
+          return;
+        }
       }
     }
 
@@ -6142,6 +6181,32 @@ const server = http.createServer(async (req, res) => {
       const isBmeUser = isTest4 ? false : (targetUser && targetUser.isBme !== false);
       const defaultCurriculum = isTest4 ? TEST4_CURRICULUM : (isBmeUser ? DEFAULT_BME_CURRICULUM : []);
       const defaultRoutines = isBmeUser ? [...DEFAULT_BME_ROUTINE_EVENTS, ...DEFAULT_BME_STUDY_BLOCKS] : [];
+
+      // ─── Command: /mode <drive|ai> or โหมด <drive|ai> ───
+      const modeMatch = text.match(/^\/?(mode|โหมด)\s*(drive|ai|auto|ไดรฟ์)?/i);
+      if (modeMatch) {
+        const arg = (modeMatch[2] || '').toLowerCase();
+        const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+        if (arg === 'drive' || arg === 'ไดรฟ์') {
+          userData.driveMode = 'drive_only';
+          await dbAdapter.saveUserData(linkedUserId, userData);
+          store[linkedUserId] = userData;
+          saveStore();
+          await sendLineReply(replyToken, '📁 สลับเป็นโหมด [บันทึก Drive อย่างเดียว] เรียบร้อยแล้วครับ! ⚡\n\nต่อไปนี้เมื่อส่งไฟล์จะอัปโหลดขึ้น Google Drive ทันที โดยไม่รอดีเลย์และไม่สรุป AI อัตโนมัติ (แต่ยังกดปุ่มสรุปเองได้เสมอครับ)');
+          return;
+        } else if (arg === 'ai' || arg === 'auto') {
+          userData.driveMode = 'auto_summary';
+          await dbAdapter.saveUserData(linkedUserId, userData);
+          store[linkedUserId] = userData;
+          saveStore();
+          await sendLineReply(replyToken, '🤖 สลับเป็นโหมด [สรุป AI อัตโนมัติ] เรียบร้อยแล้วครับ! ✨\n\nต่อไปนี้เมื่อส่งไฟล์ ระบบจะอัปโหลดขึ้น Drive และรวบรวมสรุปเนื้อหาด้วย Gemini AI ให้โดยอัตโนมัติ');
+          return;
+        } else {
+          const curMode = userData.driveMode === 'drive_only' ? '📁 บันทึก Drive อย่างเดียว' : '🤖 สรุป AI อัตโนมัติ';
+          await sendLineReply(replyToken, `⚙️ โหมดปัจจุบันของคุณคือ: ${curMode}\n\nคุณสามารถเปลี่ยนโหมดได้โดยพิมพ์:\n• /mode drive (บันทึก Drive ไวๆ อย่างเดียว ไม่สรุป)\n• /mode ai (สรุป AI อัตโนมัติหลังส่งไฟล์)`);
+          return;
+        }
+      }
 
       // ─── 0. Command: เมนู / Menu / Help / วิธีใช้ / คู่มือ ───
       if (/^(help|menu|guide|manual|วิธีใช้|คู่มือ|เมนู|\?|คำสั่ง|ฟีเจอร์)$/i.test(text)) {
