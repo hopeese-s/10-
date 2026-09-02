@@ -59,7 +59,7 @@ function inferMediaMeta(message) {
  * @param {Array} params.curriculum - User's curriculum array
  * @param {Function} params.sendPush - Function to send push notification to lineUserId
  */
-async function handleIncomingMedia({ message, buffer, lineUserId, userId, curriculum, sendPush }) {
+async function handleIncomingMedia({ message, buffer, lineUserId, userId, curriculum, sendPush, driveOnly = false }) {
   if (!buffer || buffer.length === 0) {
     throw new Error('Empty file buffer');
   }
@@ -68,15 +68,21 @@ async function handleIncomingMedia({ message, buffer, lineUserId, userId, curric
 
   // 1. Resolve active course with 30-min grace period
   const subjectInfo = scheduleService.resolveCurrentSubject(curriculum);
+  console.log(`📂 [DriveRouter] Resolved subject: [${subjectInfo.matchedCode}] → ${subjectInfo.category} at ${subjectInfo.timeStr}`);
 
   // 2. Resolve target subject folder in Google Drive (Flat structure v2)
   let folderId = null;
   if (config.hasDriveConfig) {
     try {
       folderId = await driveService.resolveSubjectFolder(subjectInfo.category, subjectInfo.subCategory);
+      console.log(`📁 [DriveRouter] Resolved Drive folder ID: ${folderId} for category: ${subjectInfo.category}`);
     } catch (driveErr) {
       console.error('⚠️ Could not resolve Google Drive subject folder:', driveErr.message);
+      // Re-throw so caller sees real error reason
+      throw new Error(`Google Drive folder error: ${driveErr.message}`);
     }
+  } else {
+    throw new Error('Google Drive not configured (GOOGLE_DRIVE_PARENT_ID or Service Account missing)');
   }
 
   // 3. Format flat filename: {YYYY-MM-DD}_{HHMM}_{Type}_{ShortID}.{ext}
@@ -93,6 +99,7 @@ async function handleIncomingMedia({ message, buffer, lineUserId, userId, curric
       console.log(`✅ [DriveRouter] Original uploaded successfully: ${fileUploadResult.webViewLink}`);
     } catch (upErr) {
       console.error(`❌ [DriveRouter] Failed to upload original file "${driveFilename}":`, upErr.message);
+      throw new Error(`Drive upload failed: ${upErr.message}`);
     }
   }
 
@@ -102,6 +109,7 @@ async function handleIncomingMedia({ message, buffer, lineUserId, userId, curric
     mimeType,
     ext,
     typeLabel,
+    filename: originalName || driveFilename, // fixed: aiSummarizer expects "filename"
     driveFilename,
     originalName,
     webViewLink: fileUploadResult ? fileUploadResult.webViewLink : null
@@ -116,21 +124,17 @@ async function handleIncomingMedia({ message, buffer, lineUserId, userId, curric
 
   const sessionKey = sessionManager.getSessionKey(subjectInfo);
 
-  if (!params.driveOnly) {
+  if (!driveOnly) {
     // Start debounce queue for AI Summary
     sessionManager.addFileToSession(subjectInfo, fileEntry, meta, async (sKey, subj, sessionFiles, sessionMeta) => {
       await finalizeLectureSession(sKey, subj, sessionFiles, sessionMeta);
     });
   } else {
-    // Register file in session without starting auto-timer (for manual trigger if requested)
-    let s = sessionManager.getSession(sessionKey);
-    if (!s) {
-      sessionManager.addFileToSession(subjectInfo, fileEntry, meta, async (sKey, subj, sessionFiles, sessionMeta) => {
-        await finalizeLectureSession(sKey, subj, sessionFiles, sessionMeta);
-      });
-      sessionManager.cancelSession(sessionKey); // stop the auto timer
-      s = sessionManager.getSession(sessionKey);
-    }
+    // driveOnly mode: register file in session store but cancel auto-timer
+    sessionManager.addFileToSession(subjectInfo, fileEntry, meta, async (sKey, subj, sessionFiles, sessionMeta) => {
+      await finalizeLectureSession(sKey, subj, sessionFiles, sessionMeta);
+    });
+    sessionManager.cancelSession(sessionKey); // stop the debounce timer
   }
 
   return {

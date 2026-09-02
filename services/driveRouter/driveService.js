@@ -7,7 +7,10 @@ const { Readable } = require('stream');
 const { google } = require('googleapis');
 const { GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_DRIVE_PARENT_ID } = require('./config');
 
-const SCOPES = ['https://www.googleapis.com/auth/drive.file'];
+const SCOPES = [
+  'https://www.googleapis.com/auth/drive',          // full drive access (needed for shared folders)
+  'https://www.googleapis.com/auth/drive.file'      // fallback scope
+];
 
 let _driveClient = null;
 const _folderCache = new Map(); // Cache "parentId_folderName" -> folderId
