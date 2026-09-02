@@ -141,5 +141,5 @@ module.exports = {
   SUBJECT_KEYWORDS,
   UNSORTED,
   extractFolderId,
-  hasDriveConfig: Boolean(GOOGLE_DRIVE_PARENT_ID && (GOOGLE_SERVICE_ACCOUNT_JSON || fs.existsSync(path.join(__dirname, '../../service_account.json'))))
+  hasDriveConfig: Boolean(GOOGLE_SERVICE_ACCOUNT_JSON || fs.existsSync(path.join(__dirname, '../../service_account.json')))
 };

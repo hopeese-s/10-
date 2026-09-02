@@ -103,15 +103,71 @@ async function findOrCreateFolder(name, parentId) {
   return newFolderId;
 }
 
+let _cachedParentId = null;
+
+/**
+ * Resolves root parent folder ID with auto-discovery:
+ * 1. Verifies GOOGLE_DRIVE_PARENT_ID
+ * 2. If invalid or missing, searches for shared folder named 'E-Calendar_Study_Space'
+ */
+async function getRootParentFolderId() {
+  if (_cachedParentId) return _cachedParentId;
+
+  const drive = getDriveClient();
+  let candidateId = GOOGLE_DRIVE_PARENT_ID;
+
+  // 1. Check if configured ID is valid and accessible
+  if (candidateId) {
+    try {
+      const check = await drive.files.get({
+        fileId: candidateId,
+        fields: 'id, name, trashed',
+        supportsAllDrives: true
+      });
+      if (check.data && !check.data.trashed) {
+        console.log(`📁 [DriveService] Verified root folder by ID: "${check.data.name}" (${check.data.id})`);
+        _cachedParentId = check.data.id;
+        return _cachedParentId;
+      }
+    } catch (checkErr) {
+      console.warn(`⚠️ Parent ID [${candidateId}] inaccessible: ${checkErr.message}. Attempting auto-discovery...`);
+    }
+  }
+
+  // 2. Auto-discover shared folder named 'E-Calendar_Study_Space'
+  try {
+    const listRes = await drive.files.list({
+      q: "name = 'E-Calendar_Study_Space' and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+      fields: 'files(id, name, webViewLink)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+      spaces: 'drive'
+    });
+
+    const files = listRes.data.files || [];
+    if (files.length > 0) {
+      console.log(`🎉 [DriveService] Auto-discovered root folder: "${files[0].name}" (${files[0].id})`);
+      _cachedParentId = files[0].id;
+      return _cachedParentId;
+    }
+  } catch (searchErr) {
+    console.warn('⚠️ Auto-discovery search for E-Calendar_Study_Space failed:', searchErr.message);
+  }
+
+  if (candidateId) {
+    _cachedParentId = candidateId;
+    return _cachedParentId;
+  }
+
+  throw new Error('Could not find folder "E-Calendar_Study_Space" in Google Drive. Please ensure the folder is shared with the Service Account email.');
+}
+
 /**
  * Resolves or creates subject folder in Google Drive (Flat structure v2)
  */
 async function resolveSubjectFolder(category, subCategory = null) {
-  if (!GOOGLE_DRIVE_PARENT_ID) {
-    throw new Error('GOOGLE_DRIVE_PARENT_ID is not configured');
-  }
-
-  let folderId = await findOrCreateFolder(category, GOOGLE_DRIVE_PARENT_ID);
+  const rootId = await getRootParentFolderId();
+  let folderId = await findOrCreateFolder(category, rootId);
   if (subCategory) {
     folderId = await findOrCreateFolder(subCategory, folderId);
   }
