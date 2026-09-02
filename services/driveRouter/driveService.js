@@ -176,11 +176,7 @@ async function getRootParentFolderId() {
     console.warn('⚠️ Auto-discovery search for E-Calendar_Study_Space failed:', searchErr.message);
   }
 
-  if (candidateId) {
-    _cachedParentId = candidateId;
-    return _cachedParentId;
-  }
-
+  // Do NOT fall back to the known-inaccessible candidateId — throw so the caller sees the real error
   throw new Error('Could not find folder "E-Calendar_Study_Space" in Google Drive. Please ensure the folder is shared with the Service Account email.');
 }
 

@@ -6,10 +6,12 @@ const { SESSION_DEBOUNCE_SECONDS } = require('./config');
 const _sessions = new Map(); // sessionKey -> { files, subjectInfo, meta, timer }
 
 /**
- * Computes unique session key based on date and subject code
+ * Computes unique session key based on user, date and subject code
+ * @param {Object} subjectInfo
+ * @param {string} [userScope] - userId or lineUserId to prevent cross-user session merging
  */
-function getSessionKey(subjectInfo) {
-  return `${subjectInfo.dateStr}_${subjectInfo.matchedCode}`;
+function getSessionKey(subjectInfo, userScope = '') {
+  return `${userScope ? `${userScope}_` : ''}${subjectInfo.dateStr}_${subjectInfo.matchedCode}`;
 }
 
 /**
@@ -20,7 +22,8 @@ function getSessionKey(subjectInfo) {
  * @param {Function} onFlush - async callback(sessionKey, subjectInfo, files, meta)
  */
 function addFileToSession(subjectInfo, fileEntry, meta, onFlush) {
-  const key = getSessionKey(subjectInfo);
+  const userScope = (meta && (meta.userId || meta.lineUserId)) || '';
+  const key = getSessionKey(subjectInfo, userScope);
 
   let session = _sessions.get(key);
   if (!session) {

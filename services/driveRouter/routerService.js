@@ -122,7 +122,7 @@ async function handleIncomingMedia({ message, buffer, lineUserId, userId, curric
     sendPush
   };
 
-  const sessionKey = sessionManager.getSessionKey(subjectInfo);
+  const sessionKey = sessionManager.getSessionKey(subjectInfo, userId || lineUserId || '');
 
   if (!driveOnly) {
     // Start debounce queue for AI Summary
@@ -203,78 +203,83 @@ function buildDriveUploadFlex({ driveFilename, courseName, matchedCode, category
     });
   }
 
+  const bubble = {
+    type: 'bubble',
+    header: {
+      type: 'box',
+      layout: 'vertical',
+      backgroundColor: headerBg,
+      paddingAll: '16px',
+      contents: [
+        { type: 'text', text: 'E-CALENDAR DRIVE ROUTER', color: '#CCFBF1', size: 'xxs', weight: 'bold', letterSpacing: '1px' },
+        { type: 'text', text: headerTitle, color: '#FFFFFF', size: 'md', weight: 'bold', margin: 'xs' }
+      ]
+    },
+    body: {
+      type: 'box',
+      layout: 'vertical',
+      paddingAll: '16px',
+      spacing: 'sm',
+      contents: [
+        {
+          type: 'box',
+          layout: 'vertical',
+          backgroundColor: '#F8FAFC',
+          cornerRadius: 'md',
+          paddingAll: '12px',
+          contents: [
+            { type: 'text', text: `📚 วิชา: ${courseName || matchedCode}`, weight: 'bold', size: 'sm', color: '#0F766E', wrap: true },
+            { type: 'text', text: `📁 โฟลเดอร์: ${category}`, size: 'xs', color: '#475569', margin: 'xs' },
+            { type: 'text', text: `📄 ไฟล์: ${driveFilename}`, size: 'xxs', color: '#64748B', margin: 'xs', wrap: true }
+          ]
+        },
+        ...(driveOnlyMode ? [
+          {
+            type: 'text',
+            text: '✅ โหมดบันทึกอย่างเดียว (แตะปุ่มด้านล่างหากต้องการสรุป AI)',
+            size: 'xxs',
+            color: '#059669',
+            margin: 'md'
+          },
+          {
+            type: 'button',
+            style: 'secondary',
+            height: 'sm',
+            margin: 'sm',
+            action: {
+              type: 'postback',
+              label: '⚡ สรุป AI ไฟล์นี้',
+              data: `action=summarize_now&key=${encodeURIComponent(sessionKey)}`
+            }
+          }
+        ] : [
+          {
+            type: 'text',
+            text: '⚡ สรุปทันที หรือ แค่อัพโหลดเข้า Drive:',
+            size: 'xxs',
+            weight: 'bold',
+            color: '#475569',
+            margin: 'md'
+          }
+        ])
+      ]
+    }
+  };
+
+  if (buttons.length > 0) {
+    bubble.footer = {
+      type: 'box',
+      layout: 'vertical',
+      spacing: 'sm',
+      paddingAll: '14px',
+      contents: buttons
+    };
+  }
+
   return {
     type: 'flex',
     altText: `📁 บันทึกเข้า Google Drive แล้ว: ${driveFilename}`,
-    contents: {
-      type: 'bubble',
-      header: {
-        type: 'box',
-        layout: 'vertical',
-        backgroundColor: headerBg,
-        paddingAll: '16px',
-        contents: [
-          { type: 'text', text: 'E-CALENDAR DRIVE ROUTER', color: '#CCFBF1', size: 'xxs', weight: 'bold', letterSpacing: '1px' },
-          { type: 'text', text: headerTitle, color: '#FFFFFF', size: 'md', weight: 'bold', margin: 'xs' }
-        ]
-      },
-      body: {
-        type: 'box',
-        layout: 'vertical',
-        paddingAll: '16px',
-        spacing: 'sm',
-        contents: [
-          {
-            type: 'box',
-            layout: 'vertical',
-            backgroundColor: '#F8FAFC',
-            cornerRadius: 'md',
-            paddingAll: '12px',
-            contents: [
-              { type: 'text', text: `📚 วิชา: ${courseName || matchedCode}`, weight: 'bold', size: 'sm', color: '#0F766E', wrap: true },
-              { type: 'text', text: `📁 โฟลเดอร์: ${category}`, size: 'xs', color: '#475569', margin: 'xs' },
-              { type: 'text', text: `📄 ไฟล์: ${driveFilename}`, size: 'xxs', color: '#64748B', margin: 'xs', wrap: true }
-            ]
-          },
-          ...(driveOnlyMode ? [
-            {
-              type: 'text',
-              text: '✅ โหมดบันทึกอย่างเดียว (แตะปุ่มด้านล่างหากต้องการสรุป AI)',
-              size: 'xxs',
-              color: '#059669',
-              margin: 'md'
-            },
-            {
-              type: 'button',
-              style: 'secondary',
-              height: 'sm',
-              margin: 'sm',
-              action: {
-                type: 'postback',
-                label: '⚡ สรุป AI ไฟล์นี้',
-                data: `action=summarize_now&key=${encodeURIComponent(sessionKey)}`
-              }
-            }
-          ] : [
-            {
-              type: 'text',
-              text: '⚡ สรุปทันที หรือ แค่อัพโหลดเข้า Drive:',
-              size: 'xxs',
-              weight: 'bold',
-              color: '#475569',
-              margin: 'md'
-            }
-          ])
-        ]
-      },
-      footer: {
-        type: 'box',
-        layout: 'vertical',
-        spacing: 'sm',
-        paddingAll: '14px',
-        contents: buttons
-      }
-    }
+    contents: bubble
   };
 }
 

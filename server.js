@@ -5871,12 +5871,24 @@ const server = http.createServer(async (req, res) => {
             driveOnlyMode: isDriveOnly
           });
 
-          await sendLineReply(replyToken, [flexMsg]);
+          let replyOk = await sendLineReply(replyToken, [flexMsg]);
+          if (!replyOk && lineUserId) {
+            console.log(`⚠️ sendLineReply failed or token expired, falling back to sendLinePush for [${lineUserId}]`);
+            const pushOk = await sendLinePush(lineUserId, [flexMsg]);
+            if (!pushOk) {
+              const textFallback = `📁 บันทึกเข้า Google Drive สำเร็จแล้ว!\n📚 วิชา: ${routeResult.subjectInfo.courseName || routeResult.subjectInfo.matchedCode}\n📂 โฟลเดอร์: ${routeResult.subjectInfo.category}\n📄 ไฟล์: ${routeResult.driveFilename}${routeResult.fileUploadResult ? `\n🔗 ลิงก์: ${routeResult.fileUploadResult.webViewLink}` : ''}`;
+              await sendLinePush(lineUserId, textFallback);
+            }
+          }
           return;
 
         } catch (routerErr) {
           console.error('❌ Error handling incoming media with driveRouter:', routerErr);
-          await sendLineReply(replyToken, `⚠️ เกิดข้อผิดพลาดในการอัปโหลดเข้า Drive: ${routerErr.message}`);
+          const errMsg = `⚠️ เกิดข้อผิดพลาดในการอัปโหลดเข้า Drive: ${routerErr.message}`;
+          const rOk = await sendLineReply(replyToken, errMsg);
+          if (!rOk && lineUserId) {
+            await sendLinePush(lineUserId, errMsg);
+          }
           return;
         }
       }

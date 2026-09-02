@@ -110,7 +110,7 @@ console.log('\nTest 4: AI Summarizer Robustness');
   // Second file added
   sessionManager.addFileToSession(testSubj, { driveFilename: 'audio.m4a' }, { userId: '1' }, () => {});
 
-  const testKey = sessionManager.getSessionKey(testSubj);
+  const testKey = sessionManager.getSessionKey(testSubj, '1');
   await sessionManager.flushSessionImmediately(testKey, (key, subj, files) => {
     sessionFlushed = true;
     assert.strictEqual(files.length, 2);
