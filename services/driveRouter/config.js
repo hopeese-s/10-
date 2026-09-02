@@ -10,6 +10,16 @@ const LINE_CHANNEL_SECRET = (process.env.LINE_CHANNEL_SECRET || '').replace(/['"
 const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || '').replace(/['"]/g, '').trim();
 const GEMINI_MODEL = (process.env.GEMINI_MODEL || 'gemini-2.0-flash').replace(/['"]/g, '').trim();
 
+// Multi-provider AI Support (OpenRouter / OpenCode / DeepSeek / OpenAI / Groq / Gemini)
+const OPENROUTER_API_KEY = (process.env.OPENROUTER_API_KEY || process.env.OPENCODE_API_KEY || '').replace(/['"]/g, '').trim();
+const DEEPSEEK_API_KEY = (process.env.DEEPSEEK_API_KEY || '').replace(/['"]/g, '').trim();
+const OPENAI_API_KEY = (process.env.OPENAI_API_KEY || '').replace(/['"]/g, '').trim();
+const GROQ_API_KEY = (process.env.GROQ_API_KEY || '').replace(/['"]/g, '').trim();
+const AI_PROVIDER = (process.env.AI_PROVIDER || '').toLowerCase().trim();
+
+const hasAnyAi = Boolean(OPENROUTER_API_KEY || DEEPSEEK_API_KEY || OPENAI_API_KEY || GROQ_API_KEY || GEMINI_API_KEY);
+
+
 function extractFolderId(input) {
   if (!input) return '';
   const cleaned = input.replace(/['"]/g, '').trim();
@@ -139,7 +149,12 @@ module.exports = {
   LINE_CHANNEL_ACCESS_TOKEN,
   LINE_CHANNEL_SECRET,
   GEMINI_API_KEY,
-  GEMINI_MODEL,
+  OPENROUTER_API_KEY,
+  DEEPSEEK_API_KEY,
+  OPENAI_API_KEY,
+  GROQ_API_KEY,
+  AI_PROVIDER,
+  hasAnyAi,
   GOOGLE_SERVICE_ACCOUNT_JSON,
   GOOGLE_DRIVE_PARENT_ID,
   GOOGLE_CLIENT_ID,
