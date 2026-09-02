@@ -1,28 +1,50 @@
 // services/driveRouter/driveService.js
-// Google Drive v3 integration with Service Account authentication & folder caching
+// Google Drive v3 — supports OAuth2 (preferred for personal Drive) or Service Account
 
 const fs = require('fs');
 const path = require('path');
 const { Readable } = require('stream');
 const { google } = require('googleapis');
-const { GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_DRIVE_PARENT_ID } = require('./config');
+const {
+  GOOGLE_SERVICE_ACCOUNT_JSON,
+  GOOGLE_DRIVE_PARENT_ID,
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
+  GOOGLE_REFRESH_TOKEN,
+  hasOAuthConfig
+} = require('./config');
 
-const SCOPES = [
-  'https://www.googleapis.com/auth/drive',          // full drive access (needed for shared folders)
-  'https://www.googleapis.com/auth/drive.file'      // fallback scope
-];
+const SCOPES = ['https://www.googleapis.com/auth/drive'];
 
 let _driveClient = null;
-const _folderCache = new Map(); // Cache "parentId_folderName" -> folderId
+const _folderCache = new Map();
 
 /**
- * Initializes and returns the authenticated Google Drive client
+ * Returns authenticated Drive client.
+ * Priority: OAuth2 refresh token (personal Drive) > Service Account (Workspace Shared Drive)
  */
 function getDriveClient() {
   if (_driveClient) return _driveClient;
 
   let auth = null;
-  if (GOOGLE_SERVICE_ACCOUNT_JSON) {
+
+  // ── Option 1: OAuth2 with refresh token (PREFERRED for personal My Drive) ──
+  // Lets the bot act as the Google account owner, uploading directly to their storage.
+  if (hasOAuthConfig) {
+    try {
+      const oauth2 = new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET);
+      oauth2.setCredentials({ refresh_token: GOOGLE_REFRESH_TOKEN });
+      auth = oauth2;
+      console.log('🔑 [DriveService] Using OAuth2 refresh token (personal My Drive mode)');
+    } catch (e) {
+      console.error('❌ OAuth2 setup failed:', e.message);
+    }
+  }
+
+  // ── Option 2: Service Account (fallback) ──
+  // Note: Service Accounts cannot upload to personal My Drive (no quota).
+  // Only works with Google Workspace Shared Drives.
+  if (!auth && GOOGLE_SERVICE_ACCOUNT_JSON) {
     try {
       const credentials = typeof GOOGLE_SERVICE_ACCOUNT_JSON === 'object'
         ? GOOGLE_SERVICE_ACCOUNT_JSON
@@ -31,34 +53,34 @@ function getDriveClient() {
         credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
       }
       if (credentials && credentials.client_email) {
-        console.log(`🔑 [DriveService] Authenticated with Service Account: ${credentials.client_email}`);
+        console.log(`🔑 [DriveService] Using Service Account: ${credentials.client_email}`);
       }
-      auth = new google.auth.GoogleAuth({
-        credentials,
-        scopes: SCOPES
-      });
+      auth = new google.auth.GoogleAuth({ credentials, scopes: SCOPES });
     } catch (e) {
       console.error('❌ Failed to parse GOOGLE_SERVICE_ACCOUNT_JSON:', e.message);
     }
   }
 
+  // ── Option 3: Local service_account.json file ──
   if (!auth) {
     const localKeyPath = path.join(__dirname, '../../service_account.json');
     if (fs.existsSync(localKeyPath)) {
-      auth = new google.auth.GoogleAuth({
-        keyFile: localKeyPath,
-        scopes: SCOPES
-      });
+      auth = new google.auth.GoogleAuth({ keyFile: localKeyPath, scopes: SCOPES });
     }
   }
 
   if (!auth) {
-    throw new Error('Google Drive Service Account not configured (missing GOOGLE_SERVICE_ACCOUNT_JSON or service_account.json)');
+    throw new Error(
+      'Google Drive auth not configured. ' +
+      'Set GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET + GOOGLE_REFRESH_TOKEN for personal Drive, ' +
+      'or GOOGLE_SERVICE_ACCOUNT_JSON for Workspace Shared Drives.'
+    );
   }
 
   _driveClient = google.drive({ version: 'v3', auth });
   return _driveClient;
 }
+
 
 /**
  * Searches for a folder by name within parentId; creates it if not found.

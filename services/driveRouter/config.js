@@ -23,6 +23,15 @@ function extractFolderId(input) {
 const GOOGLE_SERVICE_ACCOUNT_JSON = (process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '').trim();
 const GOOGLE_DRIVE_PARENT_ID = extractFolderId(process.env.GOOGLE_DRIVE_PARENT_ID || '');
 
+// OAuth2 credentials (preferred — lets bot upload to your personal My Drive)
+// These are needed because Service Accounts have no storage quota in personal Drive
+const GOOGLE_CLIENT_ID = (process.env.GOOGLE_CLIENT_ID || '').replace(/['"]/g, '').trim();
+const GOOGLE_CLIENT_SECRET = (process.env.GOOGLE_CLIENT_SECRET || '').replace(/['"]/g, '').trim();
+const GOOGLE_REFRESH_TOKEN = (process.env.GOOGLE_REFRESH_TOKEN || '').replace(/['"]/g, '').trim();
+
+const hasOAuthConfig = Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET && GOOGLE_REFRESH_TOKEN);
+
+
 const SESSION_DEBOUNCE_SECONDS = parseInt(process.env.SESSION_DEBOUNCE_SECONDS || '150', 10);
 const GRACE_PERIOD_MINUTES = parseInt(process.env.GRACE_PERIOD_MINUTES || '30', 10);
 const TIMEZONE = process.env.TIMEZONE || 'Asia/Bangkok';
@@ -133,6 +142,10 @@ module.exports = {
   GEMINI_MODEL,
   GOOGLE_SERVICE_ACCOUNT_JSON,
   GOOGLE_DRIVE_PARENT_ID,
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
+  GOOGLE_REFRESH_TOKEN,
+  hasOAuthConfig,
   SESSION_DEBOUNCE_SECONDS,
   GRACE_PERIOD_MINUTES,
   TIMEZONE,
@@ -141,5 +154,9 @@ module.exports = {
   SUBJECT_KEYWORDS,
   UNSORTED,
   extractFolderId,
-  hasDriveConfig: Boolean(GOOGLE_SERVICE_ACCOUNT_JSON || fs.existsSync(path.join(__dirname, '../../service_account.json')))
+  hasDriveConfig: Boolean(
+    (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET && GOOGLE_REFRESH_TOKEN) || // OAuth2 (preferred)
+    GOOGLE_SERVICE_ACCOUNT_JSON ||                                          // Service Account (fallback)
+    fs.existsSync(path.join(__dirname, '../../service_account.json'))
+  )
 };
