@@ -145,6 +145,19 @@ if (hasGemini) {
   console.log('ℹ️ Gemini API key not set (Natural Language fallback NLP will be used)');
 }
 
+// ─── E-Calendar Auto Drive Router & AI Summary v2 Setup ──────
+let driveRouter = null;
+try {
+  driveRouter = require('./services/driveRouter');
+  if (driveRouter && driveRouter.config && driveRouter.config.hasDriveConfig) {
+    console.log('📁 Google Drive Auto Router configured (Flat structure v2, AI Summary enabled)');
+  } else {
+    console.log('ℹ️ Google Drive Auto Router loaded (set GOOGLE_SERVICE_ACCOUNT_JSON & GOOGLE_DRIVE_PARENT_ID to enable Drive sync)');
+  }
+} catch (drErr) {
+  console.warn('⚠️ Could not initialize driveRouter:', drErr.message);
+}
+
 // In-memory store + file persistence
 let store = {
   _users: {},             // { [username]: { id, username, displayName, passwordHash, salt, calendarKey, role, createdAt } }
@@ -5143,48 +5156,6 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // ─── API: Normalized Class Schedule for AI Router (GET /api/schedule) ───
-  if (pathname === '/api/schedule' && req.method === 'GET') {
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-    const qKey = reqUrl.searchParams.get('sync_key') || reqUrl.searchParams.get('key') || '1';
-    let targetData = store[qKey] || store['1'] || null;
-    if (!targetData) {
-      const adminUser = Object.values(store._users || {}).find(u => u && u.role === 'admin');
-      if (adminUser) targetData = store[adminUser.id];
-    }
-    targetData = targetData || {};
-
-    const rawCurriculum = (targetData.curriculum && Array.isArray(targetData.curriculum) && targetData.curriculum.length > 0)
-      ? targetData.curriculum
-      : DEFAULT_BME_CURRICULUM;
-
-    const dayNameMap = {
-      monday: 'Monday', tuesday: 'Tuesday', wednesday: 'Wednesday',
-      thursday: 'Thursday', friday: 'Friday', saturday: 'Saturday', sunday: 'Sunday'
-    };
-
-    const normalized = rawCurriculum.map(c => {
-      const cleanDay = (c.day || '').toLowerCase().trim();
-      return {
-        code: c.code || c.subject_code || c.title || 'UNKNOWN',
-        name: c.name || c.title || c.code || '',
-        day: dayNameMap[cleanDay] || (cleanDay ? cleanDay.charAt(0).toUpperCase() + cleanDay.slice(1) : 'Monday'),
-        start: c.start || '09:00',
-        end: c.end || '12:00',
-        room: c.room || ''
-      };
-    });
-
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      curriculum: normalized,
-      timezone: 'Asia/Bangkok',
-      totalCourses: normalized.length,
-      updatedAt: targetData.updatedAt || new Date().toISOString()
-    }));
-    return;
-  }
-
   // ─── API: Create Share Bundle (POST /api/share) ───
   if (pathname === '/api/share' && req.method === 'POST') {
     parseJsonBody((err, data) => {
@@ -5819,6 +5790,57 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       return;
+    }
+
+    // ─── E-Calendar Auto Drive Router & AI Summary v2 (iPad Share Sheet / LINE OA) ───
+    if (event.type === 'message' && event.message && ['file', 'audio', 'image'].includes(event.message.type)) {
+      if (driveRouter && driveRouter.config && driveRouter.config.hasDriveConfig) {
+        const linkedUserId = (store._lineUsers && store._lineUsers[lineUserId]) || '1';
+        
+        // Stage 1: Send immediate acknowledgement reply (<30s token expiration guarantee)
+        await sendLineReply(replyToken, '📥 รับไฟล์แล้ว กำลังจับวิชาและสรุปให้อยู่นะ...');
+
+        // Background download and routing
+        (async () => {
+          try {
+            const buffer = await getLineMessageContent(event.message.id);
+            if (!buffer) {
+              console.warn(`⚠️ Failed to download LINE media content: message id ${event.message.id}`);
+              return;
+            }
+
+            const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+            const userObj = Object.values(store._users || {}).find(u => u.id === linkedUserId || (u.username && u.username.toLowerCase() === linkedUserId.toLowerCase()));
+            const isBmeUserObj = userObj ? userObj.isBme !== false : (linkedUserId === '1');
+            const curriculum = (userData.curriculum && Array.isArray(userData.curriculum) && userData.curriculum.length > 0)
+              ? userData.curriculum
+              : (isBmeUserObj ? DEFAULT_BME_CURRICULUM : []);
+
+            // Also mirror save to E-Calendar's local vault in parallel
+            try {
+              const { ext, mimeType } = driveRouter.routerService.inferMediaMeta(event.message);
+              const safeName = event.message.fileName || `media_${Date.now()}.${ext}`;
+              await saveMediaFileToStorage(buffer, safeName, `.${ext}`, mimeType, linkedUserId);
+            } catch (vErr) {
+              console.warn('⚠️ Vault mirror save warning:', vErr.message);
+            }
+
+            // Route to Google Drive + Debounce Session + AI Summarizer + LINE Push
+            await driveRouter.handleIncomingMedia({
+              message: event.message,
+              buffer,
+              lineUserId,
+              userId: linkedUserId,
+              curriculum,
+              sendPush: sendLinePush
+            });
+          } catch (routerErr) {
+            console.error('❌ Error handling incoming media with driveRouter:', routerErr);
+          }
+        })();
+
+        return;
+      }
     }
 
     // ─── Voice / Audio Message Handler (Gemini Multimodal Voice & Problem Solver) ───
@@ -6804,8 +6826,8 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // ─── API: LINE Messaging Webhook (POST /api/line/webhook) ───
-  if (pathname === '/api/line/webhook' && req.method === 'POST') {
+  // ─── API: LINE Messaging Webhook (POST /api/line/webhook or POST /webhook) ───
+  if ((pathname === '/api/line/webhook' || pathname === '/webhook') && req.method === 'POST') {
     parseJsonBody(async (err, data, rawBody) => {
       if (err) {
         console.error('❌ LINE Webhook parse error:', err.message);
