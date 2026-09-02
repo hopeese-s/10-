@@ -5824,73 +5824,73 @@ const server = http.createServer(async (req, res) => {
       if (driveRouter && driveRouter.config && driveRouter.config.hasDriveConfig) {
         const linkedUserId = (store._lineUsers && store._lineUsers[lineUserId]) || '1';
 
-        try {
-          const buffer = await getLineMessageContent(event.message.id);
-          if (!buffer) {
-            await sendLineReply(replyToken, '⚠️ ไม่สามารถดาวน์โหลดไฟล์จาก LINE ได้ กรุณาลองใหม่อีกครั้งครับ');
-            return;
-          }
+        // 1. Stage 1: Send INSTANT acknowledgment (< 300ms) so user knows bot received it
+        const fnHint = event.message.fileName ? ` "${event.message.fileName}"` : '';
+        await sendLineReply(replyToken, `📥 ได้รับไฟล์${fnHint}แล้ว กำลังอัปโหลดเข้า Google Drive... ⏳`);
 
-          const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
-          const userObj = Object.values(store._users || {}).find(u => u.id === linkedUserId || (u.username && u.username.toLowerCase() === linkedUserId.toLowerCase()));
-          const isBmeUserObj = userObj ? userObj.isBme !== false : (linkedUserId === '1');
-          const curriculum = (userData.curriculum && Array.isArray(userData.curriculum) && userData.curriculum.length > 0)
-            ? userData.curriculum
-            : (isBmeUserObj ? DEFAULT_BME_CURRICULUM : []);
-
-          const isDriveOnly = userData.driveMode === 'drive_only';
-
-          // Also mirror save to E-Calendar's local vault in parallel
+        // 2. Stage 2: Background download & upload to Google Drive
+        (async () => {
           try {
-            const { ext, mimeType } = driveRouter.routerService.inferMediaMeta(event.message);
-            const safeName = event.message.fileName || `media_${Date.now()}.${ext}`;
-            await saveMediaFileToStorage(buffer, safeName, `.${ext}`, mimeType, linkedUserId);
-          } catch (vErr) {
-            console.warn('⚠️ Vault mirror save warning:', vErr.message);
-          }
+            const buffer = await getLineMessageContent(event.message.id);
+            if (!buffer) {
+              await sendLinePush(lineUserId, '⚠️ ไม่สามารถดาวน์โหลดไฟล์จาก LINE ได้ กรุณาลองส่งใหม่อีกครั้งครับ');
+              return;
+            }
 
-          // Route to Google Drive (uploads original file immediately)
-          const routeResult = await driveRouter.handleIncomingMedia({
-            message: event.message,
-            buffer,
-            lineUserId,
-            userId: linkedUserId,
-            curriculum,
-            sendPush: sendLinePush,
-            driveOnly: isDriveOnly
-          });
+            const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
+            const userObj = Object.values(store._users || {}).find(u => u.id === linkedUserId || (u.username && u.username.toLowerCase() === linkedUserId.toLowerCase()));
+            const isBmeUserObj = userObj ? userObj.isBme !== false : (linkedUserId === '1');
+            const curriculum = (userData.curriculum && Array.isArray(userData.curriculum) && userData.curriculum.length > 0)
+              ? userData.curriculum
+              : (isBmeUserObj ? DEFAULT_BME_CURRICULUM : []);
 
-          // Send interactive Flex Message with direct Drive link + action buttons!
-          const flexMsg = driveRouter.buildDriveUploadFlex({
-            driveFilename: routeResult.driveFilename,
-            courseName: routeResult.subjectInfo.courseName,
-            matchedCode: routeResult.subjectInfo.matchedCode,
-            category: routeResult.subjectInfo.category,
-            webViewLink: routeResult.fileUploadResult ? routeResult.fileUploadResult.webViewLink : null,
-            sessionKey: routeResult.sessionKey,
-            driveOnlyMode: isDriveOnly
-          });
+            const isDriveOnly = userData.driveMode === 'drive_only';
 
-          let replyOk = await sendLineReply(replyToken, [flexMsg]);
-          if (!replyOk && lineUserId) {
-            console.log(`⚠️ sendLineReply failed or token expired, falling back to sendLinePush for [${lineUserId}]`);
+            // Mirror save to local vault
+            try {
+              const { ext, mimeType } = driveRouter.routerService.inferMediaMeta(event.message);
+              const safeName = event.message.fileName || `media_${Date.now()}.${ext}`;
+              await saveMediaFileToStorage(buffer, safeName, `.${ext}`, mimeType, linkedUserId);
+            } catch (vErr) {
+              console.warn('⚠️ Vault mirror save warning:', vErr.message);
+            }
+
+            // Route to Google Drive
+            const routeResult = await driveRouter.handleIncomingMedia({
+              message: event.message,
+              buffer,
+              lineUserId,
+              userId: linkedUserId,
+              curriculum,
+              sendPush: sendLinePush,
+              driveOnly: isDriveOnly
+            });
+
+            // Stage 2: Push interactive Flex card with Drive Link & buttons
+            const flexMsg = driveRouter.buildDriveUploadFlex({
+              driveFilename: routeResult.driveFilename,
+              courseName: routeResult.subjectInfo.courseName,
+              matchedCode: routeResult.subjectInfo.matchedCode,
+              category: routeResult.subjectInfo.category,
+              webViewLink: routeResult.fileUploadResult ? routeResult.fileUploadResult.webViewLink : null,
+              sessionKey: routeResult.sessionKey,
+              driveOnlyMode: isDriveOnly
+            });
+
             const pushOk = await sendLinePush(lineUserId, [flexMsg]);
             if (!pushOk) {
               const textFallback = `📁 บันทึกเข้า Google Drive สำเร็จแล้ว!\n📚 วิชา: ${routeResult.subjectInfo.courseName || routeResult.subjectInfo.matchedCode}\n📂 โฟลเดอร์: ${routeResult.subjectInfo.category}\n📄 ไฟล์: ${routeResult.driveFilename}${routeResult.fileUploadResult ? `\n🔗 ลิงก์: ${routeResult.fileUploadResult.webViewLink}` : ''}`;
               await sendLinePush(lineUserId, textFallback);
             }
-          }
-          return;
 
-        } catch (routerErr) {
-          console.error('❌ Error handling incoming media with driveRouter:', routerErr);
-          const errMsg = `⚠️ เกิดข้อผิดพลาดในการอัปโหลดเข้า Drive: ${routerErr.message}`;
-          const rOk = await sendLineReply(replyToken, errMsg);
-          if (!rOk && lineUserId) {
+          } catch (routerErr) {
+            console.error('❌ Error handling incoming media with driveRouter:', routerErr);
+            const errMsg = `⚠️ เกิดข้อผิดพลาดในการอัปโหลดเข้า Drive: ${routerErr.message}`;
             await sendLinePush(lineUserId, errMsg);
           }
-          return;
-        }
+        })();
+
+        return;
       }
     }
 
