@@ -837,9 +837,18 @@
             </p>
             <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">
               <div>
-                <label style="font-size:11.5px;font-weight:600;color:var(--label-2);display:block;margin-bottom:4px">เลือกไฟล์ PDF ในระบบ:</label>
+                <label style="font-size:11.5px;font-weight:600;color:var(--label-2);display:block;margin-bottom:4px">📁 เลือกไฟล์ PDF จากเครื่อง / iPad:</label>
+                <input type="file" id="tk-pdf-file-picker" accept="application/pdf" class="form-input" style="font-size:12px;padding:6px 10px" />
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;margin:2px 0;font-size:11px;color:var(--label-3)">
+                <span style="flex:1;height:1px;background:var(--sep)"></span>
+                <span>หรือเลือกจากไฟล์ในระบบ</span>
+                <span style="flex:1;height:1px;background:var(--sep)"></span>
+              </div>
+              <div>
+                <label style="font-size:11.5px;font-weight:600;color:var(--label-2);display:block;margin-bottom:4px">📚 ไฟล์ PDF ในระบบ E-Calendar:</label>
                 <select id="tk-pdf-source" class="form-input" style="font-size:12px">
-                  <option value="">-- กำลังโหลดไฟล์ PDF... --</option>
+                  <option value="">-- หรือเลือกไฟล์ PDF ในระบบ --</option>
                 </select>
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -872,7 +881,10 @@
               </div>
             </div>
             <div id="tk-pdf-status" style="font-size:11.5px;color:var(--label-2);margin-top:10px;text-align:center;min-height:18px"></div>
-            <div id="tk-pdf-results" style="margin-top:12px;max-height:180px;overflow-y:auto;display:none;grid-template-columns:repeat(auto-fill, minmax(80px, 1fr));gap:6px;padding:6px;background:var(--bg-2);border-radius:var(--r-m);border:1px solid var(--sep)"></div>
+            <div id="tk-pdf-actions-bar" style="display:none;margin-top:10px;text-align:center">
+              <button id="tk-pdf-download-all-btn" class="btn btn-secondary" style="font-size:12px;padding:6px 16px;border-radius:var(--r-pill);font-weight:600">📥 ดาวน์โหลดทุกภาพ</button>
+            </div>
+            <div id="tk-pdf-results" style="margin-top:12px;max-height:220px;overflow-y:auto;display:none;grid-template-columns:repeat(auto-fill, minmax(90px, 1fr));gap:8px;padding:8px;background:var(--bg-2);border-radius:var(--r-m);border:1px solid var(--sep)"></div>
           </div>
 
         </div>
