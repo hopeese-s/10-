@@ -203,6 +203,18 @@ function buildDriveUploadFlex({ driveFilename, courseName, matchedCode, category
     });
   }
 
+  // Mode 3 optional trigger: copy to E-Calendar internal vault
+  buttons.push({
+    type: 'button',
+    style: 'link',
+    height: 'sm',
+    action: {
+      type: 'postback',
+      label: '💾 สำเนาไฟล์เข้าคลัง E-Calendar',
+      data: `action=save_vault&key=${encodeURIComponent(sessionKey)}`
+    }
+  });
+
   const bubble = {
     type: 'bubble',
     header: {

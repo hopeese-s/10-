@@ -3806,17 +3806,27 @@
 
       // Zoom handlers (supports smooth scaling & cancels pending renders)
       bodyEl.querySelector('#pdf-zoom-in')?.addEventListener('click', async () => {
+        const scrollRatio = container.scrollHeight > 0 ? (container.scrollTop / container.scrollHeight) : 0;
         currentScale = Math.min(3.5, currentScale + 0.25);
         if (zoomValEl) zoomValEl.textContent = `${Math.round(currentScale * 100)}%`;
-        if (viewMode === 'scroll') { await renderAllPagesScroll(); }
-        else { await renderCurrentPage(); }
+        if (viewMode === 'scroll') {
+          await renderAllPagesScroll();
+          container.scrollTop = Math.round(scrollRatio * container.scrollHeight);
+        } else {
+          await renderCurrentPage();
+        }
       });
 
       bodyEl.querySelector('#pdf-zoom-out')?.addEventListener('click', async () => {
+        const scrollRatio = container.scrollHeight > 0 ? (container.scrollTop / container.scrollHeight) : 0;
         currentScale = Math.max(0.2, currentScale - 0.25);
         if (zoomValEl) zoomValEl.textContent = `${Math.round(currentScale * 100)}%`;
-        if (viewMode === 'scroll') { await renderAllPagesScroll(); }
-        else { await renderCurrentPage(); }
+        if (viewMode === 'scroll') {
+          await renderAllPagesScroll();
+          container.scrollTop = Math.round(scrollRatio * container.scrollHeight);
+        } else {
+          await renderCurrentPage();
+        }
       });
 
       bodyEl.querySelector('#pdf-zoom-fit')?.addEventListener('click', async () => {
@@ -3825,24 +3835,30 @@
         const availableW = Math.max(260, (container.clientWidth || window.innerWidth * 0.9) - 36);
         currentScale = Math.max(0.2, Math.min(2.5, availableW / vp.width));
         if (zoomValEl) zoomValEl.textContent = `${Math.round(currentScale * 100)}%`;
-        if (viewMode === 'scroll') { await renderAllPagesScroll(); }
-        else { await renderCurrentPage(); }
+        if (viewMode === 'scroll') {
+          await renderAllPagesScroll();
+        } else {
+          await renderCurrentPage();
+        }
       });
 
-      // Native Touch Pinch-to-Zoom Gesture for Mobile PDF Preview
+      // Native Touch Pinch-to-Zoom Gesture for Mobile PDF Preview (Smooth CSS Transform & Zero Scroll Jump)
       let touchStartDist = 0;
       let touchStartScale = currentScale;
       let isPinching = false;
-      let pinchTimeout = null;
+      let pinchCurrentFactor = 1.0;
 
       container.addEventListener('touchstart', (e) => {
         if (e.touches.length === 2) {
           isPinching = true;
+          pinchCurrentFactor = 1.0;
           touchStartDist = Math.hypot(
             e.touches[0].pageX - e.touches[1].pageX,
             e.touches[0].pageY - e.touches[1].pageY
           );
           touchStartScale = currentScale;
+          const targetEl = (viewMode === 'scroll') ? scrollContainer : singleWrapper;
+          if (targetEl) targetEl.style.transition = 'none';
         }
       }, { passive: true });
 
@@ -3852,23 +3868,36 @@
             e.touches[0].pageX - e.touches[1].pageX,
             e.touches[0].pageY - e.touches[1].pageY
           );
-          const factor = currentDist / touchStartDist;
-          currentScale = Math.max(0.3, Math.min(3.5, touchStartScale * factor));
-          if (zoomValEl) zoomValEl.textContent = `${Math.round(currentScale * 100)}%`;
+          pinchCurrentFactor = currentDist / touchStartDist;
+          const displayScale = Math.max(0.3, Math.min(3.5, touchStartScale * pinchCurrentFactor));
+          if (zoomValEl) zoomValEl.textContent = `${Math.round(displayScale * 100)}%`;
 
-          clearTimeout(pinchTimeout);
-          pinchTimeout = setTimeout(async () => {
-            if (viewMode === 'scroll') { await renderAllPagesScroll(); }
-            else { await renderCurrentPage(); }
-          }, 120);
+          const targetEl = (viewMode === 'scroll') ? scrollContainer : singleWrapper;
+          if (targetEl) {
+            targetEl.style.transform = `scale(${pinchCurrentFactor})`;
+            targetEl.style.transformOrigin = 'center top';
+          }
         }
       }, { passive: true });
 
       container.addEventListener('touchend', async (e) => {
         if (e.touches.length < 2 && isPinching) {
           isPinching = false;
-          if (viewMode === 'scroll') { await renderAllPagesScroll(); }
-          else { await renderCurrentPage(); }
+          const targetEl = (viewMode === 'scroll') ? scrollContainer : singleWrapper;
+          if (targetEl) {
+            targetEl.style.transform = '';
+            targetEl.style.transformOrigin = '';
+          }
+          currentScale = Math.max(0.3, Math.min(3.5, touchStartScale * pinchCurrentFactor));
+          if (zoomValEl) zoomValEl.textContent = `${Math.round(currentScale * 100)}%`;
+
+          const scrollRatio = container.scrollHeight > 0 ? (container.scrollTop / container.scrollHeight) : 0;
+          if (viewMode === 'scroll') {
+            await renderAllPagesScroll();
+            container.scrollTop = Math.round(scrollRatio * container.scrollHeight);
+          } else {
+            await renderCurrentPage();
+          }
         }
       }, { passive: true });
 
@@ -3996,10 +4025,23 @@
             </div>
           </div>`;
       } else {
-        // Google Drive / Classroom / generic link — show rich card + open button
-        const typeEmoji = { drive: '📁', classroom: '🎓', link: '🔗' };
-        const emoji = typeEmoji[item.type] || '🔗';
-        
+        // Check if item is a Google Drive file link
+        const driveMatch = (item.url || '').match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || (item.url || '').match(/id=([a-zA-Z0-9_-]+)/);
+        if (driveMatch && driveMatch[1]) {
+          const driveEmbedUrl = `https://drive.google.com/file/d/${driveMatch[1]}/preview`;
+          body.innerHTML = `
+            <div style="display:flex;flex-direction:column;width:100%;height:100%;min-height:380px;align-items:center">
+              <iframe src="${driveEmbedUrl}" allow="autoplay" style="width:100%;height:calc(85vh - 140px);min-height:380px;border:none;border-radius:var(--r-m);background:#fff" loading="lazy"></iframe>
+              <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;justify-content:center">
+                <a href="${escHtml(item.url)}" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="padding:7px 20px;font-size:12.5px;font-weight:700;text-decoration:none;border-radius:var(--r-pill)">🚀 เปิดใน Google Drive เต็มจอ ↗</a>
+                <a href="https://drive.google.com/uc?export=download&id=${driveMatch[1]}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="padding:7px 18px;font-size:12px;font-weight:600;text-decoration:none;border-radius:var(--r-pill)">📥 ดาวน์โหลด</a>
+              </div>
+            </div>`;
+        } else {
+          // Google Drive folder / Classroom / generic link — show rich card + open button
+          const typeEmoji = { drive: '📁', classroom: '🎓', link: '🔗' };
+          const emoji = typeEmoji[item.type] || '🔗';
+          
           body.innerHTML = `
             <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;gap:20px;min-height:280px;text-align:center">
               <div style="font-size:52px">${emoji}</div>
@@ -4014,6 +4056,7 @@
                  onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"
               >🚀 เปิด ${item.type === 'classroom' ? 'Google Classroom' : item.type === 'drive' ? 'Google Drive' : 'ลิงค์'}</a>
             </div>`;
+        }
       }
     }
 

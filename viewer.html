@@ -27,6 +27,8 @@
       display: flex;
       flex-direction: column;
       height: 100vh;
+      height: 100dvh;
+    }
     .viewer-header {
       background: var(--bg-1);
       border-bottom: 1px solid var(--sep);
@@ -376,10 +378,28 @@
             fallbackToIframe(err);
           });
 
-          async function renderDocument() {
+          async function renderDocument(preserveScroll = false) {
             if (!pdfDoc) return;
+            
+            // Record scroll position or currently viewed page before re-rendering
+            let savedScrollRatio = 0;
+            let targetPageIdx = currentPage;
+            if (preserveScroll && container.scrollHeight > 0) {
+              savedScrollRatio = container.scrollTop / container.scrollHeight;
+              const wrappers = contentEl.querySelectorAll('.pdf-page-wrapper');
+              for (const w of wrappers) {
+                const rect = w.getBoundingClientRect();
+                if (rect.bottom > 100) {
+                  targetPageIdx = parseInt(w.dataset.pageIndex, 10) || currentPage;
+                  break;
+                }
+              }
+            }
+
             contentEl.innerHTML = '';
-            container.scrollTop = 0;
+            if (!preserveScroll) {
+              container.scrollTop = 0;
+            }
 
             if (viewMode === 'scroll') {
               navGroup.style.display = 'none';
@@ -400,7 +420,7 @@
                     }
                   }
                 });
-              }, { rootMargin: '100% 0px' });
+              }, { rootMargin: '120% 0px' });
 
               for (let i = 1; i <= numPages; i++) {
                 const wrapper = document.createElement('div');
@@ -420,6 +440,13 @@
                 
                 contentEl.appendChild(wrapper);
                 observer.observe(wrapper);
+              }
+
+              // Restore scroll position after skeleton is mounted
+              if (preserveScroll && savedScrollRatio > 0) {
+                requestAnimationFrame(() => {
+                  container.scrollTop = Math.round(savedScrollRatio * container.scrollHeight);
+                });
               }
 
               async function renderSinglePage(pageNum, wrapper) {
@@ -449,13 +476,13 @@
                   label.style.cssText = 'text-align:center;font-size:11px;color:var(--label-3);padding:6px 0;background:var(--bg-2);width:100%;border-top:1px solid var(--sep)';
                   label.textContent = `หน้า ${pageNum} / ${numPages}`;
                   wrapper.appendChild(label);
-                } catch (err) {
-                  if (err && err.name === 'RenderingCancelledException') return;
-                  console.error('Error rendering page ' + pageNum, err);
+                } catch (e) {
+                  if (e && e.name === 'RenderingCancelledException') return;
+                  console.error('Error rendering page ' + pageNum + ':', e);
                 }
               }
             } else {
-              // Page mode
+              // Page-by-page mode
               navGroup.style.display = 'flex';
               modePageBtn.style.background = 'var(--accent-bg)';
               modePageBtn.style.color = 'var(--accent)';
@@ -499,22 +526,22 @@
           }
 
           // Event Listeners
-          modeScrollBtn.onclick = () => { viewMode = 'scroll'; renderDocument(); };
-          modePageBtn.onclick = () => { viewMode = 'page'; renderDocument(); };
+          modeScrollBtn.onclick = () => { viewMode = 'scroll'; renderDocument(false); };
+          modePageBtn.onclick = () => { viewMode = 'page'; renderDocument(false); };
 
-          prevBtn.onclick = () => { if (currentPage > 1) { currentPage--; renderDocument(); } };
-          nextBtn.onclick = () => { if (currentPage < numPages) { currentPage++; renderDocument(); } };
+          prevBtn.onclick = () => { if (currentPage > 1) { currentPage--; renderDocument(false); } };
+          nextBtn.onclick = () => { if (currentPage < numPages) { currentPage++; renderDocument(false); } };
 
           document.getElementById('viewer-zoom-in').onclick = () => {
             currentScale = Math.min(3.5, currentScale + 0.25);
             zoomVal.textContent = `${Math.round(currentScale * 100)}%`;
-            renderDocument();
+            renderDocument(true);
           };
 
           document.getElementById('viewer-zoom-out').onclick = () => {
             currentScale = Math.max(0.2, currentScale - 0.25);
             zoomVal.textContent = `${Math.round(currentScale * 100)}%`;
-            renderDocument();
+            renderDocument(true);
           };
 
           document.getElementById('viewer-zoom-fit').onclick = async () => {
@@ -524,55 +551,59 @@
             const availW = Math.max(280, window.innerWidth - 60);
             currentScale = Math.max(0.3, Math.min(2.0, availW / vp.width));
             zoomVal.textContent = `${Math.round(currentScale * 100)}%`;
-            renderDocument();
+            renderDocument(true);
           };
 
-          // Native Touch Pinch-to-Zoom Gesture for Mobile
+          // Native Touch Pinch-to-Zoom Gesture with CSS Transform (Smooth 60fps & No Scroll Jump)
           let touchStartDist = 0;
           let touchStartScale = currentScale;
           let isPinching = false;
-          let pinchTimeout = null;
+          let pinchCurrentFactor = 1.0;
 
-          document.querySelector('.viewer-main')?.addEventListener('touchstart', (e) => {
+          const viewerMainEl = document.querySelector('.viewer-main');
+          viewerMainEl?.addEventListener('touchstart', (e) => {
             if (e.touches.length === 2) {
               isPinching = true;
+              pinchCurrentFactor = 1.0;
               touchStartDist = Math.hypot(
                 e.touches[0].pageX - e.touches[1].pageX,
                 e.touches[0].pageY - e.touches[1].pageY
               );
               touchStartScale = currentScale;
+              contentEl.style.transition = 'none';
             }
           }, { passive: true });
 
-          document.querySelector('.viewer-main')?.addEventListener('touchmove', (e) => {
+          viewerMainEl?.addEventListener('touchmove', (e) => {
             if (isPinching && e.touches.length === 2 && touchStartDist > 0) {
               const currentDist = Math.hypot(
                 e.touches[0].pageX - e.touches[1].pageX,
                 e.touches[0].pageY - e.touches[1].pageY
               );
-              const factor = currentDist / touchStartDist;
-              currentScale = Math.max(0.3, Math.min(3.5, touchStartScale * factor));
-              zoomVal.textContent = `${Math.round(currentScale * 100)}%`;
-
-              clearTimeout(pinchTimeout);
-              pinchTimeout = setTimeout(() => {
-                renderDocument();
-              }, 120);
+              pinchCurrentFactor = currentDist / touchStartDist;
+              const displayScale = Math.max(0.3, Math.min(3.5, touchStartScale * pinchCurrentFactor));
+              zoomVal.textContent = `${Math.round(displayScale * 100)}%`;
+              contentEl.style.transform = `scale(${pinchCurrentFactor})`;
+              contentEl.style.transformOrigin = 'center top';
             }
           }, { passive: true });
 
-          document.querySelector('.viewer-main')?.addEventListener('touchend', (e) => {
+          viewerMainEl?.addEventListener('touchend', (e) => {
             if (e.touches.length < 2 && isPinching) {
               isPinching = false;
-              renderDocument();
+              contentEl.style.transform = '';
+              contentEl.style.transformOrigin = '';
+              currentScale = Math.max(0.3, Math.min(3.5, touchStartScale * pinchCurrentFactor));
+              zoomVal.textContent = `${Math.round(currentScale * 100)}%`;
+              renderDocument(true);
             }
           }, { passive: true });
 
           // Keyboard navigation
           document.addEventListener('keydown', (e) => {
             if (viewMode === 'page') {
-              if (e.key === 'ArrowLeft' && currentPage > 1) { currentPage--; renderDocument(); }
-              if (e.key === 'ArrowRight' && currentPage < numPages) { currentPage++; renderDocument(); }
+              if (e.key === 'ArrowLeft' && currentPage > 1) { currentPage--; renderDocument(false); }
+              if (e.key === 'ArrowRight' && currentPage < numPages) { currentPage++; renderDocument(false); }
             }
             if (e.key === 'Escape') {
               backBtn.click();

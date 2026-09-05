@@ -5754,6 +5754,30 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      if (action === 'save_vault') {
+        const sessionKey = params.get('key');
+        let copiedCount = 0;
+        if (driveRouter && driveRouter.sessionManager && sessionKey) {
+          const session = driveRouter.sessionManager.sessions.get(sessionKey);
+          if (session && session.files && session.files.length > 0) {
+            for (const file of session.files) {
+              if (file.buffer) {
+                const ext = path.extname(file.driveFilename || file.filename || '.bin') || '.bin';
+                const fn = file.driveFilename || file.filename || `file_${Date.now()}${ext}`;
+                await saveMediaFileToStorage(file.buffer, fn, ext, file.mimeType, linkedUserId);
+                copiedCount++;
+              }
+            }
+          }
+        }
+        if (copiedCount > 0) {
+          await sendLineReply(replyToken, `💾 สำเนาไฟล์เข้าคลังเอกสาร E-Calendar (Cloud Vault) เรียบร้อยแล้วครับ (${copiedCount} ไฟล์) ✨`);
+        } else {
+          await sendLineReply(replyToken, '✅ ไฟล์ถูกบันทึกเรียบร้อยแล้วครับ');
+        }
+        return;
+      }
+
       if (action === 'snooze') {
         const min = parseInt(params.get('min') || '15', 10);
         if (!userData.notiSettings) userData.notiSettings = { enabled: true, offsets: [15] };
@@ -5845,17 +5869,23 @@ const server = http.createServer(async (req, res) => {
               : (isBmeUserObj ? DEFAULT_BME_CURRICULUM : []);
 
             const isDriveOnly = userData.driveMode === 'drive_only';
+            const isEcalenVault = userData.driveMode === 'vault' || userData.driveMode === 'ecalendar';
 
-            // Mirror save to local vault
-            try {
-              const { ext, mimeType } = driveRouter.routerService.inferMediaMeta(event.message);
-              const safeName = event.message.fileName || `media_${Date.now()}.${ext}`;
-              await saveMediaFileToStorage(buffer, safeName, `.${ext}`, mimeType, linkedUserId);
-            } catch (vErr) {
-              console.warn('⚠️ Vault mirror save warning:', vErr.message);
+            // Mode 3: If user explicitly selected E-Calendar Cloud Vault, save to R2 storage directly
+            if (isEcalenVault) {
+              try {
+                const { ext, mimeType } = driveRouter.routerService.inferMediaMeta(event.message);
+                const safeName = event.message.fileName || `media_${Date.now()}.${ext}`;
+                const fileRec = await saveMediaFileToStorage(buffer, safeName, `.${ext}`, mimeType, linkedUserId);
+                await sendLinePush(lineUserId, `💾 บันทึกไฟล์ "${safeName}" เข้าคลังเอกสาร E-Calendar (Cloud Vault) เรียบร้อยแล้วครับ!\n🔗 ลิงก์: ${fileRec.fullUrl || fileRec.url}`);
+                return;
+              } catch (vErr) {
+                console.warn('⚠️ Vault direct save warning:', vErr.message);
+              }
             }
 
-            // Route to Google Drive
+            // Mode 1 (AI Summary) & Mode 2 (Drive Only):
+            // Upload to Google Drive directly (ZERO Cloudflare R2 usage!)
             const routeResult = await driveRouter.handleIncomingMedia({
               message: event.message,
               buffer,
@@ -5865,6 +5895,34 @@ const server = http.createServer(async (req, res) => {
               sendPush: sendLinePush,
               driveOnly: isDriveOnly
             });
+
+            // Register Drive link in E-Calendar Study Resources for seamless in-app preview
+            if (routeResult.fileUploadResult && routeResult.fileUploadResult.webViewLink) {
+              try {
+                const driveFileId = routeResult.fileUploadResult.fileId;
+                const webViewLink = routeResult.fileUploadResult.webViewLink;
+                if (!userData.studyLinks) userData.studyLinks = [];
+                
+                const studyEntry = {
+                  id: `drive-${driveFileId || Date.now()}`,
+                  title: event.message.fileName || routeResult.driveFilename,
+                  sub: `Google Drive (${routeResult.subjectInfo.category})`,
+                  type: 'drive',
+                  url: webViewLink,
+                  desc: `บันทึกใน Google Drive เมื่อ ${new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}`,
+                  folderId: 'f-drive',
+                  createdAt: new Date().toISOString()
+                };
+                userData.studyLinks.unshift(studyEntry);
+                userData.version = (parseInt(userData.version, 10) || 0) + 1;
+                userData.updatedAt = new Date().toISOString();
+                await dbAdapter.saveUserData(linkedUserId, userData);
+                store[linkedUserId] = userData;
+                saveStore();
+              } catch (regErr) {
+                console.warn('⚠️ Register drive link to studyLinks error:', regErr.message);
+              }
+            }
 
             // Stage 2: Push interactive Flex card with Drive Link & buttons
             const flexMsg = driveRouter.buildDriveUploadFlex({
@@ -6194,28 +6252,51 @@ const server = http.createServer(async (req, res) => {
       const defaultCurriculum = isTest4 ? TEST4_CURRICULUM : (isBmeUser ? DEFAULT_BME_CURRICULUM : []);
       const defaultRoutines = isBmeUser ? [...DEFAULT_BME_ROUTINE_EVENTS, ...DEFAULT_BME_STUDY_BLOCKS] : [];
 
-      // ─── Command: /mode <drive|ai> or โหมด <drive|ai> ───
-      const modeMatch = text.match(/^\/?(mode|โหมด)\s*(drive|ai|auto|ไดรฟ์)?/i);
+      // ─── Command: /mode <1|2|3|drive|ai|ecalen> ───
+      const modeMatch = text.match(/^\/?(mode|โหมด)\s*(drive|ai|auto|ไดรฟ์|ecalen|ecalendar|vault|คลัง|1|2|3)?/i);
       if (modeMatch) {
         const arg = (modeMatch[2] || '').toLowerCase();
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
-        if (arg === 'drive' || arg === 'ไดรฟ์') {
-          userData.driveMode = 'drive_only';
-          await dbAdapter.saveUserData(linkedUserId, userData);
-          store[linkedUserId] = userData;
-          saveStore();
-          await sendLineReply(replyToken, '📁 สลับเป็นโหมด [บันทึก Drive อย่างเดียว] เรียบร้อยแล้วครับ! ⚡\n\nต่อไปนี้เมื่อส่งไฟล์จะอัปโหลดขึ้น Google Drive ทันที โดยไม่รอดีเลย์และไม่สรุป AI อัตโนมัติ (แต่ยังกดปุ่มสรุปเองได้เสมอครับ)');
-          return;
-        } else if (arg === 'ai' || arg === 'auto') {
+        if (arg === 'ai' || arg === 'auto' || arg === '1') {
           userData.driveMode = 'auto_summary';
           await dbAdapter.saveUserData(linkedUserId, userData);
           store[linkedUserId] = userData;
           saveStore();
-          await sendLineReply(replyToken, '🤖 สลับเป็นโหมด [สรุป AI อัตโนมัติ] เรียบร้อยแล้วครับ! ✨\n\nต่อไปนี้เมื่อส่งไฟล์ ระบบจะอัปโหลดขึ้น Drive และรวบรวมสรุปเนื้อหาด้วย Gemini AI ให้โดยอัตโนมัติ');
+          await sendLineReply(replyToken, '🤖 สลับเป็น [โหมด 1: สรุป AI อัตโนมัติ + Google Drive] เรียบร้อยแล้วครับ! ✨\n\n• อัปโหลดเข้า Google Drive แยกโฟลเดอร์ตามวิชาและวันที่\n• สรุปเนื้อหาด้วย AI อัตโนมัติ\n• สร้างลิงก์เข้าดูใน E-Calendar\n• 🛡️ ไม่กินพื้นที่ Cloudflare R2 (0 Byte)');
+          return;
+        } else if (arg === 'drive' || arg === 'ไดรฟ์' || arg === '2') {
+          userData.driveMode = 'drive_only';
+          await dbAdapter.saveUserData(linkedUserId, userData);
+          store[linkedUserId] = userData;
+          saveStore();
+          await sendLineReply(replyToken, '📁 สลับเป็น [โหมด 2: บันทึก Google Drive อย่างเดียว] เรียบร้อยแล้วครับ! ⚡\n\n• อัปโหลดเข้า Google Drive ไวทันใจ ไม่รอสรุป AI\n• สร้างลิงก์เข้าดูใน E-Calendar\n• 🛡️ ไม่กินพื้นที่ Cloudflare R2 (0 Byte)');
+          return;
+        } else if (arg === 'ecalen' || arg === 'ecalendar' || arg === 'vault' || arg === 'คลัง' || arg === '3') {
+          userData.driveMode = 'vault';
+          await dbAdapter.saveUserData(linkedUserId, userData);
+          store[linkedUserId] = userData;
+          saveStore();
+          await sendLineReply(replyToken, '💾 สลับเป็น [โหมด 3: คลังเอกสาร E-Calendar (Cloud Vault)] เรียบร้อยแล้วครับ!\n\n• บันทึกไฟล์ต้นฉบับเข้า Cloudflare R2 ของระบบ E-Calendar โดยตรง\n• เหมาะสำหรับไฟล์ที่ต้องการเก็บไว้ในคลังของแอปโดยเฉพาะ');
           return;
         } else {
-          const curMode = userData.driveMode === 'drive_only' ? '📁 บันทึก Drive อย่างเดียว' : '🤖 สรุป AI อัตโนมัติ';
-          await sendLineReply(replyToken, `⚙️ โหมดปัจจุบันของคุณคือ: ${curMode}\n\nคุณสามารถเปลี่ยนโหมดได้โดยพิมพ์:\n• /mode drive (บันทึก Drive ไวๆ อย่างเดียว ไม่สรุป)\n• /mode ai (สรุป AI อัตโนมัติหลังส่งไฟล์)`);
+          const modeNames = {
+            'auto_summary': '1️⃣ 🤖 สรุป AI + Google Drive (ไม่กินพื้นที่ Cloudflare)',
+            'drive_only': '2️⃣ 📁 Google Drive อย่างเดียว (ไม่กินพื้นที่ Cloudflare)',
+            'vault': '3️⃣ 💾 คลังเอกสาร E-Calendar (Cloudflare Vault)'
+          };
+          const curMode = modeNames[userData.driveMode] || modeNames['auto_summary'];
+          const replyMsg = {
+            type: 'text',
+            text: `⚙️ โหมดการจัดการไฟล์ปัจจุบันของคุณ:\n${curMode}\n\nคุณสามารถกดเลือกเปลี่ยนโหมดได้จากปุ่มด้านล่างนี้ได้ทันทีครับ 👇`,
+            quickReply: {
+              items: [
+                { type: 'action', action: { type: 'message', label: '🤖 1. AI + Drive', text: '/mode 1' } },
+                { type: 'action', action: { type: 'message', label: '📁 2. Drive Only', text: '/mode 2' } },
+                { type: 'action', action: { type: 'message', label: '💾 3. คลัง E-Calen', text: '/mode 3' } }
+              ]
+            }
+          };
+          await sendLineReply(replyToken, [replyMsg]);
           return;
         }
       }
