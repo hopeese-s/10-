@@ -5201,12 +5201,14 @@
 
     // Stage 2: Poll every 1 second until done
     let pollTimer = null;
+    let pollCount = 0;
     async function doPoll() {
+      pollCount++;
       try {
         const pollRes = await fetch('/api/study-tools/import-media-poll', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...authHeaders },
-          body: JSON.stringify({ task_id: taskId, ...pendingMeta })
+          body: JSON.stringify({ task_id: taskId, retryCount: pollCount, ...pendingMeta })
         });
         const p = await pollRes.json();
 
@@ -5214,7 +5216,7 @@
           clearTimeout(pollTimer);
           if (progressBox) progressBox.style.display = 'none';
           showToast(`❌ ${p.error || 'ดาวน์โหลดล้มเหลว'}`, 'error');
-          if (statusEl) statusEl.innerHTML = `<span style="color:#ef4444">❌ ${p.error || 'ดาวน์โหลดล้มเหลว'}</span>`;
+          if (statusEl) statusEl.innerHTML = `<span style="color:#ef4444;font-weight:600">❌ ${p.error || 'ดาวน์โหลดล้มเหลว'}</span>`;
           btn.disabled = false;
           btn.innerHTML = '🚀 เริ่มดาวน์โหลดและบันทึกเข้าคลังวิชา';
           return;
@@ -5228,7 +5230,7 @@
           if (progressBytes) progressBytes.textContent = p.size_str || 'เสร็จแล้ว';
           if (progressSpeed) progressSpeed.textContent = '✅ Done';
 
-          showToast(`🎉 "${p.title}" ดาวน์โหลดเสร็จ พร้อมโหลดได้เลย!`, 'success');
+          showToast(`🎉 "${p.title}" แปลงและบันทึกเสร็จ พร้อมดาวน์โหลด!`, 'success');
 
           // Show download button directly inside the progress box
           if (p.directDownloadUrl && progressBox) {
@@ -5238,6 +5240,18 @@
 
           if (statusEl) statusEl.innerHTML = `<span style="color:var(--accent);font-weight:700">✅ สำเร็จ! บันทึกลิงก์เข้าคลังวิชาแล้ว</span>`;
           urlInput.value = '';
+          btn.disabled = false;
+          btn.innerHTML = '🚀 เริ่มดาวน์โหลดและบันทึกเข้าคลังวิชา';
+          return;
+        }
+
+        // Timeout check: if polling for over 60s and still at 0%
+        if (pollCount > 60 && (!p.percent || p.percent === 0)) {
+          clearTimeout(pollTimer);
+          if (progressBox) progressBox.style.display = 'none';
+          const timeoutMsg = 'การเชื่อมต่อหมดเวลา หรือวิดีโอนี้อาจถูกจำกัดสิทธิ์โดย YouTube กรุณาตรวจสอบลิงก์อีกครั้ง';
+          showToast(`⚠️ ${timeoutMsg}`, 'warning');
+          if (statusEl) statusEl.innerHTML = `<span style="color:#ef4444;font-weight:600">⚠️ ${timeoutMsg}</span>`;
           btn.disabled = false;
           btn.innerHTML = '🚀 เริ่มดาวน์โหลดและบันทึกเข้าคลังวิชา';
           return;

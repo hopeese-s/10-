@@ -7,6 +7,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { Readable } = require('stream');
 
 const PORT = process.env.PORT || 3000;
 const DB_FILE = path.join(__dirname, 'sync_store.json');
@@ -4733,6 +4734,50 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ─── API: Study Tools - Proxy Download Media File ───────────────────────
+  if (pathname === '/api/study-tools/download-media' && req.method === 'GET') {
+    const filename = url.searchParams.get('filename') || url.searchParams.get('file') || '';
+    if (!filename) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Missing filename parameter' }));
+      return;
+    }
+
+    const safeFilename = path.basename(filename);
+    const ext = path.extname(safeFilename).toLowerCase();
+    const contentType = ext === '.mp3' ? 'audio/mpeg' : ext === '.mp4' ? 'video/mp4' : ext === '.webm' ? 'video/webm' : 'application/octet-stream';
+    const isInline = url.searchParams.get('inline') === 'true';
+    const disposition = isInline ? 'inline' : `attachment; filename="${encodeURIComponent(safeFilename)}"`;
+
+    try {
+      const upstreamRes = await fetch(`${activeOmniLoadUrl}/downloads/${encodeURIComponent(safeFilename)}`, {
+        signal: AbortSignal.timeout(60000)
+      });
+
+      if (!upstreamRes.ok) {
+        res.writeHead(upstreamRes.status, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'File not found on media engine' }));
+        return;
+      }
+
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Content-Disposition': disposition,
+        ...(upstreamRes.headers.get('content-length') ? { 'Content-Length': upstreamRes.headers.get('content-length') } : {})
+      });
+
+      const nodeStream = Readable.fromWeb(upstreamRes.body);
+      nodeStream.pipe(res);
+    } catch (err) {
+      console.error('Download media proxy error:', err);
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Failed to stream media file: ' + err.message }));
+      }
+    }
+    return;
+  }
+
   // ─── API: Study Tools - Poll Import Task & Finalize ────────────────────────
   if (pathname === '/api/study-tools/import-media-poll' && req.method === 'POST') {
     parseJsonBody(async (err, data) => {
@@ -4742,21 +4787,52 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const { task_id: taskId, ownerId: rawOwnerId, formatType = 'mp4', courseCode = '', customTitle = '', folderId = 'f-uploads', mediaUrl = '' } = data;
+      const { task_id: taskId, ownerId: rawOwnerId, formatType = 'mp4', courseCode = '', customTitle = '', folderId = 'f-uploads', mediaUrl = '', retryCount = 0 } = data;
       const ownerId = rawOwnerId || resolveOwnerId(data);
 
       try {
-        const taskRes = await fetch(`${activeOmniLoadUrl}/api/tasks/${taskId}`, { signal: AbortSignal.timeout(5000) });
-        if (!taskRes.ok) {
+        let taskInfo = null;
+        try {
+          const taskRes = await fetch(`${activeOmniLoadUrl}/api/tasks/${taskId}`, { signal: AbortSignal.timeout(5000) });
+          if (taskRes.ok) {
+            taskInfo = await taskRes.json();
+          }
+        } catch (_) {}
+
+        // Fallback: If single task lookup failed or 404, check full /api/tasks list
+        if (!taskInfo) {
+          try {
+            const listRes = await fetch(`${activeOmniLoadUrl}/api/tasks`, { signal: AbortSignal.timeout(5000) });
+            if (listRes.ok) {
+              const allTasks = await listRes.json();
+              if (Array.isArray(allTasks)) {
+                taskInfo = allTasks.find(t => t.task_id === taskId);
+              }
+            }
+          } catch (_) {}
+        }
+
+        // If still not found after retrying
+        if (!taskInfo) {
+          if (retryCount >= 15) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ status: 'error', error: 'ไม่พบงานดาวน์โหลดบนเซิร์ฟเวอร์ หรือหมดเวลาการเชื่อมต่อ (Task timeout)' }));
+            return;
+          }
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ status: 'pending', percent: 0 }));
           return;
         }
 
-        const taskInfo = await taskRes.json();
+        // Error from OmniLoad / yt-dlp
+        if (taskInfo.status === 'error') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'error', error: taskInfo.error || 'ดาวน์โหลดไม่สำเร็จ' }));
+          return;
+        }
 
         // Still running — return live progress to frontend
-        if (taskInfo.status !== 'completed' && taskInfo.status !== 'error') {
+        if (taskInfo.status !== 'completed') {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
             status: taskInfo.status || 'downloading',
@@ -4769,20 +4845,13 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        // Error
-        if (taskInfo.status === 'error') {
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ status: 'error', error: taskInfo.error || 'Download failed' }));
-          return;
-        }
-
-        // Completed — provide direct download URL from OmniLoad, no re-buffering needed
+        // Completed — provide public proxy download URL from Project 10
         const filename = taskInfo.filename || '';
-        const directDownloadUrl = `${activeOmniLoadUrl}/downloads/${encodeURIComponent(filename)}`;
+        const directDownloadUrl = `/api/study-tools/download-media?filename=${encodeURIComponent(filename)}`;
         const displayName = customTitle || taskInfo.title || filename;
-        const fileSizeMb = taskInfo.size_str || taskInfo.filesize_formatted || 'N/A';
+        const fileSizeMb = taskInfo.size_str || taskInfo.file_size_str || 'N/A';
 
-        // Save a study link record (no file buffer needed — point to OmniLoad URL)
+        // Save a study link record
         try {
           const ownerData = (await dbAdapter.getUserData(ownerId)) || {};
           if (!ownerData.studyLinks) ownerData.studyLinks = [];
@@ -4821,6 +4890,11 @@ const server = http.createServer(async (req, res) => {
 
       } catch (e) {
         console.error('Import media poll error:', e);
+        if (retryCount >= 10) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'error', error: 'ไม่สามารถติดต่อเซิร์ฟเวอร์ดาวน์โหลดได้: ' + (e.message || 'Connection error') }));
+          return;
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'pending', percent: 0 }));
       }
