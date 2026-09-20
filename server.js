@@ -812,6 +812,7 @@ async function generateIcsCalendar(userId, includeRoutines = false, includeStudy
 
   // Build events
   const events = [];
+  const oneOffEvents = []; // single-day events with an exact date (no weekly recurrence)
   
   // 1. Classes
   if (includeClass) {
@@ -869,13 +870,30 @@ async function generateIcsCalendar(userId, includeRoutines = false, includeStudy
       monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU',
       mon: 'MO', tue: 'TU', wed: 'WE', thu: 'TH', fri: 'FR', sat: 'SA', sun: 'SU'
     };
-    const dayCode = dayMap[day.toLowerCase()];
-    if (!dayCode || !Array.isArray(blocks)) return;
+    if (!Array.isArray(blocks)) return;
     blocks.forEach((block) => {
       if (!block.start || !block.end) return;
       const isStudy = block.isStudyBlock || block.tag === 'study';
       const isClass = block.isClass || block.tag === 'class';
       const isRoutine = !isStudy && !isClass;
+
+      // ── One-off "emergency added" events (midterm exam, book reading plan, etc.) ──
+      // These carry an exact date and ALWAYS go to Apple Calendar for that single day
+      // only — they bypass the study/class/routines category filters and never repeat.
+      if (block.date && /^\d{4}-\d{2}-\d{2}$/.test(block.date)) {
+        oneOffEvents.push({
+          date: block.date,
+          start: block.start,
+          end: block.end,
+          title: block.title || 'Custom Block',
+          sub: block.notes || block.subtitle || '',
+          emergency: Boolean(block.emergency)
+        });
+        return;
+      }
+
+      const dayCode = dayMap[day.toLowerCase()];
+      if (!dayCode) return;
 
       if (isStudy && !includeStudy) return;
       if (isClass && !includeClass) return;
@@ -947,6 +965,44 @@ async function generateIcsCalendar(userId, includeRoutines = false, includeStudy
       ics.push('ACTION:DISPLAY');
       ics.push(`DESCRIPTION:ถึงเวลาแล้ว! เริ่ม ${summary}`);
       ics.push('TRIGGER:-PT0M');
+      ics.push('END:VALARM');
+    }
+
+    ics.push('END:VEVENT');
+  });
+
+  // 5. One-off "emergency added" events — single-day only, never repeat weekly.
+  //    Always included in the feed (bypass category filters) so they reach Apple Calendar
+  //    even when the user has not opted-in personal items.
+  oneOffEvents.forEach((ev, idx) => {
+    const dtStart = formatIcsDateTime(ev.date, ev.start);
+    const dtEnd = formatIcsDateTime(ev.date, ev.end);
+    const uid = `ecal-once-${userId || 'default'}-${ev.date}-${idx}-${ev.start.replace(':', '')}@daily-study.app`;
+    const icon = ev.emergency ? '🚨 ' : '🗓️ ';
+    const summary = icon + ev.title;
+    const desc = (ev.sub ? ev.sub + '\n' : '') + '⚠️ Emergency added from E-Calendar: this event appears on this day only.';
+
+    ics.push('BEGIN:VEVENT');
+    ics.push(`UID:${uid}`);
+    ics.push(`DTSTAMP:${nowStamp}`);
+    ics.push(`DTSTART;TZID=Asia/Bangkok:${dtStart}`);
+    ics.push(`DTEND;TZID=Asia/Bangkok:${dtEnd}`);
+    // NOTE: no RRULE — the event exists ONLY on this exact date
+    ics.push(`SUMMARY:${summary}`);
+    ics.push(`DESCRIPTION:${desc}`);
+    ics.push('STATUS:CONFIRMED');
+
+    ics.push('BEGIN:VALARM');
+    ics.push('ACTION:DISPLAY');
+    ics.push(`DESCRIPTION:เตือนความจำ: อีก 15 นาทีจะถึง ${summary}`);
+    ics.push('TRIGGER:-PT15M');
+    ics.push('END:VALARM');
+
+    if (ev.emergency) {
+      ics.push('BEGIN:VALARM');
+      ics.push('ACTION:DISPLAY');
+      ics.push(`DESCRIPTION:🚨 เหลือเวลาอีก 1 ชั่วโมง: ${summary}`);
+      ics.push('TRIGGER:-PT1H');
       ics.push('END:VALARM');
     }
 
@@ -1423,39 +1479,89 @@ function parseThaiNaturalAppointment(text) {
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
   const daysMap = {
     'อาทิตย์': 'sunday', 'จันทร์': 'monday', 'อังคาร': 'tuesday', 'พุธ': 'wednesday',
-    'พฤหัส': 'thursday', 'พฤหัสบดี': 'thursday', 'ศุกร์': 'friday', 'เสาร์': 'saturday'
+    'พฤหัสบดี': 'thursday', 'พฤหัส': 'thursday', 'ศุกร์': 'friday', 'เสาร์': 'saturday'
+  };
+  const thaiMonths = {
+    'มกราคม': 1, 'ก.พ.': 2, 'กพ': 2, 'กุมภาพันธ์': 2, 'มี.ค.': 3, 'มีค': 3, 'มีนาคม': 3,
+    'เม.ย.': 4, 'เมย': 4, 'เมษายน': 4, 'พ.ค.': 5, 'พค': 5, 'พฤษภาคม': 5,
+    'มิ.ย.': 6, 'มิย': 6, 'มิถุนายน': 6, 'ก.ค.': 7, 'กค': 7, 'กรกฎาคม': 7,
+    'ส.ค.': 8, 'สค': 8, 'สิงหาคม': 8, 'ก.ย.': 9, 'กย': 9, 'กันยายน': 9,
+    'ต.ค.': 10, 'ตค': 10, 'ตุลาคม': 10, 'พ.ย.': 11, 'พย': 11, 'พฤศจิกายน': 11,
+    'ธ.ค.': 12, 'ธค': 12, 'ธันวาคม': 12
   };
 
+  // ── Extract explicit date (B6): "2026-09-28", "28/9/2026", "28/9", "28 ก.ย." ──
+  let explicitDate = null; // 'YYYY-MM-DD'
+  const isoDateMatch = text.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  const slashDateMatch = text.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+  const thaiDateMatch = text.match(/(\d{1,2})\s*(ก\.?\s?พ\.?|กพ|กุมภาพันธ์|มี\.?\s?ค\.?|มีค|มีนาคม|เม\.?\s?ย\.?|เมย|เมษายน|พ\.?\s?ค\.?|พค|พฤษภาคม|มิ\.?\s?ย\.?|มิย|มิถุนายน|ก\.?\s?ค\.?|กค|กรกฎาคม|ส\.?\s?ค\.?|สค|สิงหาคม|ก\.?\s?ย\.?|กย|กันยายน|ต\.?\s?ค\.?|ตค|ตุลาคม|พ\.?\s?ย\.?|พย|พฤศจิกายน|ธ\.?\s?ค\.?|ธค|ธันวาคม)(?:\s*(\d{4}))?/i);
+  const pad2 = n => String(n).padStart(2, '0');
+  if (isoDateMatch) {
+    explicitDate = `${isoDateMatch[1]}-${isoDateMatch[2]}-${isoDateMatch[3]}`;
+  } else if (slashDateMatch) {
+    const d = parseInt(slashDateMatch[1], 10);
+    const m = parseInt(slashDateMatch[2], 10);
+    let y = slashDateMatch[3] ? parseInt(slashDateMatch[3], 10) : now.getFullYear();
+    if (y < 100) y += 2000;
+    if (y > 2400) y -= 543; // Thai Buddhist year
+    if (d >= 1 && d <= 31 && m >= 1 && m <= 12) explicitDate = `${y}-${pad2(m)}-${pad2(d)}`;
+  } else if (thaiDateMatch) {
+    const d = parseInt(thaiDateMatch[1], 10);
+    const monthToken = thaiDateMatch[2].replace(/\s+/g, '').toLowerCase();
+    let m = null;
+    for (const [name, num] of Object.entries(thaiMonths)) {
+      if (monthToken === name.replace(/\s+/g, '').toLowerCase()) { m = num; break; }
+    }
+    let y = thaiDateMatch[3] ? parseInt(thaiDateMatch[3], 10) : now.getFullYear();
+    if (y > 2400) y -= 543; // Thai Buddhist year
+    if (d >= 1 && d <= 31 && m) explicitDate = `${y}-${pad2(m)}-${pad2(d)}`;
+  }
+
+  // ── Resolve target weekday ──
   let targetDay = null;
-  if (/พรุ่งนี้/i.test(text)) {
+  if (explicitDate) {
+    const [y, m, d] = explicitDate.split('-').map(Number);
+    targetDay = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+  } else if (/พรุ่งนี้/i.test(text)) {
     const d = new Date(now.getTime() + 24 * 60 * 60 * 1000);
     targetDay = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][d.getDay()];
   } else if (/วันนี้/i.test(text)) {
     targetDay = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][now.getDay()];
   } else {
-    for (const [thDay, engDay] of Object.entries(daysMap)) {
+    // B4 FIX: match full day names (longest first), not a broken character class
+    const dayNames = Object.keys(daysMap).sort((a, b) => b.length - a.length);
+    for (const thDay of dayNames) {
       if (text.includes(thDay)) {
-        targetDay = engDay;
+        targetDay = daysMap[thDay];
         break;
       }
     }
   }
 
-  // Extract time
+  // ── Extract time ──
   let startTime = '09:00';
   let endTime = '10:00';
 
-  const timeRangeMatch = text.match(/(\d{1,2}[:.]\d{2})\s*[-–ถึง]\s*(\d{1,2}[:.]\d{2})/);
-  const singleTimeMatch = text.match(/(\d{1,2}[:.]\d{2})\s*(น\.|นาฬิกา)?/);
-  const thaiWordTimeMatch = text.match(/(บ่าย\s*([1-5|โมง|สอง|สาม|สี่|ห้า]+)|([1-9]|1[0-2])\s*โมง(เช้า|เย็น)?|([1-5])\s*ทุ่ม|เที่ยง)/i);
+  // B5 FIX: proper range match for "-", "–", "ถึง", "ถึงเวลา", "-ถึง-" with optional spaces
+  const timeRangeMatch = text.match(/(\d{1,2})[:.](\d{2})\s*(?:-|–|—|ถึง|to)\s*(\d{1,2})[:.](\d{2})/i);
+  const singleTimeMatch = text.match(/(?:เวลา\s*)?(\d{1,2})[:.](\d{2})/);
+  const thaiWordTimeMatch = text.match(/(บ่าย\s*(?:[1-5]|โมง|สอง|สาม|สี่|ห้า)\s*โมง?|(?:[1-9]|1[0-2])\s*โมง(?:เช้า|เย็น)?|[1-5]\s*ทุ่ม|เที่ยง)/i);
 
   if (timeRangeMatch) {
-    startTime = timeRangeMatch[1].replace('.', ':');
-    endTime = timeRangeMatch[2].replace('.', ':');
+    const sh = parseInt(timeRangeMatch[1], 10);
+    const sm = parseInt(timeRangeMatch[2], 10);
+    const eh = parseInt(timeRangeMatch[3], 10);
+    const em = parseInt(timeRangeMatch[4], 10);
+    // Thai colloquial: "บ่าย 1 - 3" style ranges are handled elsewhere; here hours 1-6 after
+    // a บ่าย/เย็น marker are ambiguous, keep as-is (24h assumed for numeric ranges)
+    startTime = `${pad2(sh)}:${pad2(sm)}`;
+    endTime = `${pad2(eh)}:${pad2(em)}`;
   } else if (singleTimeMatch) {
-    startTime = singleTimeMatch[1].replace('.', ':');
-    const [h, m] = startTime.split(':').map(Number);
-    endTime = `${String((h + 1) % 24).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    const h = parseInt(singleTimeMatch[1], 10);
+    const m = parseInt(singleTimeMatch[2], 10);
+    startTime = `${pad2(h)}:${pad2(m)}`;
+    const endTotal = (h * 60 + m + 60) % (24 * 60);
+    endTime = `${pad2(Math.floor(endTotal / 60))}:${pad2(endTotal % 60)}`;
   } else if (thaiWordTimeMatch) {
     const raw = thaiWordTimeMatch[0];
     if (raw.includes('บ่าย')) {
@@ -1465,7 +1571,11 @@ function parseThaiNaturalAppointment(text) {
       const num = parseInt((raw.match(/\d+/) || [1])[0], 10);
       startTime = `${18 + num}:00`;
     } else if (raw.includes('โมง')) {
-      const num = parseInt((raw.match(/\d+/) || [9])[0], 10);
+      let num = parseInt((raw.match(/\d+/) || [9])[0], 10);
+      // "5 โมงเย็น" / "บ่าย 5 โมง" = afternoon/evening → add 12 (but "1 โมง" midday = 13:00 too)
+      const isPm = raw.includes('เย็น') || raw.includes('บ่าย') || raw.includes('โมงเย็น');
+      if (isPm && num >= 1 && num <= 6) num += 12;
+      // "โมงเช้า" stays morning
       startTime = `${String(num).padStart(2, '0')}:00`;
     } else if (raw.includes('เที่ยง')) {
       startTime = '12:00';
@@ -1481,13 +1591,17 @@ function parseThaiNaturalAppointment(text) {
     location = locMatch[2].trim();
   }
 
-  // Clean title
+  // Clean title (B4 FIX: proper day-name alternation, also strip explicit dates)
   let title = text
     .replace(/^(นัด|นัดหมาย|มีตติ้ง|meeting|ประชุม|ซ้อม|ติว)\s*/i, '')
-    .replace(/(พรุ่งนี้|วันนี้|วัน[จันทร์|อังคาร|พุธ|พฤหัส|ศุกร์|เสาร์|อาทิตย์]+)/g, '')
-    .replace(/(\d{1,2}[:.]\d{2}\s*[-–ถึง]?\s*\d{0,2}[:.]?\d{0,2}\s*(น\.|นาฬิกา)?)/g, '')
-    .replace(/(บ่าย\s*([1-5|โมง|สอง|สาม|สี่|ห้า]+)|([1-9]|1[0-2])\s*โมง(เช้า|เย็น)?|([1-5])\s*ทุ่ม|เที่ยง)/g, '')
+    .replace(new RegExp(`(พรุ่งนี้|วันนี้|วัน(?:${Object.keys(daysMap).sort((a, b) => b.length - a.length).join('|')}))`, 'g'), '')
+    .replace(/\b\d{4}-\d{2}-\d{2}\b/g, '')
+    .replace(/\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/g, '')
+    .replace(new RegExp(`\\d{1,2}\\s*(?:${Object.keys(thaiMonths).sort((a, b) => b.length - a.length).join('|')})\\s*(?:\\d{4})?`, 'g'), '')
+    .replace(/(\d{1,2}[:.]\d{2}\s*(?:-|–|ถึง|to)?\s*\d{0,2}[:.]?\d{0,2}\s*(น\.|นาฬิกา)?)/gi, '')
+    .replace(/(บ่าย\s*(?:[1-5]|สอง|สาม|สี่|ห้า)\s*โมง?|(?:[1-9]|1[0-2])\s*โมง(?:เช้า|เย็น)?|[1-5]\s*ทุ่ม|เที่ยง)/gi, '')
     .replace(/(ที่|ณ|ห้อง)\s*([a-zA-Z0-9ก-๙\-_\s]+)/g, '')
+    .replace(/\s{2,}/g, ' ')
     .trim();
 
   if (!title) title = 'นัดหมายใหม่';
@@ -1495,6 +1609,7 @@ function parseThaiNaturalAppointment(text) {
   return {
     title,
     day: targetDay || ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][now.getDay()],
+    date: explicitDate,
     start: startTime,
     end: endTime,
     location,
@@ -5765,19 +5880,13 @@ const server = http.createServer(async (req, res) => {
     const lineUserId = event.source && event.source.userId;
     const replyToken = event.replyToken;
 
-    if (lineUserId) {
-      if (!store._lineUsers) store._lineUsers = {};
-      if (!store._userLine) store._userLine = {};
-      if (!store._lineUsers[lineUserId]) {
-        store._lineUsers[lineUserId] = '1';
-      }
-      if (!store._userLine['1']) {
-        store._userLine['1'] = lineUserId;
-      }
-      if (store._users && store._users['witchaya'] && !store._userLine[store._users['witchaya'].id]) {
-        store._userLine[store._users['witchaya'].id] = lineUserId;
-      }
-    }
+    // SECURITY FIX (B1): Do NOT auto-link strangers to user '1'.
+    // Only an explicitly linked LINE account (via /link <username> or /link <calendarKey>)
+    // may access user data. Unlinked users get an instruction reply instead.
+    if (lineUserId && !store._lineUsers) store._lineUsers = {};
+
+    const linkedUserIdForEvent = lineUserId ? ((store._lineUsers && store._lineUsers[lineUserId]) || null) : null;
+    const isLinkedUser = Boolean(linkedUserIdForEvent);
 
     if (event.type === 'follow') {
       const welcomeText = 
@@ -5798,7 +5907,11 @@ const server = http.createServer(async (req, res) => {
       const dataStr = (event.postback && event.postback.data) || '';
       const params = new URLSearchParams(dataStr);
       const action = params.get('action');
-      const linkedUserId = (store._lineUsers && store._lineUsers[lineUserId]) || '1';
+      const linkedUserId = linkedUserIdForEvent;
+      if (!linkedUserId) {
+        await sendLineReply(replyToken, '🔒 กรุณาผูกบัญชีก่อนใช้งาน โดยพิมพ์: /link <Username ของคุณ>');
+        return;
+      }
       const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
 
       // ─── Drive Router Actions: Speed-up AI Summary or Drive Only ───
@@ -5920,7 +6033,11 @@ const server = http.createServer(async (req, res) => {
     // ─── E-Calendar Auto Drive Router & AI Summary v2 (iPad Share Sheet / LINE OA) ───
     if (event.type === 'message' && event.message && ['file', 'audio', 'image'].includes(event.message.type)) {
       if (driveRouter && driveRouter.config && driveRouter.config.hasDriveConfig) {
-        const linkedUserId = (store._lineUsers && store._lineUsers[lineUserId]) || '1';
+        const linkedUserId = linkedUserIdForEvent;
+      if (!linkedUserId) {
+        await sendLineReply(replyToken, '🔒 กรุณาผูกบัญชีก่อนใช้งาน โดยพิมพ์: /link <Username ของคุณ>');
+        return;
+      }
 
         // 1. Stage 1: Send INSTANT acknowledgment (< 300ms) so user knows bot received it
         const fnHint = event.message.fileName ? ` "${event.message.fileName}"` : '';
@@ -6028,7 +6145,11 @@ const server = http.createServer(async (req, res) => {
 
     // ─── Voice / Audio Message Handler (Gemini Multimodal Voice & Problem Solver) ───
     if (event.type === 'message' && event.message && event.message.type === 'audio') {
-      const linkedUserId = (store._lineUsers && store._lineUsers[lineUserId]) || '1';
+      const linkedUserId = linkedUserIdForEvent;
+      if (!linkedUserId) {
+        await sendLineReply(replyToken, '🔒 กรุณาผูกบัญชีก่อนใช้งาน โดยพิมพ์: /link <Username ของคุณ>');
+        return;
+      }
       const audioBuffer = await getLineMessageContent(event.message.id);
       if (!audioBuffer) {
         await sendLineReply(replyToken, '⚠️ ไม่สามารถดาวน์โหลดไฟล์เสียงจาก LINE ได้ กรุณาลองใหม่อีกครั้งครับ');
@@ -6121,7 +6242,11 @@ const server = http.createServer(async (req, res) => {
 
     // ─── Image Message Handler (Gemini Multimodal Math/Vision OCR & Cloud Vault) ───
     if (event.type === 'message' && event.message && event.message.type === 'image') {
-      const linkedUserId = (store._lineUsers && store._lineUsers[lineUserId]) || '1';
+      const linkedUserId = linkedUserIdForEvent;
+      if (!linkedUserId) {
+        await sendLineReply(replyToken, '🔒 กรุณาผูกบัญชีก่อนใช้งาน โดยพิมพ์: /link <Username ของคุณ>');
+        return;
+      }
       const imageBuffer = await getLineMessageContent(event.message.id);
       if (!imageBuffer) {
         await sendLineReply(replyToken, '⚠️ ไม่สามารถดาวน์โหลดรูปภาพจาก LINE ได้ กรุณาลองใหม่อีกครั้งครับ');
@@ -6232,7 +6357,11 @@ const server = http.createServer(async (req, res) => {
 
     // ─── Document / File Message Handler (PDF / Docs / Cloud Vault) ───
     if (event.type === 'message' && event.message && event.message.type === 'file') {
-      const linkedUserId = (store._lineUsers && store._lineUsers[lineUserId]) || '1';
+      const linkedUserId = linkedUserIdForEvent;
+      if (!linkedUserId) {
+        await sendLineReply(replyToken, '🔒 กรุณาผูกบัญชีก่อนใช้งาน โดยพิมพ์: /link <Username ของคุณ>');
+        return;
+      }
       const originalFileName = event.message.fileName || `document_${Date.now()}.bin`;
       const fileExt = path.extname(originalFileName).toLowerCase() || '.bin';
       const fileBuffer = await getLineMessageContent(event.message.id);
@@ -6312,7 +6441,11 @@ const server = http.createServer(async (req, res) => {
       }
 
       // Check linked user
-      const linkedUserId = (store._lineUsers && store._lineUsers[lineUserId]) || '1';
+      const linkedUserId = linkedUserIdForEvent;
+      if (!linkedUserId) {
+        await sendLineReply(replyToken, '🔒 กรุณาผูกบัญชีก่อนใช้งาน โดยพิมพ์: /link <Username ของคุณ>');
+        return;
+      }
       let targetUser = Object.values(store._users || {}).find(u => u.id === linkedUserId || (u.username && u.username.toLowerCase() === String(linkedUserId).toLowerCase()));
       if (!targetUser && (linkedUserId === 'u_test4' || linkedUserId === 'test4')) {
         targetUser = { id: 'u_test4', username: 'test4', displayName: 'test4', role: 'student', isBme: false };
@@ -6467,7 +6600,16 @@ const server = http.createServer(async (req, res) => {
       // ─── 1.8 Natural Language Appointment / Meeting Creation ───
       // NOTE: Only runs if NOT an explicit +โน้ต / +task / +งาน command
       const appointmentMatch = text.match(/^(นัด|นัดหมาย|มีตติ้ง|meeting|ประชุม|ซ้อม|ติว)\s*(.+)/i);
-      const hasDateKeyword = hasGemini && text.length > 15 && (text.includes('พรุ่งนี้') || text.includes('วันจันทร์') || text.includes('วันอังคาร') || text.includes('วันพุธ') || text.includes('วันพฤหัส') || text.includes('วันศุกร์') || text.includes('วันเสาร์') || text.includes('วันอาทิตย์'));
+      // Works WITHOUT Gemini too: day keywords, explicit dates, or time mentions trigger the flow
+      // Guard: do NOT hijack schedule-query commands (ตารางวันนี้, ตารางวันพุธ, พรุ่งนี้เรียนไร, etc.)
+      const isScheduleQuery = /^(ตาราง|ตารางเรียน|ตารางเรียนวัน|ตารางวัน|ตารางสอน|เรียนไร|มีเรียนมั้ย|วันนี้เรียนไร|วันนี้มีเรียนมั้ย|เรียนไรวันนี้|มีเรียนมั้ยวันนี้|พรุ่งนี้เรียนไร|พรุ่งนี้เรียนอะไร|มีเรียนมั้ยพรุ่งนี้|พรุ่งนี้มีเรียนมั้ย|พรุ่งนี้|วันนี้|today|tomorrow|schedule)(\s|$)/i.test(text.trim()) || /^(ตาราง|ตารางเรียน|schedule)?\s*(วัน)?\s*(จันทร์|อังคาร|พุธ|พฤหัส|พฤหัสบดี|ศุกร์|เสาร์|อาทิตย์|monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)$/i.test(text.trim());
+      const hasDateKeyword = !isScheduleQuery && text.length > 8 && (
+        text.includes('พรุ่งนี้') || text.includes('วันนี้') ||
+        text.includes('วันจันทร์') || text.includes('วันอังคาร') || text.includes('วันพุธ') ||
+        text.includes('วันพฤหัส') || text.includes('วันศุกร์') || text.includes('วันเสาร์') || text.includes('วันอาทิตย์') ||
+        /\b\d{4}-\d{2}-\d{2}\b/.test(text) || /\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/.test(text) ||
+        /\d{1,2}\s*(ก\.?\s?พ\.?|มี\.?\s?ค\.?|เม\.?\s?ย\.?|พ\.?\s?ค\.?|มิ\.?\s?ย\.?|ก\.?\s?ค\.?|ส\.?\s?ค\.?|ก\.?\s?ย\.?|ต\.?\s?ค\.?|พ\.?\s?ย\.?|ธ\.?\s?ค\.?|กันยายน|ตุลาคม|พฤศจิกายน|ธันวาคม|มกราคม|กุมภาพันธ์|มีนาคม|เมษายน|พฤษภาคม|มิถุนายน|กรกฎาคม|สิงหาคม)/i.test(text)
+      );
       if (!explicitNoteMatch && !explicitTaskMatch && (appointmentMatch || hasDateKeyword)) {
         let extracted = null;
         if (hasGemini) {
@@ -6490,6 +6632,10 @@ const server = http.createServer(async (req, res) => {
             if (!ev.day || !ev.title) return;
             const dayKey = ev.day.toLowerCase();
             if (!userData.customBlocks[dayKey]) userData.customBlocks[dayKey] = [];
+            // One-off dated events (midterm exam, book reading plan, etc.) keep their exact
+            // date and are flagged as "emergency" so they are pushed to Apple Calendar
+            // for ONLY that single day (no weekly RRULE, bypasses feed category filters).
+            const isOneOff = Boolean(ev.date);
             const newBlock = {
               id: Date.now().toString() + Math.random().toString(36).substring(2, 5),
               title: ev.title,
@@ -6497,10 +6643,15 @@ const server = http.createServer(async (req, res) => {
               end: ev.end || '10:00',
               tag: 'study',
               isStudyBlock: true,
-              notes: ev.notes || ev.location || ''
+              notes: ev.notes || ev.location || '',
+              ...(isOneOff ? {
+                date: ev.date,
+                source: 'line',
+                emergency: true
+              } : {})
             };
             userData.customBlocks[dayKey].push(newBlock);
-            savedEvents.push({ ...ev, id: newBlock.id });
+            savedEvents.push({ ...ev, id: newBlock.id, emergency: isOneOff });
           });
 
           await dbAdapter.saveUserData(linkedUserId, userData);
