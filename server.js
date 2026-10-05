@@ -4625,6 +4625,7 @@ const server = http.createServer(async (req, res) => {
     req.on('end', () => {
       if (aborted) return;
       const rawBuffer = Buffer.concat(chunks);
+      chunks = null; // Free chunk references immediately
       const rawString = rawBuffer.toString('utf8');
       try {
         const parsed = JSON.parse(rawString || '{}');
@@ -7636,6 +7637,13 @@ setInterval(() => {
 // ─── Background Scheduler: Check 15-min Class Reminders ───────
 const _notifiedReminders = {}; // { 'userId_date_slot': true }
 
+// Periodic Memory Hygiene (Every 15 min) — triggers V8 GC if available
+setInterval(() => {
+  if (typeof global.gc === 'function') {
+    try { global.gc(); } catch (_) {}
+  }
+}, 15 * 60 * 1000);
+
 setInterval(async () => {
   if (!webpush || !store._pushSubscriptions || !vapidKeys.publicKey) return;
 
@@ -7648,6 +7656,19 @@ setInterval(async () => {
   const currentMinute = bangkokTime.getUTCMinutes();
   const nowTotalMinutes = currentHour * 60 + currentMinute;
   const todayStr = bangkokTime.toISOString().slice(0, 10);
+
+  // Auto-prune _notifiedReminders: clear expired reminder keys from past days
+  const rKeys = Object.keys(_notifiedReminders);
+  if (rKeys.length > 200) {
+    for (const k of rKeys) {
+      if (!k.includes(todayStr)) {
+        delete _notifiedReminders[k];
+      }
+    }
+    if (Object.keys(_notifiedReminders).length > 300) {
+      for (const k in _notifiedReminders) delete _notifiedReminders[k];
+    }
+  }
 
   const userIds = new Set([
     ...Object.keys(store._pushSubscriptions || {}),

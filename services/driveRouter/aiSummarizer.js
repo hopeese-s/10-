@@ -33,7 +33,10 @@ function extractTextFromBuffer(buffer, mimeType, filename = '') {
     return buffer.toString('utf-8').slice(0, 20000);
   }
 
-  const raw = buffer.toString('latin1');
+  // Optimize: Do not convert huge 20-30MB buffer to latin1 string.
+  // Sample up to 2MB which contains the full text streams for slide notes/PDFs.
+  const sampleBuf = buffer.length > 2 * 1024 * 1024 ? buffer.subarray(0, 2 * 1024 * 1024) : buffer;
+  const raw = sampleBuf.toString('latin1');
   const textBlocks = [];
   const btMatches = raw.match(/BT[\s\S]*?ET/g) || [];
   for (const block of btMatches) {

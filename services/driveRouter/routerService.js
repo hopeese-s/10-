@@ -103,9 +103,9 @@ async function handleIncomingMedia({ message, buffer, lineUserId, userId, curric
     }
   }
 
-  // 5. Enqueue into Session Manager
+  // 5. Enqueue into Session Manager (omit buffer in driveOnly mode to save RAM)
   const fileEntry = {
-    buffer,
+    buffer: driveOnly ? null : buffer,
     mimeType,
     ext,
     typeLabel,
@@ -304,6 +304,13 @@ async function finalizeLectureSession(sessionKey, subjectInfo, files, meta) {
 
   // 1. Run Gemini multimodal summary on all files
   const { shortSummary, fullMarkdown } = await aiSummarizer.summarizeSession(files, sessionLabel);
+
+  // Memory cleanup: release raw binary buffers immediately
+  if (Array.isArray(files)) {
+    for (const f of files) {
+      if (f) f.buffer = null;
+    }
+  }
 
   // 2. Upload AI Markdown summary to Drive (in the same subject folder)
   let summaryDriveLink = null;
