@@ -65,10 +65,10 @@ const hasR2 = Boolean(R2_ACCOUNT_ID && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY 
 
 if (hasR2) {
   try {
-    const { S3Client } = require('@aws-sdk/client-s3');
+    const { S3Client } = require('./services/miniR2');
     r2Client = new S3Client({
       region: 'auto',
-      endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      endpoint: process.env.R2_ENDPOINT || `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
       credentials: {
         accessKeyId: R2_ACCESS_KEY_ID,
         secretAccessKey: R2_SECRET_ACCESS_KEY
@@ -92,7 +92,7 @@ const hasSupabase = Boolean(SUPABASE_URL && SUPABASE_KEY);
 
 if (hasSupabase) {
   try {
-    const { createClient } = require('@supabase/supabase-js');
+    const { createClient } = require('./services/miniSupabase');
     supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
     console.log('✅ Supabase PostgreSQL Database Adapter connected (' + SUPABASE_URL + ')');
   } catch (e) {
@@ -1182,7 +1182,7 @@ async function saveMediaFileToStorage(buffer, originalFilename, ext, contentType
 
   if (r2Client) {
     try {
-      const { PutObjectCommand } = require('@aws-sdk/client-s3');
+      const { PutObjectCommand } = require('./services/miniR2');
       await r2Client.send(new PutObjectCommand({
         Bucket: R2_BUCKET_NAME,
         Key: filename,
@@ -4748,7 +4748,7 @@ const server = http.createServer(async (req, res) => {
       // Upload to Cloudflare R2 if configured
       if (r2Client) {
         try {
-          const { PutObjectCommand } = require('@aws-sdk/client-s3');
+          const { PutObjectCommand } = require('./services/miniR2');
           const contentType = safeExt === '.pdf' ? 'application/pdf' :
                               safeExt === '.png' ? 'image/png' :
                               safeExt === '.jpg' || safeExt === '.jpeg' ? 'image/jpeg' :
@@ -5098,7 +5098,7 @@ const server = http.createServer(async (req, res) => {
             ? await fs.openAsBlob(localPath, { type: 'application/pdf' })
             : new Blob([await fs.promises.readFile(localPath)], { type: 'application/pdf' });
         } else if (r2Client) {
-          const { GetObjectCommand } = require('@aws-sdk/client-s3');
+          const { GetObjectCommand } = require('./services/miniR2');
           const r2Res = await r2Client.send(new GetObjectCommand({
             Bucket: R2_BUCKET_NAME,
             Key: filename
@@ -5140,7 +5140,7 @@ const server = http.createServer(async (req, res) => {
 
             if (r2Client) {
               try {
-                const { PutObjectCommand } = require('@aws-sdk/client-s3');
+                const { PutObjectCommand } = require('./services/miniR2');
                 await r2Client.send(new PutObjectCommand({
                   Bucket: R2_BUCKET_NAME,
                   Key: imgTargetName,
@@ -5272,7 +5272,7 @@ const server = http.createServer(async (req, res) => {
       // 2. Stream from Cloudflare R2
       if (r2Client) {
         try {
-          const { GetObjectCommand } = require('@aws-sdk/client-s3');
+          const { GetObjectCommand } = require('./services/miniR2');
           const r2Res = await r2Client.send(new GetObjectCommand({
             Bucket: R2_BUCKET_NAME,
             Key: filename
