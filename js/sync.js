@@ -23,7 +23,10 @@ const CloudSync = (function () {
     const savedUser = localStorage.getItem('sd-current-user');
     if (savedUser && authToken) currentUser = JSON.parse(savedUser);
   } catch (_) {}
-  let syncKey      = localStorage.getItem('sd-sync-key') || (currentUser ? currentUser.id : '1');
+  // A saved key (even an empty one = "sync turned off") always wins. New anonymous devices
+  // start local-only instead of silently joining the shared "1" bucket other visitors write to.
+  const savedSyncKey = localStorage.getItem('sd-sync-key');
+  let syncKey      = savedSyncKey !== null ? savedSyncKey : (currentUser ? currentUser.id : '');
   let syncStatus   = currentUser ? 'synced' : 'local';
   let lastSyncTime = parseInt(localStorage.getItem('sd-last-sync-time') || '0', 10);
   let rememberMe   = localStorage.getItem('sd-remember-me') === 'true';
@@ -158,7 +161,8 @@ const CloudSync = (function () {
     currentUser = null;
     localStorage.removeItem('sd-auth-token');
     localStorage.removeItem('sd-current-user');
-    setSyncKey('1');
+    // Go local-only: never push a just-logged-out account's data into a shared bucket
+    setSyncKey('');
     updateUIStatus();
   }
 
@@ -224,7 +228,7 @@ const CloudSync = (function () {
       localStorage.setItem('sd-sync-key', syncKey);
       syncStatus = 'synced';
     } else {
-      localStorage.removeItem('sd-sync-key');
+      localStorage.setItem('sd-sync-key', '');
       syncStatus = 'local';
     }
     updateUIStatus();
@@ -420,24 +424,29 @@ const CloudSync = (function () {
     const authBtn = document.getElementById('auth-user-btn');
     const modalBadge = document.getElementById('modal-sync-status');
 
-    let userIcon = currentUser ? (currentUser.role === 'admin' ? '👑' : '👤') : '👤';
-    let userTip = currentUser ? `บัญชี: ${currentUser.displayName} (@${currentUser.username})` : 'บัญชีผู้ใช้งาน (คลิกเพื่อเข้าสู่ระบบ)';
-
+    const userTip = currentUser ? `บัญชี: ${currentUser.displayName} (@${currentUser.username})` : 'เข้าสู่ระบบ / สมัครสมาชิก';
     if (authBtn) {
-      authBtn.innerHTML = userIcon;
       authBtn.title = userTip;
+      authBtn.classList.toggle('is-signed-in', Boolean(currentUser));
+      // Signed-in users see their initial instead of a generic person glyph
+      if (currentUser && currentUser.displayName) {
+        authBtn.innerHTML = `<span class="avatar-initial">${String(currentUser.displayName).trim().charAt(0).toUpperCase().replace(/[<>&"']/g, '')}</span>`;
+      } else {
+        authBtn.innerHTML = '<svg class="i"><use href="#i-user"/></svg>';
+      }
     }
 
+    const who = currentUser ? currentUser.displayName : syncKey;
     const states = {
-      local:   { icon: '☁️', tip: 'คลิกเพื่อตั้งค่า Cloud Sync', badge: '⚪ ข้อมูลในเครื่องนี้เท่านั้น' },
-      syncing: { icon: '🔄', tip: 'กำลังซิงค์ข้อมูล…', badge: '🔄 กำลังซิงค์ข้อมูล…' },
-      synced:  { icon: '☁️', tip: `เชื่อมต่อ Cloud แล้ว (${currentUser ? currentUser.displayName : syncKey})`, badge: `✅ เชื่อมต่อ Cloud แล้ว (${currentUser ? 'บัญชี: ' + currentUser.displayName : 'Key: ' + syncKey})` },
-      error:   { icon: '⚠️', tip: 'ออฟไลน์ชั่วคราว — จะซิงค์ใหม่อัตโนมัติเมื่อออนไลน์', badge: '⚠️ ออฟไลน์ (บันทึกลงเครื่องแล้ว)' },
+      local:   { tip: 'ข้อมูลอยู่ในเครื่องนี้เท่านั้น — แตะเพื่อตั้งค่าซิงค์', badge: 'เก็บไว้ในเครื่องนี้เท่านั้น' },
+      syncing: { tip: 'กำลังซิงค์…', badge: 'กำลังซิงค์…' },
+      synced:  { tip: `ซิงค์แล้ว (${who})`, badge: `ซิงค์แล้ว · ${currentUser ? 'บัญชี ' + currentUser.displayName : 'Key ' + syncKey}` },
+      error:   { tip: 'ออฟไลน์อยู่ — บันทึกในเครื่องแล้ว จะซิงค์ให้เองเมื่อกลับมาออนไลน์', badge: 'ออฟไลน์ · บันทึกในเครื่องแล้ว' },
     };
 
     const s = states[syncStatus] || states.local;
     if (btn) {
-      btn.innerHTML = s.icon;
+      btn.dataset.sync = syncStatus;
       btn.title = s.tip;
     }
     if (modalBadge) {

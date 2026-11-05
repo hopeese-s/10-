@@ -3,18 +3,18 @@
 // ============================================================
 
 const TAGS = {
-  prayer:   { emoji: '🕌', label: 'ละหมาด',        color: '#a78bfa', bg: 'rgba(167,139,250,0.18)', border: 'rgba(167,139,250,0.4)' },
-  sleep:    { emoji: '😴', label: 'นอน/พัก',        color: '#818cf8', bg: 'rgba(129,140,248,0.18)', border: 'rgba(129,140,248,0.4)' },
-  morning:  { emoji: '☀️', label: 'กิจวัตรเช้า',    color: '#fbbf24', bg: 'rgba(251,191,36,0.18)',  border: 'rgba(251,191,36,0.4)'  },
-  travel:   { emoji: '🚗', label: 'เดินทาง',        color: '#f59e0b', bg: 'rgba(245,158,11,0.18)',  border: 'rgba(245,158,11,0.4)'  },
-  class:    { emoji: '🎓', label: 'เรียน',          color: '#38bdf8', bg: 'rgba(56,189,248,0.18)',  border: 'rgba(56,189,248,0.4)'  },
-  study:    { emoji: '📚', label: 'ทบทวน',          color: '#60a5fa', bg: 'rgba(96,165,250,0.18)',  border: 'rgba(96,165,250,0.4)'  },
-  food:     { emoji: '🍳', label: 'อาหาร',          color: '#fb923c', bg: 'rgba(251,146,60,0.18)',  border: 'rgba(251,146,60,0.4)'  },
-  social:   { emoji: '💬', label: 'คุยโทรศัพท์',    color: '#f472b6', bg: 'rgba(244,114,182,0.18)', border: 'rgba(244,114,182,0.4)' },
-  prep:     { emoji: '🧹', label: 'เตรียมตัว',      color: '#94a3b8', bg: 'rgba(148,163,184,0.18)', border: 'rgba(148,163,184,0.4)' },
-  break:    { emoji: '☕', label: 'พักเบรก',        color: '#34d399', bg: 'rgba(52,211,153,0.18)',  border: 'rgba(52,211,153,0.4)'  },
-  freetime: { emoji: '🌴', label: 'ฟรีไทม์',        color: '#6bae8e', bg: 'rgba(107,174,142,0.18)', border: 'rgba(107,174,142,0.4)' },
-  family:   { emoji: '🏠', label: 'ครอบครัว',       color: '#d4a96a', bg: 'rgba(212,169,106,0.18)', border: 'rgba(212,169,106,0.4)' },
+  prayer:   { emoji: '🕌', label: 'ละหมาด',        color: '#7356A8', bg: 'rgba(115,86,168,0.11)', border: 'rgba(115,86,168,0.3)' },
+  sleep:    { emoji: '😴', label: 'นอน/พัก',        color: '#4E5BA6', bg: 'rgba(78,91,166,0.11)', border: 'rgba(78,91,166,0.3)' },
+  morning:  { emoji: '☀️', label: 'กิจวัตรเช้า',    color: '#A2700E', bg: 'rgba(162,112,14,0.11)', border: 'rgba(162,112,14,0.3)'  },
+  travel:   { emoji: '🚗', label: 'เดินทาง',        color: '#7D6B52', bg: 'rgba(125,107,82,0.11)', border: 'rgba(125,107,82,0.3)'  },
+  class:    { emoji: '🎓', label: 'เรียน',          color: '#B4521A', bg: 'rgba(180,82,26,0.11)', border: 'rgba(180,82,26,0.3)'  },
+  study:    { emoji: '📚', label: 'ทบทวน',          color: '#2F6FA8', bg: 'rgba(47,111,168,0.11)', border: 'rgba(47,111,168,0.3)'  },
+  food:     { emoji: '🍳', label: 'อาหาร',          color: '#6E7F2A', bg: 'rgba(110,127,42,0.11)', border: 'rgba(110,127,42,0.3)'  },
+  social:   { emoji: '💬', label: 'คุยโทรศัพท์',    color: '#B0436E', bg: 'rgba(176,67,110,0.11)', border: 'rgba(176,67,110,0.3)' },
+  prep:     { emoji: '🧹', label: 'เตรียมตัว',      color: '#6B7280', bg: 'rgba(107,114,128,0.11)', border: 'rgba(107,114,128,0.3)' },
+  break:    { emoji: '☕', label: 'พักเบรก',        color: '#3E7A55', bg: 'rgba(62,122,85,0.11)', border: 'rgba(62,122,85,0.3)'  },
+  freetime: { emoji: '🌴', label: 'ฟรีไทม์',        color: '#2F7F7A', bg: 'rgba(47,127,122,0.11)', border: 'rgba(47,127,122,0.3)' },
+  family:   { emoji: '🏠', label: 'ครอบครัว',       color: '#A0683A', bg: 'rgba(160,104,58,0.11)', border: 'rgba(160,104,58,0.3)' },
 };
 
 // Subject colors for class schedule
@@ -429,7 +429,7 @@ const BME_PILLARS = {
   circuits: {
     id: 'circuits',
     name: 'Electronics & Signals',
-    nameTh: '⚡ ฮาร์ดแวร์ & สัญญาณการแพทย์',
+    nameTh: 'ฮาร์ดแวร์ & สัญญาณการแพทย์',
     color: '#2563eb',
     bg: 'rgba(37, 99, 235, 0.12)',
     icon: '⚡'
@@ -437,7 +437,7 @@ const BME_PILLARS = {
   computing: {
     id: 'computing',
     name: 'AI, Code & Math',
-    nameTh: '💻 ปัญญาประดิษฐ์ & ซอฟต์แวร์',
+    nameTh: 'ปัญญาประดิษฐ์ & ซอฟต์แวร์',
     color: '#059669',
     bg: 'rgba(16, 185, 129, 0.12)',
     icon: '💻'
@@ -445,7 +445,7 @@ const BME_PILLARS = {
   biomech: {
     id: 'biomech',
     name: 'Biomechanics & Robotics',
-    nameTh: '🦾 ชีวกลศาสตร์ & หุ่นยนต์การแพทย์',
+    nameTh: 'ชีวกลศาสตร์ & หุ่นยนต์การแพทย์',
     color: '#d97706',
     bg: 'rgba(217, 119, 6, 0.12)',
     icon: '🦾'
@@ -453,7 +453,7 @@ const BME_PILLARS = {
   biomaterials: {
     id: 'biomaterials',
     name: 'Biomaterials & Life Science',
-    nameTh: '🧬 วัสดุชีวการแพทย์ & ชีวเคมี',
+    nameTh: 'วัสดุชีวการแพทย์ & ชีวเคมี',
     color: '#9333ea',
     bg: 'rgba(147, 51, 234, 0.12)',
     icon: '🧬'
@@ -461,7 +461,7 @@ const BME_PILLARS = {
   core: {
     id: 'core',
     name: 'BME Core & Capstone',
-    nameTh: '🏆 แกนหลัก BME & โครงงานวิจัย',
+    nameTh: 'แกนหลัก BME & โครงงานวิจัย',
     color: '#C45A1B',
     bg: 'rgba(196, 90, 27, 0.12)',
     icon: '🏆'

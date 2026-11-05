@@ -4,6 +4,9 @@
 // ============================================================
 
 const http = require('http');
+const https = require('https');
+const dns = require('dns');
+const net = require('net');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -608,6 +611,35 @@ const dbAdapter = {
 // Initialize system auth from Supabase on launch
 if (supabase) {
   dbAdapter.loadSystemAuth();
+}
+
+// ─── SSRF guard: refuse to proxy to loopback / private / link-local / internal hosts ───
+function isPrivateAddress(ip) {
+  if (!ip) return true;
+  if (net.isIPv4(ip)) {
+    const [a, b] = ip.split('.').map(Number);
+    return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) ||
+      (a === 100 && b >= 64 && b <= 127) || a >= 224;
+  }
+  const v6 = ip.toLowerCase();
+  if (v6.startsWith('::ffff:')) return isPrivateAddress(v6.slice(7));
+  return v6 === '::1' || v6 === '::' || v6.startsWith('fc') || v6.startsWith('fd') || v6.startsWith('fe80');
+}
+
+async function isSafePublicUrl(rawUrl) {
+  let u;
+  try { u = new URL(rawUrl); } catch (_) { return false; }
+  if (!['http:', 'https:'].includes(u.protocol)) return false;
+  const host = u.hostname.replace(/^\[|\]$/g, '');
+  if (/(^localhost$)|(\.internal$)|(\.local$)/i.test(host)) return false;
+  if (net.isIP(host)) return !isPrivateAddress(host);
+  try {
+    const addrs = await dns.promises.lookup(host, { all: true });
+    return addrs.length > 0 && addrs.every(a => !isPrivateAddress(a.address));
+  } catch (_) {
+    return false;
+  }
 }
 
 // Password helpers
@@ -4655,9 +4687,27 @@ const server = http.createServer(async (req, res) => {
     const user = getAuthUser();
     if (user) return user.id;
     const headerKey = (req.headers['x-sync-key'] || '').trim();
-    if (headerKey) return headerKey;
-    if (body && body.syncKey) return body.syncKey;
-    return '1';
+    const requested = headerKey || (body && body.syncKey) || '1';
+    // Unauthenticated callers can never act on behalf of a registered account
+    if (Object.values(store._users || {}).some(u => u && u.id === requested)) return '__anon__';
+    return requested;
+  }
+
+  // ─── Helper: Is this sync key owned by a registered account? ───
+  // Account data (u_<username>) must only be readable/writable by that account
+  // (or an admin). Anonymous shared keys like "1" or "my-bme-pass" stay open.
+  function keyOwnerUser(key) {
+    if (!key) return null;
+    return Object.values(store._users || {}).find(u => u && u.id === key) || null;
+  }
+  function canAccessKey(key) {
+    if (!keyOwnerUser(key)) return true;
+    const user = getAuthUser();
+    return Boolean(user && (user.id === key || user.role === 'admin'));
+  }
+  function denyAccess() {
+    res.writeHead(403, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Forbidden: this data belongs to another account' }));
   }
 
   // ─── API: File Upload (POST /api/upload) ───
@@ -4904,7 +4954,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       const { task_id: taskId, ownerId: rawOwnerId, formatType = 'mp4', courseCode = '', customTitle = '', folderId = 'f-uploads', mediaUrl = '', retryCount = 0 } = data;
-      const ownerId = rawOwnerId || resolveOwnerId(data);
+      const ownerId = resolveOwnerId({ syncKey: rawOwnerId || data.syncKey });
 
       try {
         let taskInfo = null;
@@ -5274,6 +5324,12 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (!(await isSafePublicUrl(targetUrl))) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Target host is not allowed' }));
+      return;
+    }
+
     try {
       const parsedTarget = new URL(targetUrl);
       const isHttps = parsedTarget.protocol === 'https:';
@@ -5428,9 +5484,18 @@ const server = http.createServer(async (req, res) => {
   // ─── API: Backup Download (GET /api/backup) ───
   if (pathname === '/api/backup' && req.method === 'GET') {
     res.setHeader('Cache-Control', 'no-store');
+    // Never dump the whole store (it contains password hashes and session tokens).
+    const backupUser = getAuthUser();
+    const backupKey = backupUser ? backupUser.id : (url.searchParams.get('key') || '').trim();
+    if (!backupKey || backupKey.startsWith('_') || !canAccessKey(backupKey)) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'กรุณาเข้าสู่ระบบก่อนดาวน์โหลด Backup' }));
+      return;
+    }
+    const backupData = (await dbAdapter.getUserData(backupKey)) || {};
     res.setHeader('Content-Disposition', `attachment; filename="ecalendar-backup-${new Date().toISOString().slice(0,10)}.json"`);
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(store, null, 2));
+    res.end(JSON.stringify({ key: backupKey, exportedAt: new Date().toISOString(), data: backupData }, null, 2));
     return;
   }
 
@@ -5645,6 +5710,12 @@ const server = http.createServer(async (req, res) => {
 
   // ─── API: Admin Delete Users (POST /api/admin/delete-users) ───
   if (pathname === '/api/admin/delete-users' && req.method === 'POST') {
+    const adminUser = getAuthUser();
+    if (!adminUser || adminUser.role !== 'admin') {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Admin only' }));
+      return;
+    }
     parseJsonBody(async (err, data) => {
       if (err) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -7437,6 +7508,11 @@ const server = http.createServer(async (req, res) => {
     if (key.startsWith('_') || key === '__proto__' || key === 'constructor' || key === 'prototype') {
       res.writeHead(403, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Forbidden key' }));
+      return;
+    }
+
+    if (!canAccessKey(key)) {
+      denyAccess();
       return;
     }
 

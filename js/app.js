@@ -361,7 +361,8 @@
     });
 
     // Auto sync background polling — ONLY for authenticated users, NOT share-link visitors
-    if (!isShareRoute && window.CloudSync && isLoggedIn) {
+    const isLoggedIn = Boolean(window.CloudSync && CloudSync.getCurrentUser());
+    if (!isShareRoute && window.CloudSync && (isLoggedIn || CloudSync.getSyncKey())) {
       CloudSync.startAutoSync(cloudData => {
         if (cloudData) {
           syncSmartWithCloud(cloudData);
@@ -441,7 +442,9 @@
     const isTyping = document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
     if (isTyping) return;
 
-    if (state.currentTopView === 'dashboard') {
+    if (state.currentTopView === 'home') {
+      renderHomeView();
+    } else if (state.currentTopView === 'dashboard') {
       renderDashboardCurrentView();
     } else if (state.currentTopView === 'study') {
       renderStudyView();
@@ -723,11 +726,14 @@
     try {
       fetch('/api/files/delete', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(window.CloudSync && CloudSync.getAuthToken() ? { 'Authorization': `Bearer ${CloudSync.getAuthToken()}` } : {})
+        },
         body: JSON.stringify({
           id,
           url: item.url,
-          key: window.CloudSync ? window.CloudSync.getSyncKey() : '1'
+          syncKey: window.CloudSync ? window.CloudSync.getSyncKey() : ''
         })
       }).catch(() => {});
     } catch (_) {}
@@ -751,12 +757,9 @@
   function applyTheme() {
     document.documentElement.setAttribute('data-theme', state.theme);
     const btn = document.getElementById('theme-toggle');
-    if (btn) btn.textContent = state.theme === 'dark' ? '☀️' : '🌙';
-    const mobBtn = document.getElementById('mob-theme-toggle');
-    if (mobBtn) {
-      const icon = mobBtn.querySelector('.mob-icon');
-      if (icon) icon.textContent = state.theme === 'dark' ? '☀️' : '🌙';
-    }
+    const use = btn && btn.querySelector('use');
+    if (use) use.setAttribute('href', state.theme === 'dark' ? '#i-sun' : '#i-moon');
+    document.querySelectorAll('meta[name="theme-color"]').forEach(m => m.setAttribute('content', state.theme === 'dark' ? '#16130F' : '#FBF8F3'));
   }
 
   function toggleTheme() {
@@ -806,74 +809,142 @@
     }
   }
 
-  // ─── View 0: Home Landing Page (E-Calendar for personal use) ─
+  // ─── View 0: Home — "what does my day look like?" ─────────
+  function humanDuration(min) {
+    if (min < 1) return 'ไม่ถึงนาที';
+    if (min < 60) return `${min} นาที`;
+    const h = Math.floor(min / 60), m = min % 60;
+    return m ? `${h} ชม. ${m} นาที` : `${h} ชม.`;
+  }
+
   function renderHomeView() {
     const container = document.getElementById('view-egbe-home');
     if (!container) return;
 
+    const now = new Date();
+    const hour = now.getHours();
+    const nowMin = hour * 60 + now.getMinutes();
+    const greeting = hour < 5 ? 'ดึกแล้วนะ' : hour < 12 ? 'อรุณสวัสดิ์' : hour < 17 ? 'สวัสดีตอนบ่าย' : hour < 21 ? 'สวัสดีตอนเย็น' : 'ราตรีสวัสดิ์';
+    const user = window.CloudSync ? CloudSync.getCurrentUser() : null;
+    const firstName = user && user.displayName ? String(user.displayName).split(' ')[0] : '';
+    const dateLabel = now.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+    const todayKey = getDayKey(now.getDay());
+    const blocks = getDayBlocks(todayKey);
+    const checks = state.checklist[getCheckKey(todayKey)] || {};
+    const progress = countStudyProgress(blocks, checks);
+
+    // Find what's happening now and what's next (blocks may cross midnight)
+    let current = null, next = null;
+    blocks.forEach(b => {
+      const s = timeToMinutes(b.start);
+      const e = s + blockMinutes(b);
+      if (nowMin >= s && nowMin < e && !current) current = { b, left: e - nowMin };
+      else if (s > nowMin && (!next || s < timeToMinutes(next.b.start))) next = { b, inMin: s - nowMin };
+    });
+
+    const tagOf = b => TAGS[b.tag] || TAGS.break;
+    const place = b => b.subtitle ? `<span class="meta"><svg class="i i-sm"><use href="#i-pin"/></svg>${escHtml(b.subtitle)}</span>` : '';
+
+    let focusHtml;
+    if (current) {
+      const pct = Math.min(100, Math.round((1 - current.left / blockMinutes(current.b)) * 100));
+      focusHtml = `
+        <div class="focus-card is-now" style="--tag:${tagOf(current.b).color}">
+          <div class="focus-eyebrow"><span class="live-dot"></span>ตอนนี้</div>
+          <div class="focus-title">${escHtml(current.b.title)}</div>
+          <div class="focus-meta"><span class="meta"><svg class="i i-sm"><use href="#i-clock"/></svg>${current.b.start}–${current.b.end}</span>${place(current.b)}</div>
+          <div class="focus-progress" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div>
+          <div class="focus-foot">อีก ${humanDuration(current.left)} จะเสร็จ${next ? ` · ต่อด้วย <strong>${escHtml(next.b.title)}</strong> ${next.b.start}` : ''}</div>
+        </div>`;
+    } else if (next) {
+      focusHtml = `
+        <div class="focus-card" style="--tag:${tagOf(next.b).color}">
+          <div class="focus-eyebrow">ถัดไป · อีก ${humanDuration(next.inMin)}</div>
+          <div class="focus-title">${escHtml(next.b.title)}</div>
+          <div class="focus-meta"><span class="meta"><svg class="i i-sm"><use href="#i-clock"/></svg>${next.b.start}–${next.b.end}</span>${place(next.b)}</div>
+        </div>`;
+    } else {
+      focusHtml = `
+        <div class="focus-card is-quiet">
+          <div class="focus-eyebrow">${blocks.length ? 'วันนี้ครบแล้ว' : 'วันนี้ยังว่าง'}</div>
+          <div class="focus-title">${blocks.length ? 'ไม่มีอะไรต่อแล้ว พักผ่อนได้เลย' : 'ยังไม่มีอะไรในตารางวันนี้'}</div>
+          <div class="focus-meta">${blocks.length ? 'พรุ่งนี้ค่อยว่ากันใหม่' : 'เพิ่มคาบเรียนในหน้าหลักสูตร หรือเพิ่มกิจกรรมเองได้'}</div>
+          ${blocks.length ? '' : '<button class="btn btn-primary btn-sm" id="home-add-btn"><svg class="i i-sm"><use href="#i-plus"/></svg>เพิ่มกิจกรรม</button>'}
+        </div>`;
+    }
+
+    const agendaHtml = blocks.length ? blocks.map(b => {
+      const s = timeToMinutes(b.start), e = s + blockMinutes(b);
+      const isPast = e <= nowMin && !(current && current.b === b);
+      const isNow = current && current.b === b;
+      return `
+        <li class="agenda-row ${isPast ? 'is-past' : ''} ${isNow ? 'is-now' : ''}" style="--tag:${tagOf(b).color}">
+          <span class="agenda-time">${b.start}</span>
+          <span class="agenda-bar" aria-hidden="true"></span>
+          <span class="agenda-body">
+            <span class="agenda-title">${escHtml(b.title)}</span>
+            ${b.subtitle ? `<span class="agenda-sub">${escHtml(b.subtitle)}</span>` : ''}
+          </span>
+          <span class="agenda-dur">${getDuration(b.start, b.end)}</span>
+        </li>`;
+    }).join('') : '';
+
+    const progressHtml = progress.total ? `
+      <div class="home-progress">
+        <div class="home-progress-num">${progress.done}<span>/${progress.total}</span></div>
+        <div class="home-progress-text">${progress.done === progress.total ? 'ทบทวนครบทุกบล็อกแล้ว เก่งมาก' : `บล็อกทบทวนวันนี้ · เหลืออีก ${progress.total - progress.done}`}</div>
+      </div>` : '';
+
+    const shortcuts = [
+      ['dashboard', 'i-today', 'ตารางทั้งสัปดาห์', 'เช็กลิสต์และกิจกรรมแต่ละวัน'],
+      ['curriculum', 'i-book', 'หลักสูตรและเกรด', 'รายวิชาเทอมนี้ คำนวณ GPAX'],
+      ['study', 'i-folder', 'คลังเอกสาร', `${(state.studyLinks || []).length} ไฟล์และลิงก์`],
+      ['graph', 'i-graph', 'แผนผังวิชา', 'วิชาไหนต่อยอดไปวิชาไหน ปี 1–4']
+    ];
+
     container.innerHTML = `
-      <div class="hero-section">
-        <div class="hero-badge">
-          <span class="hero-badge-dot"></span>
-          <span class="hero-badge-text">Personal Productivity &amp; Study Suite</span>
+      <section class="home">
+        <header class="home-head">
+          <p class="home-date">${dateLabel}</p>
+          <h1 class="home-greeting">${greeting}${firstName ? `, ${escHtml(firstName)}` : ''}</h1>
+        </header>
+
+        <div class="home-grid">
+          <div class="home-main">
+            ${focusHtml}
+            ${blocks.length ? `
+              <div class="home-section">
+                <div class="home-section-head">
+                  <h2>วันนี้มีอะไรบ้าง</h2>
+                  <button class="link-btn" data-view="dashboard">เปิดตารางวัน <svg class="i i-sm"><use href="#i-arrow"/></svg></button>
+                </div>
+                <ol class="agenda">${agendaHtml}</ol>
+              </div>` : ''}
+          </div>
+
+          <aside class="home-side">
+            ${progressHtml}
+            <nav class="shortcut-list" aria-label="ทางลัด">
+              ${shortcuts.map(([v, icon, title, sub]) => `
+                <button class="shortcut" data-view="${v}">
+                  <span class="shortcut-icon"><svg class="i"><use href="#${icon}"/></svg></span>
+                  <span class="shortcut-text"><strong>${title}</strong><small>${sub}</small></span>
+                  <svg class="i i-sm shortcut-arrow"><use href="#i-arrow"/></svg>
+                </button>`).join('')}
+            </nav>
+          </aside>
         </div>
-
-        <h1 class="hero-title">
-          E-Calendar<br />
-          <span class="hero-italic">for personal use</span>
-        </h1>
-
-        <p class="hero-subtitle">
-          ระบบจัดการเวลา แผนการศึกษา ตารางเรียน และคลังความรู้ส่วนตัว พร้อมระบบ Real-Time Cloud Sync ทุกอุปกรณ์
-        </p>
-
-        <div class="hero-ctas">
-          <button class="btn-hero-accent" data-view="dashboard">
-            <span>📅 เปิด Daily Dashboard</span>
-          </button>
-          <button class="btn-hero-dark" data-view="study">
-            <span>📝 คลังชีท &amp; โฟลเดอร์</span>
-          </button>
-          <button class="btn-hero-outline" data-view="graph">
-            <span>🕸️ Knowledge Graph</span>
-          </button>
-        </div>
-
-        <div class="hero-features-grid">
-          <div class="feature-card" data-view="dashboard">
-            <div style="font-size:28px;margin-bottom:12px">📅</div>
-            <h3 style="font-size:16px;font-weight:700;margin-bottom:6px;color:var(--label)">Daily Study &amp; Checklist</h3>
-            <p style="font-size:13px;color:var(--label-2);line-height:1.5">ตารางเรียนรายวัน รูทีนชีวิต ติ๊กงาน Check-off อัตโนมัติ พร้อม Real-Time Clock</p>
-          </div>
-
-          <div class="feature-card" data-view="curriculum">
-            <div style="font-size:28px;margin-bottom:12px">📚</div>
-            <h3 style="font-size:16px;font-weight:700;margin-bottom:6px;color:var(--label)">BME Curriculum 139 Credits</h3>
-            <p style="font-size:13px;color:var(--label-2);line-height:1.5">โครงสร้างหลักสูตร 4 ชั้นปี เลือกระหว่าง Grid และ List View พร้อมสรุปหน่วยกิต</p>
-          </div>
-
-          <div class="feature-card" data-view="study">
-            <div style="font-size:28px;margin-bottom:12px">📂</div>
-            <h3 style="font-size:16px;font-weight:700;margin-bottom:6px;color:var(--label)">Study Folders &amp; Files</h3>
-            <p style="font-size:13px;color:var(--label-2);line-height:1.5">จัดระเบียบโฟลเดอร์ ลากไฟล์ Drag &amp; Drop บน iPad และพรีวิว PDF ต่อเนื่องทุกหน้า</p>
-          </div>
-
-          <div class="feature-card" data-view="graph">
-            <div style="font-size:28px;margin-bottom:12px">🕸️</div>
-            <h3 style="font-size:16px;font-weight:700;margin-bottom:6px;color:var(--label)">4-Year Prerequisite Graph</h3>
-            <p style="font-size:13px;color:var(--label-2);line-height:1.5">แผนผังวิชาต่อเนื่อง Interactive SVG ลากโยงวิชาบังคับก่อนตั้งแต่ปี 1 ถึงปี 4</p>
-          </div>
-        </div>
-      </div>
+      </section>
     `;
 
-    // Click handlers for hero elements
     container.querySelectorAll('[data-view]').forEach(el => {
       el.addEventListener('click', (e) => {
         const targetView = e.currentTarget.dataset.view;
         if (targetView) switchTopView(targetView);
       });
     });
+    container.querySelector('#home-add-btn')?.addEventListener('click', () => openAddModal(todayKey));
   }
 
   function switchDashboardView(subviewName) {
@@ -998,28 +1069,16 @@
     if (state.currentDashboardView === 'timeline') renderTimeline(key);
   }
 
-  // ─── Timeline (9th Verbatim) ──────────────────────────────
-  function renderTimeline(dayKey) {
-    const container = document.getElementById('view-timeline');
-    if (!container) return;
+  // ─── Day block model (single source of truth for timeline, stats, week, now-line) ───
+  function getDayBlocks(dayKey) {
     const day = ROUTINES[dayKey];
-    if (!day) return;
+    if (!day) return [];
+    let baseBlocks = isWitchayaUser() ? [...day.blocks] : [];
 
-    const isWitchaya = isWitchayaUser();
-
-    // Base blocks: only Witchaya starts with default ROUTINES. Everyone else starts empty.
-    let baseBlocks = isWitchaya ? [...day.blocks] : [];
-
-    // Build live class blocks from state.curriculum (override hardcoded ROUTINES class blocks)
-    const liveCurriculum = (state.curriculum && state.curriculum.length > 0)
-      ? state.curriculum
-      : null;
-
+    const liveCurriculum = (state.curriculum && state.curriculum.length > 0) ? state.curriculum : null;
     if (liveCurriculum) {
-      // Replace class blocks for this day with live curriculum data
       const dayClasses = liveCurriculum.filter(c => (c.day || '').toLowerCase() === dayKey.toLowerCase() && c.start && c.end);
       if (dayClasses.length > 0) {
-        // Remove old hardcoded class blocks for this day, keep non-class blocks
         const nonClassBlocks = baseBlocks.filter(b => !b.isClass);
         const liveClassBlocks = dayClasses.map(c => ({
           id: `live-class-${c.code}`,
@@ -1030,17 +1089,42 @@
           tag: 'class',
           isClass: true,
           classCode: c.code,
-          notes: c.room ? `ห้อง ${c.room}` : ''
+          notes: ''
         }));
         baseBlocks = [...nonClassBlocks, ...liveClassBlocks];
       }
     }
 
-    // Merge base blocks + custom blocks (overrides replace, extras are added)
     const customExtra = (state.customBlocks[dayKey] || []);
     const overrideIds = new Set(customExtra.filter(b => b._override).map(b => b.id));
     const mergedBase = baseBlocks.filter(b => !overrideIds.has(b.id));
-    const allBlocks = [...mergedBase, ...customExtra].sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+    return [...mergedBase, ...customExtra].sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+  }
+
+  // Minutes a block spans, wrapping past midnight (e.g. sleep 23:00 → 07:00 = 480)
+  function blockMinutes(b) {
+    const s = timeToMinutes(b.start);
+    let e = timeToMinutes(b.end);
+    if (e <= s) e += 1440;
+    return e - s;
+  }
+
+  // Count only checks that belong to blocks that still exist (deleted blocks leave stale keys behind)
+  function countStudyProgress(blocks, checks) {
+    const studyBlocks = blocks.filter(b => b.isStudyBlock || b.tag === 'study');
+    const done = studyBlocks.filter(b => checks[`${b.id}-${b.studyBlockIndex !== undefined ? b.studyBlockIndex : 0}`]).length;
+    return { studyBlocks, total: studyBlocks.length, done };
+  }
+
+  // ─── Timeline (9th Verbatim) ──────────────────────────────
+  function renderTimeline(dayKey) {
+    const container = document.getElementById('view-timeline');
+    if (!container) return;
+    const day = ROUTINES[dayKey];
+    if (!day) return;
+
+    const isWitchaya = isWitchayaUser();
+    const allBlocks = getDayBlocks(dayKey);
 
     const checkKey = getCheckKey(dayKey);
     const checks = state.checklist[checkKey] || {};
@@ -1055,27 +1139,26 @@
     if (allBlocks.length === 0) {
       timelineHtml = `
         <div class="empty-timeline-state" style="text-align:center;padding:3.5rem 1.5rem;background:var(--bg-2);border-radius:var(--r-l);border:1px dashed var(--sep);margin-top:1rem;">
-          <div style="font-size:2.5rem;margin-bottom:0.75rem;">📅</div>
-          <div style="font-size:1.1rem;font-weight:700;color:var(--label);margin-bottom:0.25rem;">ยังไม่มีกิจกรรมในตารางวัน</div>
-          <div style="font-size:0.875rem;color:var(--label-3);margin-bottom:1.25rem;">คุณสามารถกดปุ่ม "＋ เพิ่มกิจกรรม" ด้านบนเพื่อเริ่มจัดตารางเรียนหรือกิจกรรมของคุณเองได้เลย</div>
-          <button class="add-btn" data-day="${dayKey}" id="empty-add-block-btn" style="margin:0 auto;display:inline-flex;">＋ เพิ่มกิจกรรม</button>
+          <div style="font-size:1.1rem;font-weight:600;color:var(--label);margin-bottom:0.35rem;">วันนี้ยังว่างอยู่</div>
+          <div style="font-size:0.9rem;color:var(--label-2);margin-bottom:1.25rem;">ใส่คาบเรียนในหน้าหลักสูตร แล้วจะขึ้นที่นี่ให้เอง — หรือเพิ่มกิจกรรมอื่น ๆ ได้เลย</div>
+          <button class="add-btn" data-day="${dayKey}" id="empty-add-block-btn" style="margin:0 auto;display:inline-flex;"><svg class="i i-sm"><use href="#i-plus"/></svg>เพิ่มกิจกรรม</button>
         </div>`;
     } else {
       timelineHtml = allBlocks.map((block) => renderBlock(block, day, checks, subjects, dayKey)).join('');
     }
 
+    // Only show the stats strip when there is something to measure (sleep / study blocks)
+    const hasMeasurable = allBlocks.some(b => b.tag === 'sleep' || b.tag === 'study' || b.isStudyBlock) || calcWeeklyStreak().total > 0;
     container.innerHTML = `
-      <div class="stats-bar">
-        ${renderStatsBar(day, checks, allBlocks)}
-      </div>
+      ${hasMeasurable ? `<div class="stats-bar">${renderStatsBar(day, checks, allBlocks)}</div>` : ''}
       <div class="day-banner">
         <div class="day-banner-text">
-          <h2>${day.labelEn} · ${day.label}</h2>
+          <h2>วัน${day.label}${dayKey === getDayKey(new Date().getDay()) ? ' <span class="today-chip">วันนี้</span>' : ''}</h2>
           <p>${formatDayDate(dayKey)}</p>
         </div>
         ${statusBadgeHtml}
         <button class="add-btn" data-day="${dayKey}" id="add-block-btn">
-          ＋ เพิ่มกิจกรรม
+          <svg class="i i-sm"><use href="#i-plus"/></svg>เพิ่มกิจกรรม
         </button>
       </div>
       <div class="timeline" id="timeline-${dayKey}">
@@ -1128,8 +1211,9 @@
     });
 
     // Attach add block btn
-    const addBtn = document.getElementById('add-block-btn');
-    if (addBtn) addBtn.addEventListener('click', () => openAddModal(dayKey));
+    container.querySelectorAll('#add-block-btn, #empty-add-block-btn').forEach(btn => {
+      btn.addEventListener('click', () => openAddModal(dayKey));
+    });
 
     updateTimeIndicator(dayKey, allBlocks);
   }
@@ -1146,7 +1230,7 @@
       isClassExtra = `is-class" data-code="${block.classCode}`;
       cardExtra = block.subtitle ? `
         <div class="card-subtitle">
-          <span class="room-badge">📍 ${block.subtitle}</span>
+          <span class="room-badge"><svg class="i i-sm"><use href="#i-pin"/></svg>${escHtml(block.subtitle)}</span>
           <span>${sc.shortName || block.classCode}</span>
         </div>` : '';
     } else if (block.subtitle) {
@@ -1155,6 +1239,7 @@
 
     let studyChecklist = '';
     if (block.isStudyBlock) {
+      if (block.studyBlockIndex === undefined) block.studyBlockIndex = 0;
       const isDone = checks[`${block.id}-${block.studyBlockIndex}`];
       const savedSubject = subjectData[`${block.id}-${block.studyBlockIndex}`] || '';
       studyChecklist = `
@@ -1167,10 +1252,10 @@
             </div>
             <div class="study-check-label-wrap">
               <div class="study-check-label ${isDone ? 'done' : ''}">
-                ${isDone ? '✅' : '📖'} ทำครบแล้ว
+                ${isDone ? 'ทบทวนเสร็จแล้ว' : 'ติ๊กเมื่อทบทวนเสร็จ'}
               </div>
               <input class="study-subject-input" type="text" 
-                placeholder="ระบุวิชาที่จะทบทวน..." 
+                placeholder="จะทบทวนวิชาอะไร" 
                 value="${escHtml(savedSubject)}"
                 data-block-id="${block.id}" data-sb-idx="${block.studyBlockIndex}"
               />
@@ -1191,15 +1276,15 @@
           <div class="tl-dot" style="border-color:${tag.color}"></div>
         </div>
         <div class="tl-card-col">
-          <div class="act-card ${isClassExtra}" data-tag="${block.tag}" data-block-id="${block.id}">
+          <div class="act-card ${isClassExtra}" data-tag="${block.tag}" data-block-id="${block.id}" style="--tag-c:${tag.color}">
             <div class="card-header">
               <div class="card-header-left">
                 <span class="tag-chip" style="color:${tag.color};background:${tag.bg};border-color:${tag.border}">
-                  ${tag.emoji} ${tag.label}
+                  ${tag.label}
                 </span>
               </div>
               <span class="card-duration">${getDuration(block.start, block.end)}</span>
-              <button class="card-edit-btn" data-block-id="${block.id}" title="แก้ไข">✏️</button>
+              <button class="card-edit-btn" data-block-id="${block.id}" title="แก้ไข" aria-label="แก้ไข ${escHtml(block.title)}"><svg class="i i-sm"><use href="#i-pencil"/></svg></button>
             </div>
             <div class="card-title">${escHtml(block.title)}</div>
             ${cardExtra}
@@ -1221,9 +1306,9 @@
   function renderStatsBar(day, checks, allBlocks = []) {
     const isWitchaya = isWitchayaUser();
     const blocksToUse = (allBlocks && allBlocks.length > 0) ? allBlocks : (isWitchaya ? day.blocks : []);
-    const studyBlocks = blocksToUse.filter(b => b.isStudyBlock || b.tag === 'study');
-    const totalStudyBlocks = studyBlocks.length;
-    const doneBlocks = Object.values(checks).filter(Boolean).length;
+    const progress = countStudyProgress(blocksToUse, checks);
+    const totalStudyBlocks = progress.total;
+    const doneBlocks = progress.done;
     const pct = totalStudyBlocks > 0
       ? Math.round((doneBlocks / totalStudyBlocks) * 100)
       : (isWitchaya && day.studyMinutes === 0 ? 100 : 0);
@@ -1235,7 +1320,7 @@
       studyMinutes = day.studyMinutes;
     } else {
       blocksToUse.forEach(b => {
-        const dur = (timeToMinutes(b.end) - timeToMinutes(b.start));
+        const dur = blockMinutes(b);
         if (dur > 0) {
           if (b.tag === 'sleep') sleepMinutes += dur;
           if (b.tag === 'study' || b.isStudyBlock) studyMinutes += dur;
@@ -1247,27 +1332,25 @@
     const sleepM = sleepMinutes % 60;
     const studyH = Math.floor(studyMinutes / 60);
     const studyM = studyMinutes % 60;
-    const studyLabel = studyMinutes === 0 ? 'พักผ่อน'
+    const studyLabel = studyMinutes === 0 ? '—'
       : `${studyH > 0 ? studyH + ' ชม.' : ''}${studyM > 0 ? ' ' + studyM + ' น.' : ''}`;
 
     const r = 20, circ = 2 * Math.PI * r;
     const offset = circ - (pct / 100) * circ;
-    const ringColor = pct === 100 ? '#34c759' : pct >= 50 ? 'var(--accent)' : '#ff9500';
+    const ringColor = pct === 100 ? 'var(--ok)' : 'var(--accent)';
     const weekStat = calcWeeklyStreak();
 
     return `
       <div class="stat-item">
-        <div class="stat-icon">😴</div>
         <div class="stat-body">
-          <div class="stat-label">นอน</div>
+          <div class="stat-label">เวลานอน</div>
           <div class="stat-value">${sleepH}<span> ชม.${sleepM > 0 ? ' ' + sleepM + 'น.' : ''}</span></div>
-          <div class="stat-sub">เป้า ~8 ชม.</div>
+          <div class="stat-sub">${sleepMinutes ? (sleepMinutes >= 420 ? 'พอดีแล้ว' : 'น้อยกว่า 7 ชม. นะ') : 'ยังไม่ได้ใส่บล็อกนอน'}</div>
         </div>
       </div>
       <div class="stat-item">
-        <div class="stat-icon">📖</div>
         <div class="stat-body">
-          <div class="stat-label">ทบทวน</div>
+          <div class="stat-label">เวลาทบทวน</div>
           <div class="stat-value">${studyLabel}</div>
           <div class="stat-sub">${totalStudyBlocks} บล็อก · ${doneBlocks} เสร็จแล้ว</div>
         </div>
@@ -1285,16 +1368,15 @@
         </svg>
         <div class="stat-body">
           <div class="stat-label">วันนี้</div>
-          <div class="stat-value" style="color:${ringColor};font-size:15px">${pct === 100 ? 'ครบแล้ว!' : pct + '%'}</div>
-          <div class="stat-sub">${pct === 100 ? '🎉' : 'เสร็จ ' + doneBlocks + '/' + totalStudyBlocks}</div>
+          <div class="stat-value">${pct === 100 ? 'ครบแล้ว' : pct + '%'}</div>
+          <div class="stat-sub">${totalStudyBlocks ? 'เสร็จ ' + doneBlocks + ' จาก ' + totalStudyBlocks : 'ไม่มีบล็อกทบทวน'}</div>
         </div>
       </div>
       <div class="stat-item">
-        <div class="stat-icon">🔥</div>
         <div class="stat-body">
           <div class="stat-label">สัปดาห์นี้</div>
           <div class="stat-value">${weekStat.done}<span>/${weekStat.total}</span></div>
-          <div class="stat-sub">บล็อกสำเร็จ</div>
+          <div class="stat-sub">บล็อกที่ทำเสร็จ</div>
         </div>
       </div>
     `;
@@ -1304,17 +1386,10 @@
     let done = 0, total = 0;
     const isWitchaya = isWitchayaUser();
     DAY_ORDER.forEach(key => {
-      const day = ROUTINES[key];
-      const customExtra = state.customBlocks[key] || [];
-      const overrideIds = new Set(customExtra.filter(b => b._override).map(b => b.id));
-      const baseBlocks = isWitchaya ? (day ? day.blocks : []).filter(b => !overrideIds.has(b.id)) : [];
-      const allBlocks = [...baseBlocks, ...customExtra];
-      const studyBlocks = allBlocks.filter(b => b.isStudyBlock || b.tag === 'study');
-
-      const checkKey = getCheckKey(key);
-      const checks = state.checklist[checkKey] || {};
-      total += studyBlocks.length;
-      done += Object.values(checks).filter(Boolean).length;
+      const checks = state.checklist[getCheckKey(key)] || {};
+      const p = countStudyProgress(getDayBlocks(key), checks);
+      total += p.total;
+      done += p.done;
     });
     return { done, total };
   }
@@ -1346,7 +1421,7 @@
     if (!timeline) return;
 
     let targetEl = null;
-    for (let i = 0; i < blocks.length - 1; i++) {
+    for (let i = 0; i < blocks.length; i++) {
       const s = timeToMinutes(blocks[i].start);
       const e = timeToMinutes(blocks[i].end) || (timeToMinutes(blocks[i].start) + 60);
       const se = e <= s ? e + 1440 : e;
@@ -1368,35 +1443,12 @@
 
   function startTimeIndicator() {
     setInterval(() => {
+      if (state.currentTopView === 'home' && !document.querySelector('.modal-overlay.open')) renderHomeView();
       if (state.currentTopView === 'dashboard' && state.currentDashboardView === 'timeline') {
         const day = ROUTINES[state.currentDay];
         if (!day) return;
         
-        const isWitchaya = isWitchayaUser();
-        let baseBlocks = isWitchaya ? [...day.blocks] : [];
-        if (state.curriculum && state.curriculum.length > 0) {
-          const dayClasses = state.curriculum.filter(c => c.day === state.currentDay && c.start && c.end);
-          if (dayClasses.length > 0) {
-            const nonClassBlocks = baseBlocks.filter(b => !b.isClass);
-            const liveClassBlocks = dayClasses.map(c => ({
-              id: `live-class-${c.code}`,
-              start: c.start,
-              end: c.end,
-              title: `${c.code} ${c.name}`,
-              subtitle: c.room ? c.room : '',
-              tag: 'class',
-              isClass: true,
-              classCode: c.code,
-              notes: c.room ? `ห้อง ${c.room}` : ''
-            }));
-            baseBlocks = [...nonClassBlocks, ...liveClassBlocks];
-          }
-        }
-
-        const customExtra = state.customBlocks[state.currentDay] || [];
-        const overrideIds = new Set(customExtra.filter(b => b._override).map(b => b.id));
-        const mergedBase = baseBlocks.filter(b => !overrideIds.has(b.id));
-        const allBlocks = [...mergedBase, ...customExtra].sort((a,b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+        const allBlocks = getDayBlocks(state.currentDay);
         updateTimeIndicator(state.currentDay, allBlocks);
       }
     }, 30000);
@@ -1457,7 +1509,7 @@
     days.forEach(d => {
       const classes = getClassesForDay(d);
       if (!classes.length) return;
-      classListHtml += `<h4 style="font-size:13px;font-weight:700;color:var(--label-2);margin-top:20px;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">${dayLabels[d]} ${d === todayKey ? '⭐ วันนี้' : ''}</h4>`;
+      classListHtml += `<h4 style="font-size:13px;font-weight:700;color:var(--label-2);margin-top:20px;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">${dayLabels[d]} ${d === todayKey ? '<span class="today-chip">วันนี้</span>' : ''}</h4>`;
       classListHtml += `<div class="week-class-list">`;
       classes.forEach(cls => {
         const sc = SUBJECT_COLORS[cls.code] || { color:'#64748b', bg:'rgba(100,116,139,0.15)', emoji:'📘', shortName:cls.code };
@@ -1466,7 +1518,7 @@
             <span class="wci-emoji">${sc.emoji}</span>
             <div class="wci-info">
               <div class="wci-name">${cls.name}</div>
-              <div class="wci-meta">📍 ${cls.room ? 'ห้อง ' + cls.room : ''} · ⏰ ${cls.start}–${cls.end} · ${cls.type}</div>
+              <div class="wci-meta">${cls.start}–${cls.end}${cls.room ? ' · ห้อง ' + escHtml(cls.room) : ''} · ${escHtml(cls.type)}</div>
             </div>
             <span class="wci-code" style="background:${sc.bg};color:${sc.color}">${cls.code}</span>
           </div>`;
@@ -1474,7 +1526,8 @@
       classListHtml += `</div>`;
     });
 
-    const legendItems = Object.entries(SUBJECT_COLORS).map(([code, sc]) => `
+    const codesInSchedule = new Set(allDaysClasses.flatMap(x => x.classes.map(c => c.code)));
+    const legendItems = Object.entries(SUBJECT_COLORS).filter(([code]) => codesInSchedule.has(code)).map(([code, sc]) => `
       <div class="legend-item">
         <div class="legend-dot" style="background:${sc.color}"></div>
         <span style="color:${sc.color};font-weight:700">${code}</span>
@@ -1489,7 +1542,7 @@
 
     container.innerHTML = `
       <div class="schedule-header-row">
-        <h2>📆 ตารางเรียน — ภาคเรียนที่ 1/2026 ${isWitchaya ? '(Program B-BI)' : ''}</h2>
+        <h2>ตารางเรียน ภาคเรียนที่ 1/2026 ${isWitchaya ? '<small>Program B-BI</small>' : ''}</h2>
       </div>
       <div style="background:var(--bg-2);border-radius:var(--r-l);border:1px solid var(--sep);padding:20px 24px;box-shadow:var(--shadow-1)">
         <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:20px">
@@ -1498,7 +1551,7 @@
             const isToday = d === todayKey;
             return `
               <div style="flex:1;min-width:130px;text-align:center;padding:14px 10px;border-radius:var(--r-m);background:var(--bg-3);border:${isToday ? '2px solid var(--accent)' : '1px solid var(--sep)'}">
-                <div style="font-size:13px;font-weight:700;margin-bottom:4px;color:${isToday ? 'var(--accent)' : 'var(--label)'}">${dayLabels[d]} ${isToday ? '⭐' : ''}</div>
+                <div style="font-size:13px;font-weight:700;margin-bottom:4px;color:${isToday ? 'var(--accent)' : 'var(--label)'}">${dayLabels[d]}</div>
                 <div style="font-size:11px;color:var(--label-3)">${classes.length} วิชา</div>
                 <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px">
                   ${classes.map(cls => {
@@ -1529,12 +1582,7 @@
       const day = ROUTINES[key];
       const ck = getCheckKey(key);
       const checks = state.checklist[ck] || {};
-      const customExtra = state.customBlocks[key] || [];
-      const overrideIds = new Set(customExtra.filter(b => b._override).map(b => b.id));
-      const baseBlocks = isWitchaya ? (day ? day.blocks : []).filter(b => !overrideIds.has(b.id)) : [];
-      const allBlocks = [...baseBlocks, ...customExtra];
-      const studyBlocks = allBlocks.filter(b => b.isStudyBlock || b.tag === 'study');
-      const done = Object.values(checks).filter(Boolean).length;
+      const { studyBlocks, done } = countStudyProgress(getDayBlocks(key), checks);
       const classes = getClassesForDay(key);
       const isToday = key === todayKey;
       const statusEmojiHtml = isWitchaya ? `<div class="wdc-status">${day.statusEmoji}</div>` : '';
@@ -1543,21 +1591,21 @@
           <div class="wdc-day">${day.short} <span style="font-size:10px;color:var(--label-3)">${day.labelEn.substring(0,3)}</span></div>
           ${statusEmojiHtml}
           <div class="wdc-study">
-            ${studyBlocks.length > 0 ? `📚 ${done}/${studyBlocks.length}` : '🌴 พัก'}
+            ${studyBlocks.length > 0 ? `ทบทวน ${done}/${studyBlocks.length}` : '<span class="muted">ไม่มีบล็อกทบทวน</span>'}
           </div>
           <div class="wdc-classes">${classes.map(c => {
             const sc = SUBJECT_COLORS[c.code] || {};
-            return `<div style="color:${sc.color};font-weight:600;font-size:10px">${sc.emoji || '📘'} ${sc.shortName || c.code}</div>`;
+            return `<div class="wdc-class" style="--c:${sc.color || 'var(--label-3)'}">${escHtml(sc.shortName || c.code)}</div>`;
           }).join('')}</div>
         </div>`;
     }).join('');
 
     container.innerHTML = `
-      <div style="background:var(--mat-card);backdrop-filter:var(--blur-m);-webkit-backdrop-filter:var(--blur-m);border:1px solid rgba(255,255,255,0.55);border-radius:var(--r-l);padding:20px;margin-bottom:20px;box-shadow:var(--shadow-2)">
+      <div class="panel" style="padding:20px;margin-bottom:20px">
         <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
           <div>
             <div style="font-size:12px;color:var(--label-3);font-weight:600;text-transform:uppercase;letter-spacing:.5px">สรุปสัปดาห์นี้</div>
-            <div style="font-size:26px;font-weight:800;letter-spacing:-0.5px">${weekStat.done} / ${weekStat.total} <span style="font-size:14px;font-weight:500;color:var(--label-3)">บล็อกสำเร็จ</span></div>
+            <div style="font-size:26px;font-weight:700;letter-spacing:-0.5px">${weekStat.done} / ${weekStat.total} <span style="font-size:14px;font-weight:500;color:var(--label-3)">บล็อกทบทวนที่เสร็จ</span></div>
           </div>
           <div style="flex:1;min-width:180px">
             <div style="height:8px;border-radius:4px;background:var(--bg-3);overflow:hidden">
@@ -1799,15 +1847,15 @@
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
           <div>
             <h3 style="font-size:1.15rem;font-weight:700;margin-bottom:2px;display:flex;align-items:center;gap:8px">
-              📊 GPAX Calculator &amp; Grade Simulator
+              คำนวณเกรดเฉลี่ย (GPAX)
               ${honorsBadgeHtml}
             </h3>
-            <p style="font-size:12.5px;color:var(--label-2)">เลือกเกรดรายวิชาด้านล่างเพื่อคำนวณและจำลองเกรดล่วงหน้า (บันทึกและซิงค์ Cloud อัตโนมัติ)</p>
+            <p style="font-size:12.5px;color:var(--label-2)">เลือกเกรดในการ์ดแต่ละวิชาด้านล่าง ระบบจะคำนวณให้ทันที และซิงค์ไปทุกเครื่อง</p>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <button class="btn btn-secondary" id="gpa-sim-a" style="font-size:11.5px;padding:4px 10px;border-radius:var(--r-pill)">✨ จำลอง A ล้วน</button>
-            <button class="btn btn-secondary" id="gpa-sim-bplus" style="font-size:11.5px;padding:4px 10px;border-radius:var(--r-pill)">📈 จำลอง B+ ล้วน</button>
-            <button class="btn btn-secondary" id="gpa-reset" style="font-size:11.5px;padding:4px 10px;border-radius:var(--r-pill);color:var(--label-3)">🔄 ล้างเกรด</button>
+            <button class="btn btn-secondary" id="gpa-sim-a" style="font-size:11.5px;padding:4px 10px;border-radius:var(--r-pill)">ถ้าได้ A ทุกวิชา</button>
+            <button class="btn btn-secondary" id="gpa-sim-bplus" style="font-size:11.5px;padding:4px 10px;border-radius:var(--r-pill)">ถ้าได้ B+ ทุกวิชา</button>
+            <button class="btn btn-secondary" id="gpa-reset" style="font-size:11.5px;padding:4px 10px;border-radius:var(--r-pill);color:var(--label-3)">ล้างเกรด</button>
           </div>
         </div>
         <div class="gpax-stats-grid">
@@ -1882,6 +1930,7 @@
 
     // Attach Simulation Buttons
     document.getElementById('gpa-sim-a')?.addEventListener('click', () => {
+      if (Object.keys(state.courseGrades || {}).length && !confirm('จะเขียนทับเกรดที่ใส่ไว้ทั้งหมดเป็น A — แน่ใจไหม?')) return;
       if (!state.courseGrades) state.courseGrades = {};
       curriculumCourses.forEach(c => { state.courseGrades[c.code] = 'A'; });
       localStorage.setItem('sd-course-grades', JSON.stringify(state.courseGrades));
@@ -1892,6 +1941,7 @@
     });
 
     document.getElementById('gpa-sim-bplus')?.addEventListener('click', () => {
+      if (Object.keys(state.courseGrades || {}).length && !confirm('จะเขียนทับเกรดที่ใส่ไว้ทั้งหมดเป็น B+ — แน่ใจไหม?')) return;
       if (!state.courseGrades) state.courseGrades = {};
       curriculumCourses.forEach(c => { state.courseGrades[c.code] = 'B+'; });
       localStorage.setItem('sd-course-grades', JSON.stringify(state.courseGrades));
@@ -1902,12 +1952,13 @@
     });
 
     document.getElementById('gpa-reset')?.addEventListener('click', () => {
+      if (Object.keys(state.courseGrades || {}).length && !confirm('ล้างเกรดทั้งหมดที่ใส่ไว้?')) return;
       state.courseGrades = {};
       localStorage.setItem('sd-course-grades', JSON.stringify(state.courseGrades));
       touchUpdatedAt();
       if (window.CloudSync) CloudSync.pushToCloud(state);
       renderCurriculumView();
-      showToast('🔄 ล้างเกรดทั้งหมดเรียบร้อย', 'info');
+      showToast('ล้างเกรดแล้ว', 'info');
     });
 
     // Attach course click listeners
@@ -2140,13 +2191,13 @@
       `;
 
     const studyHeaderDesc = state.isBme !== false
-      ? 'คลังเอกสาร ชีทสรุป Google Classroom และคู่มือ BME พร้อมระบบโฟลเดอร์'
-      : 'คลังเอกสาร ชีทสรุป และไฟล์ส่วนตัวของคุณ พร้อมระบบโฟลเดอร์';
+      ? 'ชีทสรุป ลิงก์ Classroom / Drive และคู่มือ BME — จัดเป็นโฟลเดอร์ได้ ลากไฟล์มาวางได้'
+      : 'ชีทสรุปและไฟล์ของคุณ — จัดเป็นโฟลเดอร์ได้ ลากไฟล์มาวางได้';
 
     container.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.25rem;flex-wrap:wrap;gap:1rem">
         <div>
-          <h2 style="font-family:var(--font-serif);font-size:1.6rem;font-weight:700;margin-bottom:4px">Study Resources &amp; Documents</h2>
+          <h2 style="font-family:var(--font-serif);font-size:1.6rem;font-weight:700;margin-bottom:4px">คลังเอกสาร</h2>
           <p style="font-size:13px;color:var(--label-2)">${studyHeaderDesc}</p>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -4119,11 +4170,11 @@
     container.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.25rem;flex-wrap:wrap;gap:1rem">
         <div>
-          <h2 style="font-family:var(--font-serif);font-size:1.6rem;font-weight:700;margin-bottom:4px">BME Prerequisite &amp; Career Road Map (ปี 1 → ปี 4)</h2>
-          <p style="font-size:13px;color:var(--label-2)">แผนผังเชื่อมโยงเส้นทางการเรียนรู้วิศวกรรมชีวแพทย์ คลิกที่ Node วิชาเพื่อดูเส้นทาง Prerequisite และวิชาที่จะได้เรียนต่อจนถึงปี 4</p>
+          <h2 style="font-family:var(--font-serif);font-size:1.6rem;font-weight:700;margin-bottom:4px">แผนผังวิชา ปี 1 → ปี 4</h2>
+          <p style="font-size:13px;color:var(--label-2)">แตะวิชาไหนก็ได้ เพื่อดูว่าต้องผ่านวิชาอะไรมาก่อน และวิชานี้จะพาไปเรียนอะไรต่อ</p>
         </div>
         <div style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--label-2);background:var(--bg-2);padding:6px 12px;border-radius:var(--r-pill);border:1px solid var(--sep)">
-          <span>💡 คลิกที่การ์ดเพื่อ Trace เส้นทางไปต่อ</span>
+          <span>แตะการ์ดเพื่อดูเส้นทาง</span>
         </div>
       </div>
 
@@ -4132,7 +4183,7 @@
         <div class="graph-toolbar">
           <div class="graph-filter-group">
             <button class="graph-btn-pill ${currentPillar === 'all' ? 'active' : ''}" data-pillar="all">
-              🌈 ทุกสายวิชา (All)
+              ทุกสาย
             </button>
             ${Object.values(BME_PILLARS).map(p => `
               <button class="graph-btn-pill ${currentPillar === p.id ? 'active' : ''}" data-pillar="${p.id}">
@@ -4143,7 +4194,7 @@
 
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
             <div style="position:relative">
-              <input type="text" id="graph-search-input" placeholder="🔍 ค้นหาวิชา เช่น 122, Phy, AI..." value="${escHtml(graphState.searchQuery || '')}" style="padding:6px 12px 6px 28px;font-size:12px;border-radius:var(--r-pill);border:1px solid var(--sep);background:var(--bg-1);color:var(--label);outline:none;width:180px" />
+              <input type="text" id="graph-search-input" placeholder="ค้นหาวิชา เช่น 122, Phy, AI" value="${escHtml(graphState.searchQuery || '')}" style="padding:6px 12px 6px 28px;font-size:12px;border-radius:var(--r-pill);border:1px solid var(--sep);background:var(--bg-1);color:var(--label);outline:none;width:180px" />
               <span style="position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--label-3);pointer-events:none">🔍</span>
               ${graphState.searchQuery ? `<button id="graph-clear-search" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--label-3);font-size:11px">✕</button>` : ''}
             </div>
@@ -4581,6 +4632,7 @@
     const end      = modal.querySelector('#edit-end')?.value || '';
     const notes    = modal.querySelector('#edit-notes')?.value || '';
     const selectedTag = modal.querySelector('.tag-option.selected')?.dataset.tag || 'break';
+    if (!title.trim() || !start || !end) { showToast('กรอกชื่อกิจกรรมและเวลาให้ครบก่อนนะ', 'warning'); return; }
 
     const day = ROUTINES[dayKey];
     const isBaseRoutine = day && day.blocks.some(b => b.id === blockId);
@@ -4723,8 +4775,8 @@
     state.customBlocks[dayKey].push(newBlock);
     saveCustomBlocks();
     closeModal('add-modal');
-    showToast('เพิ่มกิจกรรมแล้ว!', 'success');
-    renderTimeline(dayKey);
+    showToast('เพิ่มลงตารางแล้ว', 'success');
+    if (state.currentTopView === 'home') renderHomeView(); else renderTimeline(dayKey);
   }
 
   // ─── Modal Helpers ───────────────────────────────────────
@@ -4761,12 +4813,44 @@
     const el = document.getElementById('clock');
     if (!el) return;
     const now = new Date();
-    el.textContent = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+    el.textContent = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
   }
 
   function startClock() {
     updateClock();
     setInterval(updateClock, 1000);
+  }
+
+  // ─── Mobile tools sheet (header tools are hidden on small screens) ───
+  function openToolsSheet() {
+    let sheet = document.getElementById('tools-sheet');
+    if (!sheet) {
+      sheet = document.createElement('div');
+      sheet.id = 'tools-sheet';
+      sheet.className = 'modal-overlay sheet-overlay';
+      sheet.setAttribute('role', 'dialog');
+      sheet.setAttribute('aria-label', 'เครื่องมือ');
+      const items = [
+        ['study-toolkit-btn', 'i-tools', 'เครื่องมือเรียน', 'โหลดคลิป/เสียง แปลงสไลด์ PDF'],
+        ['push-notify-btn', 'i-bell', 'การแจ้งเตือน', 'เตือนก่อนเข้าคาบ 15 นาที'],
+        ['calendar-sync-btn', 'i-cal', 'เชื่อมปฏิทิน', 'ส่งตารางไป Apple / Google Calendar']
+      ];
+      sheet.innerHTML = `<div class="modal-box sheet-box">
+          <div class="sheet-handle" aria-hidden="true"></div>
+          ${items.map(([target, icon, label, sub]) => `
+            <button class="sheet-item" data-target="${target}">
+              <svg class="i"><use href="#${icon}"/></svg>
+              <span><strong>${label}</strong><small>${sub}</small></span>
+            </button>`).join('')}
+        </div>`;
+      sheet.addEventListener('click', e => {
+        const item = e.target.closest('.sheet-item');
+        if (e.target === sheet || item) closeModal('tools-sheet');
+        if (item) document.getElementById(item.dataset.target)?.click();
+      });
+      document.body.appendChild(sheet);
+    }
+    openModal('tools-sheet');
   }
 
   // ─── Event Listeners ─────────────────────────────────────
@@ -4819,7 +4903,7 @@
 
     // Theme toggles
     document.getElementById('theme-toggle')?.addEventListener('click', toggleTheme);
-    document.getElementById('mob-theme-toggle')?.addEventListener('click', toggleTheme);
+    document.getElementById('mob-more-btn')?.addEventListener('click', openToolsSheet);
   }
 
   function setup9thEventListeners() {
@@ -4963,6 +5047,18 @@
       }
     });
 
+    // Backup: the endpoint needs to know whose data to export
+    document.getElementById('sync-backup-btn')?.addEventListener('click', (e) => {
+      const token = CloudSync.getAuthToken();
+      const key = CloudSync.getSyncKey();
+      if (!token && !key) {
+        e.preventDefault();
+        showToast('เข้าสู่ระบบหรือตั้ง Sync Key ก่อน แล้วค่อย Backup', 'warning');
+        return;
+      }
+      e.currentTarget.href = token ? `/api/backup?token=${encodeURIComponent(token)}` : `/api/backup?key=${encodeURIComponent(key)}`;
+    });
+
     // Disconnect button
     document.getElementById('sync-disconnect-btn')?.addEventListener('click', () => {
       CloudSync.setSyncKey('');
@@ -4981,12 +5077,7 @@
     // Global keyboard shortcuts
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') {
-        closeModal('edit-modal');
-        closeModal('add-modal');
-        closeModal('sync-modal');
-        closeModal('preview-modal');
-        closeModal('resource-modal');
-        closeModal('study-toolkit-modal');
+        document.querySelectorAll('.modal-overlay.open').forEach(m => closeModal(m.id));
       }
     });
 

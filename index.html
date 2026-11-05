@@ -43,42 +43,63 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/refresh.css" />
   <!-- PDF.js Multi-Page Viewer & JSZip for Instant Client-Side Processing -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body>
 
   <div id="app">
 
+    <!-- Icon sprite: one consistent line-icon set for all app chrome -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+      <defs>
+        <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/></symbol>
+        <symbol id="i-today" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16.5" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/><path d="m9 15 2 2 4-4"/></symbol>
+        <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H20v15H5.5A1.5 1.5 0 0 0 4 19.5z"/><path d="M4 19.5A1.5 1.5 0 0 0 5.5 21H20"/><path d="M8.5 7.5h7"/></symbol>
+        <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+        <symbol id="i-graph" viewBox="0 0 24 24"><circle cx="5.5" cy="6" r="2.5"/><circle cx="5.5" cy="18" r="2.5"/><circle cx="18.5" cy="12" r="2.5"/><path d="M8 6.5c4 .5 5.5 3 8 4.5M8 17.5c4-.5 5.5-3 8-4.5"/></symbol>
+        <symbol id="i-tools" viewBox="0 0 24 24"><path d="M14.5 6.5a4 4 0 0 0 5 5L21 13l-8 8-3-3 8-8"/><path d="M14.5 6.5 17 4a4 4 0 0 1 3 3l-2.5 2.5"/><path d="m3 21 6.5-6.5"/></symbol>
+        <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9"/><path d="M10 20a2.2 2.2 0 0 0 4 0"/></symbol>
+        <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16.5" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4M7.5 13.5h2M11 13.5h2M14.5 13.5h2M7.5 17h2M11 17h2"/></symbol>
+        <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c.8-4 4-6 8-6s7.2 2 8 6"/></symbol>
+        <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18.5a4.5 4.5 0 0 1-.6-9 6 6 0 0 1 11.5 1.6A3.8 3.8 0 0 1 17.5 18.5z"/></symbol>
+        <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5"/></symbol>
+        <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></symbol>
+        <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21z"/><circle cx="12" cy="10" r="2.3"/></symbol>
+        <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+        <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></symbol>
+        <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+        <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+      </defs>
+    </svg>
+
     <!-- ─── Global Header ─── -->
     <header class="app-header" role="banner">
       <div class="header-brand">
-        <a href="#" class="brand-logo" id="brand-logo-btn">
-          <span class="brand-dot"></span>E-Calendar
+        <a href="#" class="brand-logo" id="brand-logo-btn" aria-label="E-Calendar หน้าแรก">
+          <span class="brand-mark" aria-hidden="true"></span>E-Calendar
         </a>
         <nav class="header-nav" aria-label="เมนูหลัก">
-          <button class="nav-link active" data-view="home">Home</button>
-          <button class="nav-link" data-view="dashboard">Daily Dashboard</button>
-          <button class="nav-link" data-view="curriculum">Curriculum</button>
-          <button class="nav-link" data-view="study">Study</button>
-          <button class="nav-link" data-view="graph">Graph</button>
+          <button class="nav-link active" data-view="home">หน้าแรก</button>
+          <button class="nav-link" data-view="dashboard">ตารางวัน</button>
+          <button class="nav-link" data-view="curriculum">หลักสูตร</button>
+          <button class="nav-link" data-view="study">คลังเอกสาร</button>
+          <button class="nav-link" data-view="graph">แผนผังวิชา</button>
         </nav>
       </div>
 
       <div class="header-actions">
-        <div class="online-pill" title="System Online">
-          <span class="online-dot"></span>ONLINE
-        </div>
-        <button class="btn-pill icon-only-btn" id="study-toolkit-btn" onclick="openStudyToolkitModalDirect()" title="🧰 Study Toolkit: ดาวน์โหลดคลิป/เสียง & แปลงสไลด์ PDF">🧰</button>
-        <button class="btn-pill icon-only-btn" id="push-notify-btn" title="แจ้งเตือนคาบเรียนล่วงหน้า 15 นาที">🔔</button>
-        <button class="btn-pill icon-only-btn" id="calendar-sync-btn" title="เชื่อมต่อ Apple &amp; Google Calendar">📅</button>
-        <button class="btn-pill icon-only-btn" id="auth-user-btn" title="บัญชีผู้ใช้งาน">👤</button>
-        <button class="btn-pill icon-only-btn" id="cloud-sync-btn" title="Cloud Sync (สถานะการซิงค์ข้อมูล)">☁️</button>
-        <span id="clock" aria-live="polite" aria-label="เวลาปัจจุบัน">00:00:00</span>
-        <button class="icon-btn" id="theme-toggle" title="Dark / Light mode" aria-label="Toggle theme">🌙</button>
+        <span id="clock" aria-live="off" aria-label="เวลาปัจจุบัน">00:00</span>
+        <button class="hdr-btn hide-sm" id="study-toolkit-btn" title="เครื่องมือ: โหลดคลิป/เสียง และแปลงสไลด์ PDF" aria-label="เครื่องมือเรียน"><svg class="i"><use href="#i-tools"/></svg></button>
+        <button class="hdr-btn hide-sm" id="push-notify-btn" title="เตือนก่อนเข้าคาบ 15 นาที" aria-label="การแจ้งเตือน"><svg class="i"><use href="#i-bell"/></svg></button>
+        <button class="hdr-btn hide-sm" id="calendar-sync-btn" title="ส่งตารางไป Apple / Google Calendar" aria-label="เชื่อมปฏิทิน"><svg class="i"><use href="#i-cal"/></svg></button>
+        <button class="hdr-btn" id="cloud-sync-btn" title="ซิงค์ข้ามอุปกรณ์" aria-label="ซิงค์ข้อมูล" data-sync="local"><svg class="i"><use href="#i-cloud"/></svg><span class="sync-dot" aria-hidden="true"></span></button>
+        <button class="hdr-btn" id="auth-user-btn" title="บัญชีของฉัน" aria-label="บัญชีผู้ใช้"><svg class="i"><use href="#i-user"/></svg></button>
+        <button class="hdr-btn" id="theme-toggle" title="สลับโหมดมืด / สว่าง" aria-label="สลับธีม"><svg class="i"><use href="#i-moon"/></svg></button>
       </div>
     </header>
 
@@ -91,7 +112,7 @@
       <!-- Sub-segmented pill control -->
       <div class="sub-seg-wrap">
         <div class="seg-ctrl" role="tablist">
-          <button class="nav-btn active" data-view="timeline" role="tab">ตารางวัน</button>
+          <button class="nav-btn active" data-view="timeline" role="tab">รายวัน</button>
           <button class="nav-btn" data-view="week" role="tab">สัปดาห์</button>
           <button class="nav-btn" data-view="schedule" role="tab">ตารางเรียน</button>
         </div>
@@ -132,32 +153,14 @@
     </main>
 
     <!-- ─── Mobile Bottom Navigation ─── -->
-    <nav class="mobile-nav" aria-label="Mobile Navigation">
+    <nav class="mobile-nav" aria-label="เมนูหลัก (มือถือ)">
       <div class="mobile-nav-inner">
-        <button class="mob-btn active" data-view="home" aria-label="Home">
-          <span class="mob-icon">🏠</span>
-          <span class="mob-lbl">Home</span>
-        </button>
-        <button class="mob-btn" data-view="dashboard" aria-label="Daily">
-          <span class="mob-icon">📅</span>
-          <span class="mob-lbl">Daily</span>
-        </button>
-        <button class="mob-btn" data-view="curriculum" aria-label="Curriculum">
-          <span class="mob-icon">📚</span>
-          <span class="mob-lbl">Curriculum</span>
-        </button>
-        <button class="mob-btn" data-view="study" aria-label="Study">
-          <span class="mob-icon">📝</span>
-          <span class="mob-lbl">Study</span>
-        </button>
-        <button class="mob-btn" data-view="graph" aria-label="Graph">
-          <span class="mob-icon">🕸️</span>
-          <span class="mob-lbl">Graph</span>
-        </button>
-        <button class="mob-btn" id="mob-theme-toggle" aria-label="Dark/Light Mode">
-          <span class="mob-icon">🌙</span>
-          <span class="mob-lbl">Theme</span>
-        </button>
+        <button class="mob-btn active" data-view="home"><svg class="i"><use href="#i-home"/></svg><span class="mob-lbl">หน้าแรก</span></button>
+        <button class="mob-btn" data-view="dashboard"><svg class="i"><use href="#i-today"/></svg><span class="mob-lbl">ตารางวัน</span></button>
+        <button class="mob-btn" data-view="curriculum"><svg class="i"><use href="#i-book"/></svg><span class="mob-lbl">หลักสูตร</span></button>
+        <button class="mob-btn" data-view="study"><svg class="i"><use href="#i-folder"/></svg><span class="mob-lbl">เอกสาร</span></button>
+        <button class="mob-btn" data-view="graph"><svg class="i"><use href="#i-graph"/></svg><span class="mob-lbl">แผนผัง</span></button>
+        <button class="mob-btn" id="mob-more-btn" aria-label="เครื่องมือ"><svg class="i"><use href="#i-tools"/></svg><span class="mob-lbl">เครื่องมือ</span></button>
       </div>
     </nav>
 
@@ -165,14 +168,14 @@
     <div class="modal-overlay" id="edit-modal" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">
       <div class="modal-box">
         <div class="modal-header">
-          <span class="modal-title" id="edit-modal-title">✏️ แก้ไขกิจกรรม</span>
+          <span class="modal-title" id="edit-modal-title">แก้ไขกิจกรรม</span>
           <button class="modal-close" id="edit-cancel-btn" aria-label="ปิด">✕</button>
         </div>
         <div class="modal-body"></div>
         <div class="modal-actions">
-          <button class="btn btn-danger" id="edit-delete-btn">🗑️ ลบกิจกรรม</button>
+          <button class="btn btn-danger" id="edit-delete-btn">ลบกิจกรรมนี้</button>
           <button class="btn btn-secondary" id="edit-cancel-action-btn">ยกเลิก</button>
-          <button class="btn btn-primary" id="edit-save-btn">💾 บันทึก</button>
+          <button class="btn btn-primary" id="edit-save-btn">บันทึก</button>
         </div>
       </div>
     </div>
@@ -181,7 +184,7 @@
     <div class="modal-overlay" id="add-modal" role="dialog" aria-modal="true" aria-labelledby="add-modal-title">
       <div class="modal-box">
         <div class="modal-header">
-          <span class="modal-title" id="add-modal-title">➕ เพิ่มกิจกรรมใหม่</span>
+          <span class="modal-title" id="add-modal-title">เพิ่มกิจกรรม</span>
           <button class="modal-close" id="add-cancel-btn" aria-label="ปิด">✕</button>
         </div>
         <div class="modal-body">
@@ -220,7 +223,7 @@
         </div>
         <div class="modal-actions">
           <button class="btn btn-secondary" id="add-cancel-action-btn">ยกเลิก</button>
-          <button class="btn btn-primary" id="add-save-btn">➕ เพิ่มกิจกรรม</button>
+          <button class="btn btn-primary" id="add-save-btn">เพิ่มลงตาราง</button>
         </div>
       </div>
     </div>
@@ -353,12 +356,12 @@
     <div class="modal-overlay" id="sync-modal" role="dialog" aria-modal="true" aria-labelledby="sync-modal-title">
       <div class="modal-box">
         <div class="modal-header">
-          <span class="modal-title" id="sync-modal-title">☁️ Cloud Sync (ซิงค์ข้ามอุปกรณ์)</span>
+          <span class="modal-title" id="sync-modal-title">ซิงค์ข้ามอุปกรณ์</span>
           <button class="modal-close" id="sync-cancel-btn" aria-label="ปิด">✕</button>
         </div>
         <div class="modal-body">
           <p style="font-size:12.5px;color:var(--label-2);line-height:1.5;margin-bottom:12px">
-            ตั้งค่า <strong>Sync Key</strong> เดียวกัน (ค่าเริ่มต้นคือ <code>1</code>) บน iPad, iPhone, Mac และ PC เพื่อซิงค์ตารางเรียน, Checklist และโฟลเดอร์ชีทเรียนแบบเรียลไทม์อัตโนมัติ!
+            ใช้ <strong>Sync Key</strong> เดียวกันบนทุกเครื่อง (iPad, iPhone, Mac, PC) แล้วตาราง เช็กลิสต์ และโฟลเดอร์จะตรงกันเอง — แนะนำให้เข้าสู่ระบบแทน จะปลอดภัยกว่าการใช้ Key ที่คนอื่นเดาได้
           </p>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:6px">
             <div id="modal-sync-status" class="status-badge">⚪ กำลังตรวจสอบสถานะ Cloud...</div>
@@ -375,7 +378,7 @@
             <button class="btn btn-secondary" id="sync-force-push-btn" style="font-size:11.5px;padding:7px 10px" title="ส่งข้อมูลเครื่องนี้ขึ้นไปเก็บไว้บน Cloud">
               📤 ส่งข้อมูลขึ้น Cloud
             </button>
-            <a class="btn btn-secondary" href="/api/backup" download style="font-size:11.5px;padding:7px 10px;text-decoration:none;display:inline-flex;align-items:center;gap:4px" title="ดาวน์โหลด Backup ข้อมูลทั้งหมดเป็น JSON">
+            <a class="btn btn-secondary" id="sync-backup-btn" href="/api/backup" download style="font-size:11.5px;padding:7px 10px;text-decoration:none;display:inline-flex;align-items:center;gap:4px" title="ดาวน์โหลด Backup ข้อมูลทั้งหมดเป็น JSON">
               💾 Backup ข้อมูล
             </a>
           </div>
@@ -900,7 +903,7 @@
   </div><!-- #app -->
 
   <!-- LINE Front-end Framework (LIFF) SDK -->
-  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script defer charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script src="js/data.js"></script>
   <script src="js/sync.js"></script>
   <script src="js/push.js"></script>

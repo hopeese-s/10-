@@ -3,14 +3,17 @@
 // E-Calendar for personal use (BME Mahidol)
 // ============================================================
 
-const CACHE_NAME = 'e-calendar-v3';
+const CACHE_NAME = 'e-calendar-v4';
 const STATIC_ASSETS = [
   './',
   './index.html',
   './viewer.html',
   './css/style.css',
+  './css/refresh.css',
   './js/app.js',
   './js/sync.js',
+  './js/data.js',
+  './js/push.js',
   './manifest.json',
   './favicon.ico',
   './icons/icon-192.png',
