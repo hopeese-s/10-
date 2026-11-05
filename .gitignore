@@ -30,3 +30,6 @@ s k - o r - v 1 - a 7 9 7 6 b e 5 f 2 1 c 1 7 e 8 7 b b b 4 a 6 f d f . t x t
  
 sync_store.backup.json
 scratch/
+
+# runtime user uploads (stored on disk / R2, never in git)
+uploads/

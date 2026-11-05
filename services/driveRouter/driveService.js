@@ -4,7 +4,14 @@
 const fs = require('fs');
 const path = require('path');
 const { Readable } = require('stream');
-const { google } = require('googleapis');
+// Loaded on first use only: the Drive client costs ~20 MB of RAM, so a server
+// without Drive configured never pays for it. (@googleapis/drive is the
+// Drive-only package; the full 'googleapis' bundle cost ~110 MB.)
+let _gdrive = null;
+function gdrive() {
+  if (!_gdrive) _gdrive = require('@googleapis/drive');
+  return _gdrive;
+}
 const {
   GOOGLE_SERVICE_ACCOUNT_JSON,
   GOOGLE_DRIVE_PARENT_ID,
@@ -32,7 +39,7 @@ function getDriveClient() {
   // Lets the bot act as the Google account owner, uploading directly to their storage.
   if (hasOAuthConfig) {
     try {
-      const oauth2 = new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET);
+      const oauth2 = new (gdrive().auth.OAuth2)(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET);
       oauth2.setCredentials({ refresh_token: GOOGLE_REFRESH_TOKEN });
       auth = oauth2;
       console.log('🔑 [DriveService] Using OAuth2 refresh token (personal My Drive mode)');
@@ -55,7 +62,7 @@ function getDriveClient() {
       if (credentials && credentials.client_email) {
         console.log(`🔑 [DriveService] Using Service Account: ${credentials.client_email}`);
       }
-      auth = new google.auth.GoogleAuth({ credentials, scopes: SCOPES });
+      auth = new (gdrive().auth.GoogleAuth)({ credentials, scopes: SCOPES });
     } catch (e) {
       console.error('❌ Failed to parse GOOGLE_SERVICE_ACCOUNT_JSON:', e.message);
     }
@@ -65,7 +72,7 @@ function getDriveClient() {
   if (!auth) {
     const localKeyPath = path.join(__dirname, '../../service_account.json');
     if (fs.existsSync(localKeyPath)) {
-      auth = new google.auth.GoogleAuth({ keyFile: localKeyPath, scopes: SCOPES });
+      auth = new (gdrive().auth.GoogleAuth)({ keyFile: localKeyPath, scopes: SCOPES });
     }
   }
 
@@ -77,7 +84,7 @@ function getDriveClient() {
     );
   }
 
-  _driveClient = google.drive({ version: 'v3', auth });
+  _driveClient = gdrive().drive({ version: 'v3', auth });
   return _driveClient;
 }
 

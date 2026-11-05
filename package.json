@@ -4,8 +4,8 @@
   "description": "Daily Routine & Study Dashboard for BME Mahidol students",
   "main": "server.js",
   "scripts": {
-    "start": "node --max-old-space-size=384 server.js",
-    "dev": "node --max-old-space-size=384 server.js"
+    "start": "node --max-old-space-size=128 --max-semi-space-size=2 --optimize-for-size --expose-gc server.js",
+    "dev": "node --max-old-space-size=128 --max-semi-space-size=2 --optimize-for-size --expose-gc server.js"
   },
   "keywords": [
     "study",
@@ -15,12 +15,12 @@
     "Mahidol"
   ],
   "engines": {
-    "node": ">=16"
+    "node": "20.x"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",
+    "@googleapis/drive": "^27.0.0",
     "@supabase/supabase-js": "^2.112.3",
-    "googleapis": "^178.0.0",
     "web-push": "^3.6.7"
   }
 }

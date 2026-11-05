@@ -4732,11 +4732,16 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ error: 'File too large' }));
         return;
       }
-      writeStream.write(chunk);
+      // Backpressure: don't let a fast client pile the upload up in RAM
+      if (!writeStream.write(chunk)) {
+        req.pause();
+        writeStream.once('drain', () => req.resume());
+      }
     });
     req.on('end', async () => {
       if (aborted) return;
-      writeStream.end();
+      // Wait until the file is fully on disk before reading it back for R2
+      await new Promise(resolve => writeStream.end(resolve));
       let fileUrl = `/uploads/${filename}`;
       let uploadedToR2 = false;
 
@@ -4744,7 +4749,6 @@ const server = http.createServer(async (req, res) => {
       if (r2Client) {
         try {
           const { PutObjectCommand } = require('@aws-sdk/client-s3');
-          const fileBuffer = fs.readFileSync(filePath);
           const contentType = safeExt === '.pdf' ? 'application/pdf' :
                               safeExt === '.png' ? 'image/png' :
                               safeExt === '.jpg' || safeExt === '.jpeg' ? 'image/jpeg' :
@@ -4753,7 +4757,8 @@ const server = http.createServer(async (req, res) => {
           await r2Client.send(new PutObjectCommand({
             Bucket: R2_BUCKET_NAME,
             Key: filename,
-            Body: fileBuffer,
+            Body: fs.createReadStream(filePath),   // stream, don't buffer the whole file
+            ContentLength: size,
             ContentType: contentType
           }));
 
@@ -5081,50 +5086,39 @@ const server = http.createServer(async (req, res) => {
       const { fileUrl, format = 'jpg', dpi = 150, quality = 90 } = data;
 
       try {
-        // Resolve local file path or stream from R2
-        let pdfBuffer = null;
+        // Resolve the PDF. A local file is handed over as a disk-backed Blob
+        // (fs.openAsBlob), so it is streamed instead of loaded into RAM; the old
+        // code held the PDF twice (buffer + concatenated multipart body).
         const filename = path.basename(fileUrl);
         const localPath = path.join(UPLOAD_DIR, filename);
+        let pdfBlob = null;
 
         if (fs.existsSync(localPath)) {
-          pdfBuffer = fs.readFileSync(localPath);
+          pdfBlob = typeof fs.openAsBlob === 'function'
+            ? await fs.openAsBlob(localPath, { type: 'application/pdf' })
+            : new Blob([await fs.promises.readFile(localPath)], { type: 'application/pdf' });
         } else if (r2Client) {
           const { GetObjectCommand } = require('@aws-sdk/client-s3');
           const r2Res = await r2Client.send(new GetObjectCommand({
             Bucket: R2_BUCKET_NAME,
             Key: filename
           }));
-          const chunks = [];
-          for await (const chunk of r2Res.Body) chunks.push(chunk);
-          pdfBuffer = Buffer.concat(chunks);
+          const bytes = await r2Res.Body.transformToByteArray();
+          pdfBlob = new Blob([bytes], { type: 'application/pdf' });
         } else {
           throw new Error('PDF file not found on server storage');
         }
 
-        // Send Multipart Form Data to OmniLoad /api/convert/pdf-to-images
-        const boundary = '----WebKitFormBoundary' + crypto.randomBytes(16).toString('hex');
-        const formBuffers = [];
-
-        formBuffers.push(Buffer.from(
-          `--${boundary}\r\n` +
-          `Content-Disposition: form-data; name="file"; filename="${filename}"\r\n` +
-          `Content-Type: application/pdf\r\n\r\n`
-        ));
-        formBuffers.push(pdfBuffer);
-        formBuffers.push(Buffer.from(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="output_format"\r\n\r\n${format}`));
-        formBuffers.push(Buffer.from(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="dpi"\r\n\r\n${dpi}`));
-        formBuffers.push(Buffer.from(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="quality"\r\n\r\n${quality}`));
-        formBuffers.push(Buffer.from(`\r\n--${boundary}--\r\n`));
-
-        const fullBody = Buffer.concat(formBuffers);
+        // Send multipart form data to OmniLoad /api/convert/pdf-to-images
+        const form = new FormData();
+        form.append('file', pdfBlob, filename);
+        form.append('output_format', String(format));
+        form.append('dpi', String(dpi));
+        form.append('quality', String(quality));
 
         const convRes = await fetch(`${activeOmniLoadUrl}/api/convert/pdf-to-images`, {
           method: 'POST',
-          headers: {
-            'Content-Type': `multipart/form-data; boundary=${boundary}`,
-            'Content-Length': fullBody.length.toString()
-          },
-          body: fullBody,
+          body: form,
           signal: AbortSignal.timeout(60000)
         });
 
@@ -5138,10 +5132,11 @@ const server = http.createServer(async (req, res) => {
         for (const page of (convData.pages || [])) {
           const imgRes = await fetch(`${activeOmniLoadUrl}/downloads/${encodeURIComponent(page.filename)}`);
           if (imgRes.ok) {
-            const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
             const imgTargetName = `${crypto.randomBytes(6).toString('hex')}_${page.filename}`;
             const imgLocalPath = path.join(UPLOAD_DIR, imgTargetName);
-            fs.writeFileSync(imgLocalPath, imgBuffer);
+            // stream straight to disk instead of buffering each image
+            await require('stream/promises').pipeline(Readable.fromWeb(imgRes.body), fs.createWriteStream(imgLocalPath));
+            const imgSize = fs.statSync(imgLocalPath).size;
 
             if (r2Client) {
               try {
@@ -5149,7 +5144,8 @@ const server = http.createServer(async (req, res) => {
                 await r2Client.send(new PutObjectCommand({
                   Bucket: R2_BUCKET_NAME,
                   Key: imgTargetName,
-                  Body: imgBuffer,
+                  Body: fs.createReadStream(imgLocalPath),
+                  ContentLength: imgSize,
                   ContentType: format === 'png' ? 'image/png' : 'image/jpeg'
                 }));
               } catch (_) {}
@@ -7661,13 +7657,19 @@ const server = http.createServer(async (req, res) => {
     const ext = path.extname(resolvedPath).toLowerCase();
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
-    // Set caching: PDFs can be cached for a day, other files keep no‑cache
+    // Caching: PDFs for a day; everything else is revalidated with an ETag so
+    // browsers get a tiny 304 instead of re-downloading unchanged JS/CSS.
+    const etag = `W/"${stats.size.toString(16)}-${Math.floor(stats.mtimeMs).toString(16)}"`;
+    res.setHeader('ETag', etag);
     if (ext === '.pdf') {
       res.setHeader('Cache-Control', 'public, max-age=86400');
     } else {
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
+      res.setHeader('Cache-Control', 'no-cache');
+    }
+    if (req.headers['if-none-match'] === etag && !req.headers.range) {
+      res.writeHead(304);
+      res.end();
+      return;
     }
 
     // Support HTTP Range requests for progressive loading
@@ -7718,7 +7720,7 @@ setInterval(() => {
   if (typeof global.gc === 'function') {
     try { global.gc(); } catch (_) {}
   }
-}, 15 * 60 * 1000);
+}, 5 * 60 * 1000);
 
 setInterval(async () => {
   if (!webpush || !store._pushSubscriptions || !vapidKeys.publicKey) return;
