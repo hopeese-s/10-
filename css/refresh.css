@@ -322,7 +322,7 @@ h1, h2, h3, h4 { line-height: 1.3; letter-spacing: -0.01em; }
 }
 
 /* ─── Home ─── */
-.home { padding: 0.5rem 0 2rem; }
+.home-view { padding: 0.5rem 0 2rem; }
 .home-head { margin-bottom: 1.5rem; }
 .home-date { color: var(--label-3); font-size: 0.92rem; margin-bottom: 2px; }
 .home-greeting {
@@ -861,3 +861,11 @@ button, input, select, textarea { font-family: inherit; }
 .time-now-indicator { z-index: 0; }
 .tl-card-col { position: relative; z-index: 1; }
 .tl-time-col { position: relative; z-index: 2; }
+
+/* Witchaya's day status pill (กลับบ้าน / หอ) */
+.status-badge { padding: 3px 10px; border-radius: 999px; font-size: 0.78rem; font-weight: 600; line-height: 1.5; align-self: center; white-space: nowrap; }
+.status-badge.home { background: var(--ok-bg); color: var(--ok); }
+.status-badge.dorm { background: var(--accent-bg); color: var(--accent); }
+
+/* Language switch */
+.lang-label { font-family: var(--font-mono); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.04em; border: 1.5px solid currentColor; border-radius: 6px; padding: 1px 4px; line-height: 1.2; }

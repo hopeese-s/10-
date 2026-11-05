@@ -518,7 +518,7 @@
             sub: `Cloud Vault (${(f.size ? (f.size / 1024).toFixed(1) + ' KB' : '')})`,
             type: isPdf ? 'pdf' : isImg ? 'image' : 'file',
             url: f.url,
-            desc: `บันทึกเมื่อ ${f.uploadedAt ? new Date(f.uploadedAt).toLocaleString('th-TH') : 'ก่อนหน้า'}`,
+            desc: `บันทึกเมื่อ ${f.uploadedAt ? new Date(f.uploadedAt).toLocaleString((window.I18N ? I18N.locale() : 'th-TH')) : 'ก่อนหน้า'}`,
             folderId: 'f-uploads',
             createdAt: f.uploadedAt || new Date().toISOString()
           });
@@ -827,7 +827,7 @@
     const greeting = hour < 5 ? 'ดึกแล้วนะ' : hour < 12 ? 'อรุณสวัสดิ์' : hour < 17 ? 'สวัสดีตอนบ่าย' : hour < 21 ? 'สวัสดีตอนเย็น' : 'ราตรีสวัสดิ์';
     const user = window.CloudSync ? CloudSync.getCurrentUser() : null;
     const firstName = user && user.displayName ? String(user.displayName).split(' ')[0] : '';
-    const dateLabel = now.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const dateLabel = now.toLocaleDateString((window.I18N ? I18N.locale() : 'th-TH'), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
     const todayKey = getDayKey(now.getDay());
     const blocks = getDayBlocks(todayKey);
@@ -904,7 +904,7 @@
     ];
 
     container.innerHTML = `
-      <section class="home">
+      <section class="home-view">
         <header class="home-head">
           <p class="home-date">${dateLabel}</p>
           <h1 class="home-greeting">${greeting}${firstName ? `, ${escHtml(firstName)}` : ''}</h1>
@@ -1053,9 +1053,10 @@
       btn.className = `day-tab ${isActive ? 'active' : ''} ${isToday ? 'today' : ''}`;
       btn.dataset.day = key;
       const statusHtml = isWitchaya ? `<span class="day-tab-status">${day.statusEmoji}</span>` : '';
+      const en = window.I18N && I18N.lang === 'en';
       btn.innerHTML = `
-        <span class="day-tab-short">${day.short}</span>
-        <span class="day-tab-en">${day.labelEn.substring(0, 3)}</span>
+        <span class="day-tab-short">${en ? day.labelEn.substring(0, 3) : day.short}</span>
+        ${en ? '' : `<span class="day-tab-en">${day.labelEn.substring(0, 3)}</span>`}
         ${statusHtml}
       `;
       btn.addEventListener('click', () => selectDay(key));
@@ -1153,7 +1154,7 @@
       ${hasMeasurable ? `<div class="stats-bar">${renderStatsBar(day, checks, allBlocks)}</div>` : ''}
       <div class="day-banner">
         <div class="day-banner-text">
-          <h2>วัน${day.label}${dayKey === getDayKey(new Date().getDay()) ? ' <span class="today-chip">วันนี้</span>' : ''}</h2>
+          <h2>${window.I18N && I18N.lang === 'en' ? day.labelEn : 'วัน' + day.label}${dayKey === getDayKey(new Date().getDay()) ? ' <span class="today-chip">วันนี้</span>' : ''}</h2>
           <p>${formatDayDate(dayKey)}</p>
         </div>
         ${statusBadgeHtml}
@@ -1298,8 +1299,7 @@
   function formatDayDate(dayKey) {
     const dateStr = getDateKey(dayKey);
     const d = new Date(dateStr + 'T00:00:00');
-    const thMonths = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
-    return `${d.getDate()} ${thMonths[d.getMonth()]} ${d.getFullYear() + 543}`;
+    return d.toLocaleDateString((window.I18N ? I18N.locale() : 'th-TH'), { day: 'numeric', month: 'long', year: 'numeric' });
   }
 
   // ─── Stats Bar (9th Verbatim) ────────────────────────────
@@ -1344,7 +1344,7 @@
       <div class="stat-item">
         <div class="stat-body">
           <div class="stat-label">เวลานอน</div>
-          <div class="stat-value">${sleepH}<span> ชม.${sleepM > 0 ? ' ' + sleepM + 'น.' : ''}</span></div>
+          <div class="stat-value">${sleepH}<span> ชม.${sleepM > 0 ? ' ' + sleepM + ' น.' : ''}</span></div>
           <div class="stat-sub">${sleepMinutes ? (sleepMinutes >= 420 ? 'พอดีแล้ว' : 'น้อยกว่า 7 ชม. นะ') : 'ยังไม่ได้ใส่บล็อกนอน'}</div>
         </div>
       </div>
@@ -4788,7 +4788,11 @@
 
   function closeModal(id) {
     const modal = document.getElementById(id);
-    if (modal) modal.classList.remove('open');
+    if (modal) {
+      modal.classList.remove('open');
+      // some modals (push, share…) force themselves visible with an inline style
+      if (modal.style.display === 'flex' || modal.style.display === 'block') modal.style.display = '';
+    }
     document.body.style.overflow = '';
     state.editingBlock = null;
     state.addingDay = null;
@@ -4833,7 +4837,8 @@
       const items = [
         ['study-toolkit-btn', 'i-tools', 'เครื่องมือเรียน', 'โหลดคลิป/เสียง แปลงสไลด์ PDF'],
         ['push-notify-btn', 'i-bell', 'การแจ้งเตือน', 'เตือนก่อนเข้าคาบ 15 นาที'],
-        ['calendar-sync-btn', 'i-cal', 'เชื่อมปฏิทิน', 'ส่งตารางไป Apple / Google Calendar']
+        ['calendar-sync-btn', 'i-cal', 'เชื่อมปฏิทิน', 'ส่งตารางไป Apple / Google Calendar'],
+        ['lang-toggle', 'i-globe', window.I18N && I18N.lang === 'en' ? 'ภาษาไทย' : 'English', window.I18N && I18N.lang === 'en' ? 'Switch to Thai' : 'เปลี่ยนเป็นภาษาอังกฤษ']
       ];
       sheet.innerHTML = `<div class="modal-box sheet-box">
           <div class="sheet-handle" aria-hidden="true"></div>
@@ -4904,6 +4909,7 @@
     // Theme toggles
     document.getElementById('theme-toggle')?.addEventListener('click', toggleTheme);
     document.getElementById('mob-more-btn')?.addEventListener('click', openToolsSheet);
+    document.getElementById('lang-toggle')?.addEventListener('click', () => window.I18N && I18N.toggle());
   }
 
   function setup9thEventListeners() {
