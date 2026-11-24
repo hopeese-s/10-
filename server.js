@@ -2392,48 +2392,111 @@ function daysLeftLabel(n) {
   return `อีก ${n} วัน`;
 }
 
+// Palette for exam messages (one accent, calm neutrals)
+const EXAM_UI = {
+  accent: '#B3261E',      // deep red: next exam, buttons
+  accentSoft: '#FCEEEC',  // next-exam card background
+  ink: '#1C1B1F',
+  muted: '#6B6570',
+  faint: '#A8A3AB',
+  line: '#ECE6E3',
+  tile: '#F6F1EF',
+  header: '#2B1A18'
+};
+
+function examCourseName(code) {
+  const c = (DEFAULT_BME_CURRICULUM || []).find(x => x.code === code);
+  return c ? c.name : '';
+}
+
+function examDateParts(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00Z');
+  const opt = { timeZone: 'UTC' };
+  return {
+    weekday: d.toLocaleDateString('th-TH', { ...opt, weekday: 'short' }),
+    day: String(d.getUTCDate()),
+    month: d.toLocaleDateString('th-TH', { ...opt, month: 'short' })
+  };
+}
+
+// One exam as a row: calendar tile on the left, details on the right
 function examCardBox(ex, opts = {}) {
   const n = daysUntil(ex.date);
   const past = n < 0;
+  const hot = !past && (opts.highlight || n <= 1);
+  const p = examDateParts(ex.date);
+  const name = examCourseName(ex.code);
   return {
     type: 'box',
-    layout: 'vertical',
-    backgroundColor: past ? '#F3F4F6' : (n <= 1 ? '#FEE2E2' : '#FEF2F2'),
-    cornerRadius: 'md',
-    paddingAll: '10px',
-    margin: 'sm',
+    layout: 'horizontal',
+    spacing: 'md',
+    margin: opts.first ? 'none' : 'md',
+    paddingAll: '12px',
+    cornerRadius: '14px',
+    backgroundColor: hot ? EXAM_UI.accentSoft : '#FFFFFF',
+    borderWidth: '1px',
+    borderColor: hot ? '#F4C9C4' : EXAM_UI.line,
     contents: [
       {
         type: 'box',
-        layout: 'horizontal',
+        layout: 'vertical',
+        width: '54px',
+        flex: 0,
+        paddingTop: '6px',
+        paddingBottom: '6px',
+        cornerRadius: '10px',
+        backgroundColor: hot ? EXAM_UI.accent : (past ? '#F2F2F2' : EXAM_UI.tile),
+        justifyContent: 'center',
         contents: [
-          { type: 'text', text: ex.code, weight: 'bold', size: 'sm', color: past ? '#9CA3AF' : '#991B1B', flex: 3 },
-          { type: 'text', text: daysLeftLabel(n), weight: 'bold', size: 'xs', color: past ? '#9CA3AF' : '#DC2626', flex: 2, align: 'end' }
+          { type: 'text', text: p.weekday, size: 'xxs', align: 'center', color: hot ? '#FFDAD5' : EXAM_UI.muted },
+          { type: 'text', text: p.day, size: 'xl', weight: 'bold', align: 'center', color: hot ? '#FFFFFF' : (past ? EXAM_UI.faint : EXAM_UI.ink) },
+          { type: 'text', text: p.month, size: 'xxs', align: 'center', color: hot ? '#FFDAD5' : EXAM_UI.muted }
         ]
       },
-      { type: 'text', text: `${thaiShortDate(ex.date)} · ${ex.start}–${ex.end} น.`, size: 'xs', color: past ? '#9CA3AF' : '#374151', margin: 'xs' },
-      { type: 'text', text: `ห้อง ${ex.room} · ที่นั่ง ${ex.seat}${opts.campus === false ? '' : ' · Salaya SIM'}`, size: 'xs', weight: 'bold', color: past ? '#9CA3AF' : '#B91C1C', margin: 'xs', wrap: true }
+      {
+        type: 'box',
+        layout: 'vertical',
+        flex: 1,
+        justifyContent: 'center',
+        contents: [
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: ex.code, size: 'md', weight: 'bold', flex: 1, color: past ? EXAM_UI.faint : EXAM_UI.ink, decoration: past ? 'line-through' : 'none' },
+              { type: 'text', text: daysLeftLabel(n), size: 'xs', weight: 'bold', flex: 0, align: 'end', gravity: 'center', color: past ? EXAM_UI.faint : EXAM_UI.accent }
+            ]
+          },
+          ...(name ? [{ type: 'text', text: name, size: 'xs', color: past ? EXAM_UI.faint : EXAM_UI.muted, wrap: true, margin: 'xs' }] : []),
+          { type: 'text', text: `${ex.start}–${ex.end} น.`, size: 'xs', margin: 'sm', color: past ? EXAM_UI.faint : EXAM_UI.ink },
+          { type: 'text', text: `ห้อง ${ex.room} · ที่นั่ง ${ex.seat}`, size: 'xs', weight: 'bold', margin: 'xs', wrap: true, color: past ? EXAM_UI.faint : EXAM_UI.accent }
+        ]
+      }
     ]
   };
 }
 
-function examBubble(headerSmall, headerBig, bodyContents, footerButtons, color = '#B91C1C') {
+function examBubble(eyebrow, title, subtitle, bodyContents, footerButtons) {
   return {
     type: 'bubble',
+    size: 'mega',
     header: {
       type: 'box',
       layout: 'vertical',
-      backgroundColor: color,
-      paddingAll: '16px',
+      backgroundColor: EXAM_UI.header,
+      paddingAll: '20px',
+      paddingBottom: '18px',
       contents: [
-        { type: 'text', text: headerSmall, color: '#ffffff', size: 'xxs', weight: 'bold' },
-        { type: 'text', text: headerBig, color: '#ffffff', size: 'md', weight: 'bold', wrap: true }
+        { type: 'text', text: eyebrow, color: '#E8B4AC', size: 'xxs', weight: 'bold' },
+        { type: 'text', text: title, color: '#FFFFFF', size: 'xl', weight: 'bold', margin: 'sm', wrap: true },
+        ...(subtitle ? [{ type: 'text', text: subtitle, color: '#CFC4C2', size: 'xs', margin: 'sm', wrap: true }] : [])
       ]
     },
-    body: { type: 'box', layout: 'vertical', paddingAll: '12px', contents: bodyContents },
+    body: { type: 'box', layout: 'vertical', paddingAll: '14px', backgroundColor: '#FAF8F7', contents: bodyContents },
     ...(footerButtons && footerButtons.length ? {
-      footer: { type: 'box', layout: 'horizontal', spacing: 'sm', contents: footerButtons }
-    } : {})
+      footer: { type: 'box', layout: 'horizontal', spacing: 'sm', paddingAll: '12px', backgroundColor: '#FAF8F7', contents: footerButtons }
+    } : {}),
+    styles: { footer: { separator: true, separatorColor: EXAM_UI.line } }
   };
 }
 
@@ -2445,39 +2508,51 @@ function upcomingExams(userId) {
   return getExamsForUser(userId).filter(e => daysUntil(e.date) >= 0).sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
 }
 
-const EXAM_BUTTONS = [
-  { type: 'button', action: { type: 'message', label: 'สอบถัดไป', text: 'สอบถัดไป' }, style: 'primary', color: '#B91C1C', height: 'sm' },
-  { type: 'button', action: { type: 'message', label: 'นับถอยหลัง', text: 'นับถอยหลัง' }, style: 'secondary', height: 'sm' }
-];
+function examButton(label, text, primary) {
+  return primary
+    ? { type: 'button', action: { type: 'message', label, text }, style: 'primary', color: EXAM_UI.accent, height: 'sm' }
+    : { type: 'button', action: { type: 'message', label, text }, style: 'secondary', height: 'sm' };
+}
+
+function examSectionLabel(text, margin = 'none') {
+  return { type: 'text', text, size: 'xxs', weight: 'bold', color: EXAM_UI.muted, margin };
+}
 
 function buildNextExamFlex(userId) {
   const exams = getExamsForUser(userId);
   if (!exams.length) return noExamsMessage();
   const next = upcomingExams(userId)[0];
-  if (!next) return { type: 'text', text: '🎉 สอบครบทุกวิชาแล้ว พักผ่อนได้เต็มที่ครับ!' };
+  if (!next) return { type: 'text', text: 'สอบครบทุกวิชาแล้ว พักผ่อนได้เต็มที่ครับ' };
   const n = daysUntil(next.date);
+  const p = examDateParts(next.date);
+  const stat = (label, value) => ({
+    type: 'box', layout: 'vertical', flex: 1, paddingAll: '10px', cornerRadius: '10px', backgroundColor: '#FFFFFF',
+    borderWidth: '1px', borderColor: EXAM_UI.line,
+    contents: [
+      { type: 'text', text: label, size: 'xxs', color: EXAM_UI.muted },
+      { type: 'text', text: value, size: 'lg', weight: 'bold', color: EXAM_UI.ink, margin: 'xs' }
+    ]
+  });
   return {
     type: 'flex',
     altText: `สอบถัดไป: ${next.code} ${thaiShortDate(next.date)} ${next.start} ห้อง ${next.room} ที่นั่ง ${next.seat}`,
-    contents: examBubble('NEXT EXAM', `📝 สอบถัดไป: ${next.code}`, [
-      { type: 'text', text: daysLeftLabel(n), size: 'xxl', weight: 'bold', color: '#DC2626' },
-      { type: 'text', text: `${thaiShortDate(next.date)} · ${next.start}–${next.end} น.`, size: 'md', weight: 'bold', color: '#1F2937', margin: 'md' },
-      { type: 'separator', margin: 'md' },
+    contents: examBubble('NEXT EXAM', next.code, examCourseName(next.code), [
       {
-        type: 'box', layout: 'horizontal', margin: 'md', contents: [
-          { type: 'box', layout: 'vertical', contents: [
-            { type: 'text', text: 'ห้อง', size: 'xxs', color: '#6B7280' },
-            { type: 'text', text: next.room, size: 'lg', weight: 'bold', color: '#111827' }
-          ] },
-          { type: 'box', layout: 'vertical', contents: [
-            { type: 'text', text: 'ที่นั่ง', size: 'xxs', color: '#6B7280' },
-            { type: 'text', text: next.seat, size: 'lg', weight: 'bold', color: '#111827' }
-          ] }
+        type: 'box', layout: 'horizontal', alignItems: 'flex-end', contents: [
+          { type: 'text', text: daysLeftLabel(n), size: '3xl', weight: 'bold', color: EXAM_UI.accent, flex: 0 },
         ]
       },
-      { type: 'text', text: 'Salaya SIM', size: 'xs', color: '#6B7280', margin: 'sm' },
-      { type: 'text', text: 'อย่าลืม: บัตรนักศึกษา · ปากกา/ดินสอ · ไปถึงก่อน 15 นาที', size: 'xs', color: '#B91C1C', margin: 'md', wrap: true }
-    ], [EXAM_BUTTONS[1], { type: 'button', action: { type: 'message', label: 'ตารางสอบทั้งหมด', text: 'ตารางสอบ' }, style: 'secondary', height: 'sm' }])
+      { type: 'text', text: `${p.weekday} ${p.day} ${p.month} · ${next.start}–${next.end} น.`, size: 'sm', weight: 'bold', color: EXAM_UI.ink, margin: 'sm' },
+      {
+        type: 'box', layout: 'horizontal', spacing: 'sm', margin: 'lg', contents: [
+          stat('ห้องสอบ', next.room),
+          stat('ที่นั่ง', next.seat)
+        ]
+      },
+      { type: 'text', text: 'Salaya SIM', size: 'xs', color: EXAM_UI.muted, margin: 'md' },
+      { type: 'separator', margin: 'lg', color: EXAM_UI.line },
+      { type: 'text', text: 'บัตรนักศึกษา · ปากกา/ดินสอ · ไปถึงก่อน 15 นาที', size: 'xs', color: EXAM_UI.muted, margin: 'lg', wrap: true }
+    ], [examButton('นับถอยหลัง', 'นับถอยหลัง', true), examButton('ตารางสอบ', 'ตารางสอบ')])
   };
 }
 
@@ -2487,12 +2562,12 @@ function buildExamReminderFlex(ex, when) {
   return {
     type: 'flex',
     altText: `${head} ${ex.start} น. ห้อง ${ex.room} ที่นั่ง ${ex.seat}`,
-    contents: examBubble('EXAM REMINDER', `⏰ ${head}`, [
-      examCardBox(ex),
+    contents: examBubble('EXAM REMINDER', head, examCourseName(ex.code), [
+      examCardBox(ex, { highlight: true, first: true }),
       { type: 'text', text: isTomorrow
           ? 'คืนนี้เตรียมบัตรนักศึกษา ปากกา/ดินสอ แล้วนอนให้พอนะครับ'
-          : 'ออกเดินทางได้แล้ว อย่าลืมบัตรนักศึกษา!', size: 'xs', color: '#374151', margin: 'md', wrap: true }
-    ], [EXAM_BUTTONS[0]], '#DC2626')
+          : 'ออกเดินทางได้แล้ว อย่าลืมบัตรนักศึกษา', size: 'xs', color: EXAM_UI.muted, margin: 'lg', wrap: true }
+    ], [examButton('สอบถัดไป', 'สอบถัดไป', true)])
   };
 }
 
@@ -2500,15 +2575,20 @@ function buildDDayCountdownFlex(userId) {
   const exams = getExamsForUser(userId);
   if (!exams.length) return noExamsMessage();
   const upcoming = upcomingExams(userId);
-  if (!upcoming.length) return { type: 'text', text: '🎉 สอบครบทุกวิชาแล้ว พักผ่อนได้เต็มที่ครับ!' };
-  const last = upcoming[upcoming.length - 1];
+  if (!upcoming.length) return { type: 'text', text: 'สอบครบทุกวิชาแล้ว พักผ่อนได้เต็มที่ครับ' };
+  const done = exams.length - upcoming.length;
+  const pct = Math.round((done / exams.length) * 100);
   return {
     type: 'flex',
     altText: `นับถอยหลังสอบ: ${upcoming[0].code} ${daysLeftLabel(daysUntil(upcoming[0].date))}`,
-    contents: examBubble('EXAM COUNTDOWN', '⏳ นับถอยหลังวันสอบปลายภาค', [
-      { type: 'text', text: `เหลือสอบอีก ${upcoming.length} วิชา · วิชาสุดท้าย ${thaiShortDate(last.date)}`, size: 'xs', color: '#6B7280', wrap: true },
-      ...upcoming.slice(0, 3).map(ex => examCardBox(ex))
-    ], [EXAM_BUTTONS[0], { type: 'button', action: { type: 'message', label: 'ตารางสอบทั้งหมด', text: 'ตารางสอบ' }, style: 'secondary', height: 'sm' }], '#DC2626')
+    contents: examBubble('EXAM COUNTDOWN', 'นับถอยหลังวันสอบ', `สอบแล้ว ${done} จาก ${exams.length} วิชา`, [
+      {
+        type: 'box', layout: 'vertical', height: '6px', cornerRadius: '3px', backgroundColor: EXAM_UI.line,
+        contents: [{ type: 'box', layout: 'vertical', width: `${Math.max(pct, 2)}%`, height: '6px', cornerRadius: '3px', backgroundColor: EXAM_UI.accent, contents: [{ type: 'filler' }] }]
+      },
+      examSectionLabel('ใกล้ที่สุด', 'lg'),
+      { type: 'box', layout: 'vertical', margin: 'sm', contents: upcoming.slice(0, 3).map((ex, idx) => examCardBox(ex, { highlight: idx === 0, first: idx === 0 })) }
+    ], [examButton('สอบถัดไป', 'สอบถัดไป', true), examButton('ตารางสอบ', 'ตารางสอบ')])
   };
 }
 
@@ -4056,13 +4136,15 @@ function buildDetailedExamScheduleFlex(userId) {
   const exams = getExamsForUser(userId);
   if (!exams.length) return noExamsMessage();
   const sorted = [...exams].sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+  const next = upcomingExams(userId)[0];
+  const first = examDateParts(sorted[0].date), last = examDateParts(sorted[sorted.length - 1].date);
   return {
     type: 'flex',
-    altText: 'ตารางสอบปลายภาค 1/2026',
-    contents: examBubble('FINAL EXAM SCHEDULE', '🗓️ ตารางสอบปลายภาค 1/2026', [
-      { type: 'text', text: 'Salaya SIM · วิชาเรียนปกติจบแล้วก่อนช่วงสอบ', size: 'xs', color: '#6B7280', wrap: true },
-      ...sorted.map(ex => examCardBox(ex, { campus: false }))
-    ], EXAM_BUTTONS)
+    altText: `ตารางสอบปลายภาค ${sorted.length} วิชา (${first.day} ${first.month} – ${last.day} ${last.month})`,
+    contents: examBubble('FINAL EXAM · 1/2026', 'ตารางสอบปลายภาค',
+      `${sorted.length} วิชา · ${first.day} ${first.month} – ${last.day} ${last.month} · Salaya SIM`,
+      sorted.map((ex, idx) => examCardBox(ex, { highlight: next && ex === next, first: idx === 0 })),
+      [examButton('สอบถัดไป', 'สอบถัดไป', true), examButton('นับถอยหลัง', 'นับถอยหลัง')])
   };
 }
 
@@ -7044,6 +7126,25 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      // Exam commands run before the schedule commands: "ตาราง" alone would otherwise catch "ตารางสอบ".
+      // ─── 14b. Command: สอบถัดไป / next exam (the one exam coming up, with room and seat) ───
+      if (/^(สอบถัดไป|สอบต่อไป|สอบอะไรต่อ|สอบวิชาต่อไป|ที่นั่งสอบ|next\s*exam)/i.test(text)) {
+        await sendLineReply(replyToken, [buildNextExamFlex(linkedUserId)]);
+        return;
+      }
+
+      // ─── 15. Command: ตารางสอบรายวิชา (Detailed Exam Schedule / exam / exams) ───
+      if (/^(ตาราง\s*สอบ|สอบวิชาไรบ้าง|ตารางสอบปลายภาค|ตารางสอบกลางภาค|สอบปลายภาค|สอบกลางภาค|วันสอบวิชา|exam|exams|final|midterm)/i.test(text)) {
+        await sendLineReply(replyToken, [buildDetailedExamScheduleFlex(linkedUserId)]);
+        return;
+      }
+
+      // ─── 16. Command: D-Day / สอบ / วันสอบ / นับถอยหลัง / dday / countdown ───
+      if (/^(สอบ|วันสอบ|dday|d-day|นับถอยหลัง|countdown)/i.test(text)) {
+        await sendLineReply(replyToken, [buildDDayCountdownFlex(linkedUserId)]);
+        return;
+      }
+
       // ─── 4. Command: คาบต่อไป / วิชาต่อไป / next / next class / upcoming / now ───
       if (!/^next\s*exam/i.test(text) && /^(คาบต่อไป|วิชาต่อไป|next|next class|upcoming|now|เรียนไรต่อ|ห้องต่อไป|คาบถัดไป)/i.test(text)) {
         const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
@@ -7298,24 +7399,6 @@ const server = http.createServer(async (req, res) => {
         const pendingCount = tasks.filter(t => !t.done).length;
         const noteCount = (userData.quickNotes || []).length;
         await sendLineReply(replyToken, [buildUserProfileFlex(targetUser, pendingCount, noteCount)]);
-        return;
-      }
-
-      // ─── 14b. Command: สอบถัดไป / next exam (the one exam coming up, with room and seat) ───
-      if (/^(สอบถัดไป|สอบต่อไป|สอบอะไรต่อ|สอบวิชาต่อไป|ที่นั่งสอบ|next\s*exam)/i.test(text)) {
-        await sendLineReply(replyToken, [buildNextExamFlex(linkedUserId)]);
-        return;
-      }
-
-      // ─── 15. Command: ตารางสอบรายวิชา (Detailed Exam Schedule / exam / exams) ───
-      if (/^(ตาราง\s*สอบ|สอบวิชาไรบ้าง|ตารางสอบปลายภาค|ตารางสอบกลางภาค|สอบปลายภาค|สอบกลางภาค|วันสอบวิชา|exam|exams|final|midterm)/i.test(text)) {
-        await sendLineReply(replyToken, [buildDetailedExamScheduleFlex(linkedUserId)]);
-        return;
-      }
-
-      // ─── 16. Command: D-Day / สอบ / วันสอบ / นับถอยหลัง / dday / countdown ───
-      if (/^(สอบ|วันสอบ|dday|d-day|นับถอยหลัง|countdown)/i.test(text)) {
-        await sendLineReply(replyToken, [buildDDayCountdownFlex(linkedUserId)]);
         return;
       }
 
