@@ -869,3 +869,40 @@ button, input, select, textarea { font-family: inherit; }
 
 /* Language switch */
 .lang-label { font-family: var(--font-mono); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.04em; border: 1.5px solid currentColor; border-radius: 6px; padding: 1px 4px; line-height: 1.2; }
+
+/* ── One-time vs weekly events ─────────────────────────── */
+.repeat-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 3px;
+  background: var(--bg-2);
+  border: 1px solid var(--sep);
+  border-radius: 10px;
+}
+.repeat-opt {
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--label-2);
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.repeat-opt.selected { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+.form-hint { display: block; margin-top: 6px; font-size: 0.8rem; color: var(--label-3); }
+.upcoming-list .agenda-row { grid-template-columns: 84px 3px minmax(0, 1fr) auto; }
+.upcoming-date { font-family: inherit; font-size: 0.82rem; line-height: 1.25; }
+.upcoming-empty { font-size: 0.88rem; color: var(--label-3); padding: 10px 2px; border-top: 1px solid var(--sep); }
+.upcoming-del { color: var(--label-3); font-weight: 500; }
+.upcoming-del:hover { color: #C0392B; }
+.once-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(192,57,43,0.1);
+  color: #C0392B;
+}

@@ -896,6 +896,26 @@
         <div class="home-progress-text">${progress.done === progress.total ? 'ทบทวนครบทุกบล็อกแล้ว เก่งมาก' : `บล็อกทบทวนวันนี้ · เหลืออีก ${progress.total - progress.done}`}</div>
       </div>` : '';
 
+    const upcoming = getUpcomingOneTimeEvents();
+    const upcomingHtml = `
+      <div class="home-section">
+        <div class="home-section-head">
+          <h2>กำลังจะมาถึง (ครั้งเดียว)</h2>
+          <button class="link-btn" id="home-add-once-btn"><svg class="i i-sm"><use href="#i-plus"/></svg>เพิ่มนัดครั้งเดียว</button>
+        </div>
+        ${upcoming.length ? `<ol class="agenda upcoming-list">${upcoming.map(b => `
+          <li class="agenda-row" style="--tag:${tagOf(b).color}">
+            <span class="agenda-time upcoming-date">${formatShortDate(b.date)}</span>
+            <span class="agenda-bar" aria-hidden="true"></span>
+            <span class="agenda-body">
+              <span class="agenda-title">${tagOf(b).emoji} ${escHtml(b.title)}</span>
+              <span class="agenda-sub">${b.start}–${b.end}${b.subtitle ? ` · ${escHtml(b.subtitle)}` : ''}</span>
+            </span>
+            ${b.deletable ? `<button class="link-btn upcoming-del" data-day="${b.dayKey}" data-id="${escHtml(b.id)}" aria-label="ลบ ${escHtml(b.title)}">ลบ</button>` : '<span></span>'}
+          </li>`).join('')}</ol>`
+        : '<p class="upcoming-empty">ยังไม่มีนัดครั้งเดียว — กด “เพิ่มนัดครั้งเดียว” แล้วเลือกวันที่ได้เลย (จะขึ้นใน Apple Calendar เฉพาะวันนั้น)</p>'}
+      </div>`;
+
     const shortcuts = [
       ['dashboard', 'i-today', 'ตารางทั้งสัปดาห์', 'เช็กลิสต์และกิจกรรมแต่ละวัน'],
       ['curriculum', 'i-book', 'หลักสูตรและเกรด', 'รายวิชาเทอมนี้ คำนวณ GPAX'],
@@ -921,6 +941,7 @@
                 </div>
                 <ol class="agenda">${agendaHtml}</ol>
               </div>` : ''}
+            ${upcomingHtml}
           </div>
 
           <aside class="home-side">
@@ -945,6 +966,14 @@
       });
     });
     container.querySelector('#home-add-btn')?.addEventListener('click', () => openAddModal(todayKey));
+    container.querySelector('#home-add-once-btn')?.addEventListener('click', () => openAddModal(todayKey, { once: true }));
+    container.querySelectorAll('.upcoming-del').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (!confirm('ลบนัดนี้?')) return;
+        deleteOneTimeEvent(btn.dataset.day, btn.dataset.id);
+        renderHomeView();
+      });
+    });
   }
 
   function switchDashboardView(subviewName) {
@@ -1102,8 +1131,10 @@
     const customExtra = (state.customBlocks[dayKey] || []).filter(b => !b.date || b.date === dateKey);
     if (isWitchayaUser() && typeof FINAL_EXAMS !== 'undefined') {
       FINAL_EXAMS.filter(ex => ex.date === dateKey).forEach(ex => {
+        const id = `exam-${ex.code}-${ex.date}`;
+        if (customExtra.some(b => b.id === id)) return;
         customExtra.push({
-          id: `exam-${ex.code}-${ex.date}`,
+          id,
           start: ex.start,
           end: ex.end,
           title: `สอบ ${ex.code}`,
@@ -1117,6 +1148,42 @@
     const overrideIds = new Set(customExtra.filter(b => b._override).map(b => b.id));
     const mergedBase = baseBlocks.filter(b => !overrideIds.has(b.id));
     return [...mergedBase, ...customExtra].sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+  }
+
+  // All one-time (dated) events from today onward, soonest first: user-added + final exams
+  function getUpcomingOneTimeEvents() {
+    const today = getISODate(new Date());
+    const list = [];
+    const seen = new Set();
+    Object.entries(state.customBlocks || {}).forEach(([dayKey, blocks]) => {
+      (blocks || []).forEach(b => {
+        if (!b.date || b.date < today) return;
+        seen.add(b.id);
+        list.push({ ...b, dayKey, deletable: !String(b.id).startsWith('exam-') });
+      });
+    });
+    if (isWitchayaUser() && typeof FINAL_EXAMS !== 'undefined') {
+      FINAL_EXAMS.forEach(ex => {
+        const id = `exam-${ex.code}-${ex.date}`;
+        if (ex.date < today || seen.has(id)) return;
+        list.push({ id, date: ex.date, start: ex.start, end: ex.end, title: `สอบ ${ex.code}`,
+          subtitle: `${ex.room} · ที่นั่ง ${ex.seat}`, tag: 'exam', deletable: false });
+      });
+    }
+    return list.sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+  }
+
+  function formatShortDate(iso) {
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString((window.I18N ? I18N.locale() : 'th-TH'),
+      { weekday: 'short', day: 'numeric', month: 'short' });
+  }
+
+  function deleteOneTimeEvent(dayKey, blockId) {
+    if (!state.customBlocks[dayKey]) return;
+    state.customBlocks[dayKey] = state.customBlocks[dayKey].filter(b => b.id !== blockId);
+    saveCustomBlocks();
+    showToast('🗑️ ลบแล้ว', 'info');
   }
 
   // Minutes a block spans, wrapping past midnight (e.g. sleep 23:00 → 07:00 = 480)
@@ -1253,6 +1320,9 @@
         </div>` : '';
     } else if (block.subtitle) {
       cardExtra = `<div class="card-subtitle"><span>${block.subtitle}</span></div>`;
+    }
+    if (block.date) {
+      cardExtra += `<div class="card-subtitle"><span class="once-badge">📅 ครั้งเดียว · ${escHtml(formatShortDate(block.date))}</span></div>`;
     }
 
     let studyChecklist = '';
@@ -4687,6 +4757,10 @@
     const isWitchaya = isWitchayaUser();
     const isBaseRoutine = isWitchaya && day && day.blocks.some(b => b.id === blockId);
     const isLiveClass = blockId.startsWith('live-class-');
+    if (blockId.startsWith('exam-') && !state.customBlocks[dayKey].some(b => b.id === blockId)) {
+      showToast('ตารางสอบเป็นข้อมูลหลัก ลบไม่ได้ (แก้ไขเวลา/ห้องได้)', 'warning');
+      return;
+    }
     if (isBaseRoutine || isLiveClass) {
       showToast('ไม่สามารถลบวิชาหลักจากตารางวันได้ (กรุณาแก้ไขในหน้า Curriculum)', 'warning');
       return;
@@ -4699,8 +4773,9 @@
   }
 
   // ─── Add Modal (9th Verbatim) ────────────────────────────
-  function openAddModal(dayKey) {
+  function openAddModal(dayKey, opts = {}) {
     state.addingDay = dayKey;
+    const startOnce = opts.once !== false; // one-time is the default
     const modal = document.getElementById('add-modal');
     if (!modal) return;
 
@@ -4734,6 +4809,18 @@
         </div>
       </div>
       <div class="form-group">
+        <label class="form-label">ทำซ้ำ</label>
+        <div class="repeat-toggle" id="add-repeat" role="radiogroup">
+          <button type="button" class="repeat-opt ${startOnce ? 'selected' : ''}" data-repeat="once" role="radio" aria-checked="${startOnce}">📅 ครั้งเดียว</button>
+          <button type="button" class="repeat-opt ${startOnce ? '' : 'selected'}" data-repeat="weekly" role="radio" aria-checked="${!startOnce}">🔁 ทุกสัปดาห์</button>
+        </div>
+      </div>
+      <div class="form-group" id="add-date-group" ${startOnce ? '' : 'hidden'}>
+        <label class="form-label">วันที่</label>
+        <input id="add-date" class="form-input" type="date" value="${getDateKey(dayKey) < getISODate(new Date()) ? getISODate(new Date()) : getDateKey(dayKey)}"/>
+        <small class="form-hint">ขึ้นในตารางและ Apple Calendar เฉพาะวันนี้วันเดียว</small>
+      </div>
+      <div class="form-group">
         <label class="form-label">หมวดหมู่</label>
         <div class="tag-selector" id="add-tag-selector">${tagOptions}</div>
       </div>
@@ -4748,6 +4835,17 @@
         </label>
       </div>
     `;
+
+    modal.querySelector('#add-repeat').addEventListener('click', e => {
+      const opt = e.target.closest('.repeat-opt');
+      if (!opt) return;
+      modal.querySelectorAll('.repeat-opt').forEach(o => {
+        const on = o === opt;
+        o.classList.toggle('selected', on);
+        o.setAttribute('aria-checked', String(on));
+      });
+      modal.querySelector('#add-date-group').hidden = opt.dataset.repeat !== 'once';
+    });
 
     modal.querySelector('#add-tag-selector').addEventListener('click', e => {
       const opt = e.target.closest('.tag-option');
@@ -4766,7 +4864,7 @@
   }
 
   function saveNewBlock() {
-    const dayKey = state.addingDay;
+    let dayKey = state.addingDay;
     if (!dayKey) return;
     const modal = document.getElementById('add-modal');
     const title    = modal.querySelector('#add-title')?.value || '';
@@ -4777,12 +4875,23 @@
     const tag      = modal.querySelector('#add-tag-selector .tag-option.selected')?.dataset.tag || 'break';
     const isStudy  = modal.querySelector('#add-is-study')?.checked || false;
 
+    const isOnce   = modal.querySelector('.repeat-opt.selected')?.dataset.repeat === 'once';
+    const date     = modal.querySelector('#add-date')?.value || '';
+
     if (!title || !start || !end) { showToast('กรุณากรอกข้อมูลให้ครบ', 'warning'); return; }
+    if (isOnce && !/^\d{4}-\d{2}-\d{2}$/.test(date)) { showToast('กรุณาเลือกวันที่', 'warning'); return; }
+
+    if (isOnce) {
+      // File the event under the weekday of its date; the `date` field limits it to that one day
+      const [y, m, d] = date.split('-').map(Number);
+      dayKey = getDayKey(new Date(y, m - 1, d).getDay());
+    }
 
     const newBlock = {
       id: `custom-${dayKey}-${Date.now()}`,
       start, end, title, subtitle, tag, notes,
-      isCustom: true
+      isCustom: true,
+      ...(isOnce ? { date } : {})
     };
     if (isStudy) {
       newBlock.isStudyBlock = true;
@@ -4792,8 +4901,12 @@
     state.customBlocks[dayKey].push(newBlock);
     saveCustomBlocks();
     closeModal('add-modal');
-    showToast('เพิ่มลงตารางแล้ว', 'success');
-    if (state.currentTopView === 'home') renderHomeView(); else renderTimeline(dayKey);
+    const inThisWeek = isOnce && date === getDateKey(dayKey);
+    showToast(isOnce
+      ? `📅 เพิ่มแล้ว: ${formatShortDate(date)} (ครั้งเดียว)${inThisWeek ? '' : ' · ดูได้ที่หน้าแรก “กำลังจะมาถึง”'}`
+      : '🔁 เพิ่มลงตารางทุกสัปดาห์แล้ว', 'success');
+    if (state.currentTopView === 'home') renderHomeView();
+    else { state.currentDay = dayKey; renderDayTabs(); renderTimeline(dayKey); }
   }
 
   // ─── Modal Helpers ───────────────────────────────────────
