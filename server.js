@@ -777,6 +777,17 @@ const DEFAULT_BME_ROUTINE_EVENTS = [
   { day: 'SU', start: '05:30', end: '06:15', title: 'ละหมาดซุบฮิ', type: 'prayer' }
 ];
 
+// Final exams, semester 1/2026 (Witchaya). One-off events: each exists ONLY on its exact date
+// (no weekly RRULE). Keep in sync with FINAL_EXAMS in js/data.js.
+const WITCHAYA_FINAL_EXAMS = [
+  { date: '2026-12-01', start: '13:00', end: '14:00', code: 'SCPY111', room: 'SC2-322', seat: 'A-42' },
+  { date: '2026-12-02', start: '13:00', end: '16:00', code: 'SCSL190', room: 'SC2-323', seat: 'A-52' },
+  { date: '2026-12-03', start: '09:00', end: '11:00', code: 'SCMA101', room: 'SC2-323', seat: 'A-52' },
+  { date: '2026-12-08', start: '09:00', end: '12:00', code: 'SCCH161', room: 'SC2-323', seat: 'A-52' },
+  { date: '2026-12-09', start: '09:00', end: '12:00', code: 'SCPY161', room: 'SC1-152', seat: 'A-02' },
+  { date: '2026-12-11', start: '09:00', end: '10:30', code: 'SCBE102', room: 'SC2-323', seat: 'A-52' },
+];
+
 // Helper: Format date for iCalendar RFC 5545
 function formatIcsDateTime(dateStr, timeStr) {
   const cleanDate = dateStr.replace(/-/g, '');
@@ -944,6 +955,26 @@ async function generateIcsCalendar(userId, includeRoutines = false, includeStudy
     });
   });
 
+  // 5. Final exams (Witchaya only) — one-off, always included regardless of category filters
+  const isWitchaya = userObj
+    ? (userObj.username || '').toLowerCase() === 'witchaya'
+    : (userId === '1' || userId === 'default' || String(userId).toLowerCase() === 'witchaya');
+  if (isWitchaya) {
+    WITCHAYA_FINAL_EXAMS.forEach(ex => {
+      oneOffEvents.push({
+        date: ex.date,
+        start: ex.start,
+        end: ex.end,
+        title: `สอบ ${ex.code} (Final Exam)`,
+        sub: `ห้อง ${ex.room} · ที่นั่ง ${ex.seat}`,
+        location: `Salaya SIM ${ex.room}`,
+        uidKey: `exam-${ex.code}`,
+        isExam: true,
+        emergency: true
+      });
+    });
+  }
+
   // Deduplicate events by title+day+start
   const seen = new Set();
   const deduped = [];
@@ -1009,10 +1040,15 @@ async function generateIcsCalendar(userId, includeRoutines = false, includeStudy
   oneOffEvents.forEach((ev, idx) => {
     const dtStart = formatIcsDateTime(ev.date, ev.start);
     const dtEnd = formatIcsDateTime(ev.date, ev.end);
-    const uid = `ecal-once-${userId || 'default'}-${ev.date}-${idx}-${ev.start.replace(':', '')}@daily-study.app`;
-    const icon = ev.emergency ? '🚨 ' : '🗓️ ';
+    // Exams get a stable UID so Apple Calendar updates them in place instead of duplicating
+    const uid = ev.uidKey
+      ? `ecal-${ev.uidKey}-${userId || 'default'}-${ev.date}@daily-study.app`
+      : `ecal-once-${userId || 'default'}-${ev.date}-${idx}-${ev.start.replace(':', '')}@daily-study.app`;
+    const icon = ev.isExam ? '📝 ' : ev.emergency ? '🚨 ' : '🗓️ ';
     const summary = icon + ev.title;
-    const desc = (ev.sub ? ev.sub + '\n' : '') + '⚠️ Emergency added from E-Calendar: this event appears on this day only.';
+    const desc = (ev.sub ? ev.sub + '\n' : '') + (ev.isExam
+      ? 'สอบปลายภาค 1/2026 — อย่าลืมบัตรนักศึกษา! (this event appears on this day only)'
+      : '⚠️ Emergency added from E-Calendar: this event appears on this day only.');
 
     ics.push('BEGIN:VEVENT');
     ics.push(`UID:${uid}`);
@@ -1021,6 +1057,7 @@ async function generateIcsCalendar(userId, includeRoutines = false, includeStudy
     ics.push(`DTEND;TZID=Asia/Bangkok:${dtEnd}`);
     // NOTE: no RRULE — the event exists ONLY on this exact date
     ics.push(`SUMMARY:${summary}`);
+    if (ev.location) ics.push(`LOCATION:${ev.location}`);
     ics.push(`DESCRIPTION:${desc}`);
     ics.push('STATUS:CONFIRMED');
 

@@ -1096,7 +1096,24 @@
       }
     }
 
-    const customExtra = (state.customBlocks[dayKey] || []);
+    // Dated (one-off) blocks belong to a single calendar day: show them only in the week
+    // that contains that date, never on the same weekday of every other week.
+    const dateKey = getDateKey(dayKey);
+    const customExtra = (state.customBlocks[dayKey] || []).filter(b => !b.date || b.date === dateKey);
+    if (isWitchayaUser() && typeof FINAL_EXAMS !== 'undefined') {
+      FINAL_EXAMS.filter(ex => ex.date === dateKey).forEach(ex => {
+        customExtra.push({
+          id: `exam-${ex.code}-${ex.date}`,
+          start: ex.start,
+          end: ex.end,
+          title: `สอบ ${ex.code}`,
+          subtitle: `Salaya SIM · ${ex.room} · ที่นั่ง ${ex.seat}`,
+          tag: 'exam',
+          date: ex.date,
+          notes: 'Final exam'
+        });
+      });
+    }
     const overrideIds = new Set(customExtra.filter(b => b._override).map(b => b.id));
     const mergedBase = baseBlocks.filter(b => !overrideIds.has(b.id));
     return [...mergedBase, ...customExtra].sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));

@@ -220,6 +220,7 @@ window.I18N_DICT = {
 "ถ้าได้ A ทุกวิชา": "If I get A in everything",
 "ถ้าได้ B+ ทุกวิชา": "If I get B+ in everything",
 "ทบทวน": "Review",
+"สอบ": "Exam",
 "ทฤษฎีวงจรไฟฟ้า AC/DC โหนด/เมช วงจรกรองความถี่ (Filters) และวงจร RLC ในเครื่องมือแพทย์": "AC/DC circuit theory, node/mesh analysis, filters and RLC circuits in medical devices",
 "ทักษะวิศวกรรมพื้นฐานใน BME": "Basic Engineering Skills in BME",
 "ทักษะวิศวกรรมภาคปฏิบัติ การบัดกรีวงจร การใช้เครื่องมือช่างและแล็บเครื่องมือวัด": "Hands-on engineering skills: soldering, workshop tools and measurement labs",

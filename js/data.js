@@ -15,7 +15,19 @@ const TAGS = {
   break:    { emoji: '☕', label: 'พักเบรก',        color: '#3E7A55', bg: 'rgba(62,122,85,0.11)', border: 'rgba(62,122,85,0.3)'  },
   freetime: { emoji: '🌴', label: 'ฟรีไทม์',        color: '#2F7F7A', bg: 'rgba(47,127,122,0.11)', border: 'rgba(47,127,122,0.3)' },
   family:   { emoji: '🏠', label: 'ครอบครัว',       color: '#A0683A', bg: 'rgba(160,104,58,0.11)', border: 'rgba(160,104,58,0.3)' },
+  exam:     { emoji: '📝', label: 'สอบ',            color: '#C0392B', bg: 'rgba(192,57,43,0.11)', border: 'rgba(192,57,43,0.35)' },
 };
+
+// Final exams, semester 1/2026 (Witchaya). One-off: each shows ONLY on its exact date,
+// never as a weekly repeat. Keep in sync with WITCHAYA_FINAL_EXAMS in server.js.
+const FINAL_EXAMS = [
+  { date: '2026-12-01', start: '13:00', end: '14:00', code: 'SCPY111', room: 'SC2-322', seat: 'A-42' },
+  { date: '2026-12-02', start: '13:00', end: '16:00', code: 'SCSL190', room: 'SC2-323', seat: 'A-52' },
+  { date: '2026-12-03', start: '09:00', end: '11:00', code: 'SCMA101', room: 'SC2-323', seat: 'A-52' },
+  { date: '2026-12-08', start: '09:00', end: '12:00', code: 'SCCH161', room: 'SC2-323', seat: 'A-52' },
+  { date: '2026-12-09', start: '09:00', end: '12:00', code: 'SCPY161', room: 'SC1-152', seat: 'A-02' },
+  { date: '2026-12-11', start: '09:00', end: '10:30', code: 'SCBE102', room: 'SC2-323', seat: 'A-52' },
+];
 
 // Subject colors for class schedule
 const SUBJECT_COLORS = {
