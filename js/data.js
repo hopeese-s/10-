@@ -29,6 +29,14 @@ const FINAL_EXAMS = [
   { date: '2026-12-11', start: '09:00', end: '10:30', code: 'SCBE102', room: 'SC2-323', seat: 'A-52' },
 ];
 
+// Regular weekly classes stop the day before the first final exam
+const CLASSES_END_DATE = (() => {
+  const first = FINAL_EXAMS.map(e => e.date).sort()[0];
+  const [y, m, d] = first.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d - 1));
+  return dt.toISOString().slice(0, 10);
+})();
+
 // Subject colors for class schedule
 const SUBJECT_COLORS = {
   SCPY161: { color: '#3b82f6', bg: 'rgba(59,130,246,0.15)', emoji: '⚡', shortName: 'GenPhy' },

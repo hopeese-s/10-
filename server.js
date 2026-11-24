@@ -788,6 +788,104 @@ const WITCHAYA_FINAL_EXAMS = [
   { date: '2026-12-11', start: '09:00', end: '10:30', code: 'SCBE102', room: 'SC2-323', seat: 'A-52' },
 ];
 
+// ─── Schedule rules shared by the app feed, Apple Calendar and the LINE bot ───
+// 1. Regular weekly classes stop the day before the first final exam.
+// 2. On a day with a one-time event (exam or dated appointment), weekly blocks
+//    that overlap its time are dropped, so the exam replaces them.
+function isWitchayaUserId(userId) {
+  if (!userId) return false;
+  if (userId === '1' || userId === 'default' || String(userId).toLowerCase() === 'witchaya') return true;
+  const u = Object.values(store._users || {}).find(x => x.id === userId);
+  return !!(u && (u.username || '').toLowerCase() === 'witchaya');
+}
+
+function getExamsForUser(userId) {
+  return isWitchayaUserId(userId) ? WITCHAYA_FINAL_EXAMS : [];
+}
+
+// Last date (YYYY-MM-DD) with regular classes, or null when classes have no end
+function getClassesEndDate(userId) {
+  const exams = getExamsForUser(userId);
+  if (!exams.length) return null;
+  const first = exams.map(e => e.date).sort()[0];
+  const d = new Date(first + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+function classesActiveOn(userId, dateStr) {
+  const end = getClassesEndDate(userId);
+  return !end || dateStr <= end;
+}
+
+// Bangkok wall-clock "now" and date helpers (independent of the server's timezone)
+function bangkokDateStr(offsetDays = 0) {
+  const d = new Date(Date.now() + offsetDays * 86400000);
+  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+}
+
+function weekdayOfDate(dateStr) {
+  return ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][new Date(dateStr + 'T00:00:00Z').getUTCDay()];
+}
+
+function daysUntil(dateStr) {
+  return Math.round((new Date(dateStr + 'T00:00:00Z') - new Date(bangkokDateStr() + 'T00:00:00Z')) / 86400000);
+}
+
+function hhmmToMin(t) {
+  const [h, m] = String(t || '0:0').split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+function timesOverlap(a, b) {
+  const as = hhmmToMin(a.start), bs = hhmmToMin(b.start);
+  let ae = hhmmToMin(a.end), be = hhmmToMin(b.end);
+  if (ae <= as) ae += 1440;
+  if (be <= bs) be += 1440;
+  return as < be && bs < ae;
+}
+
+// Exams + dated custom blocks on one date: [{ start, end, title, room, seat, isExam, code }]
+function getOneTimeEventsOn(userId, userData, dateStr) {
+  const list = getExamsForUser(userId)
+    .filter(e => e.date === dateStr)
+    .map(e => ({ start: e.start, end: e.end, title: `สอบ ${e.code}`, code: e.code, room: e.room, seat: e.seat, isExam: true }));
+  Object.values((userData && userData.customBlocks) || {}).forEach(blocks => {
+    (Array.isArray(blocks) ? blocks : []).forEach(b => {
+      if (b.date === dateStr && b.start && b.end && !list.some(x => x.isExam && `exam-${x.code}-${dateStr}` === b.id)) {
+        list.push({ start: b.start, end: b.end, title: b.title || 'นัดหมาย', room: b.subtitle || b.notes || '', isExam: false });
+      }
+    });
+  });
+  return list.sort((a, b) => a.start.localeCompare(b.start));
+}
+
+// Everything the bot should say about one date: classes, one-time events, weekly appointments, routines
+function getScheduleForDate(userId, userData, dateStr, curriculum, routines) {
+  const day = weekdayOfDate(dateStr);
+  const dayCode = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' }[day];
+  const oneTime = getOneTimeEventsOn(userId, userData, dateStr);
+  // Prayers are never dropped; everything else that overlaps a one-time event gives way to it
+  const free = item => item.type === 'prayer' || item.tag === 'prayer' || !oneTime.some(o => timesOverlap(o, item));
+  const classes = classesActiveOn(userId, dateStr)
+    ? (curriculum || []).filter(c => c.day === day && c.start && c.end && free(c)).sort((a, b) => a.start.localeCompare(b.start))
+    : [];
+  const weekly = (((userData && userData.customBlocks) || {})[day] || [])
+    .filter(b => !b.date && b.start && b.end && free(b))
+    .filter(b => !(b.isClass || b.tag === 'class') || classesActiveOn(userId, dateStr));
+  const routineList = (routines || []).filter(r => r.day === dayCode && free(r));
+  return { day, classes, oneTime, weekly, routines: routineList, classesEnded: !classesActiveOn(userId, dateStr) };
+}
+
+// Apple Calendar text: no emoji, RFC 5545 escaping (\\ ; , and newlines)
+function icsText(str) {
+  return String(str || '')
+    .replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{20E3}]/gu, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .split('\n').map(l => l.trim()).join('\n').trim()
+    .replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+}
+
 // Helper: Format date for iCalendar RFC 5545
 function formatIcsDateTime(dateStr, timeStr) {
   const cleanDate = dateStr.replace(/-/g, '');
@@ -837,9 +935,9 @@ async function generateIcsCalendar(userId, includeRoutines = false, includeStudy
   ics.push('PRODID:-//E-Calendar//Study Dashboard 2026//TH');
   ics.push('CALSCALE:GREGORIAN');
   ics.push('METHOD:PUBLISH');
-  ics.push(`X-WR-CALNAME:${calName}`);
+  ics.push(`X-WR-CALNAME:${icsText(calName)}`);
   ics.push('X-WR-TIMEZONE:Asia/Bangkok');
-  ics.push(`X-WR-CALDESC:${calDesc}`);
+  ics.push(`X-WR-CALDESC:${icsText(calDesc)}`);
 
   ics.push('BEGIN:VTIMEZONE');
   ics.push('TZID:Asia/Bangkok');
@@ -988,6 +1086,11 @@ async function generateIcsCalendar(userId, includeRoutines = false, includeStudy
   events.length = 0;
   events.push(...deduped);
 
+  // Regular classes stop the day before the first final exam (23:59:59 Bangkok = 16:59:59Z)
+  const classesEnd = getClassesEndDate(userId);
+  const classUntil = classesEnd ? classesEnd.replace(/-/g, '') + 'T165959Z' : '20261231T235959Z';
+  const icsDayOf = dateStr => ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'][new Date(dateStr + 'T00:00:00Z').getUTCDay()];
+
   events.forEach((ev, idx) => {
     const baseDate = baseDates[ev.day];
     if (!baseDate) return;
@@ -999,34 +1102,39 @@ async function generateIcsCalendar(userId, includeRoutines = false, includeStudy
     const isStudy = ev.isStudyBlock || ev.type === 'study';
     const isClass = ev.isClass || ev.type === 'class';
 
-    const icon = isStudy ? '📚 ' : isClass ? '🎓 ' : '🗓️ ';
-    const summary = icon + ev.title;
+    const summary = icsText(ev.title);
     const classDesc = isBme ? '\nวิชาเรียน BME Mahidol' : '\nวิชาเรียนของคุณ';
-    const desc = (ev.sub || '') + (isStudy ? '\nระบบเตือนความจำจาก E-Calendar: อย่าลืมเตรียมชีทสรุปและเริ่มอ่านหนังสือ!' : classDesc);
+    const desc = icsText((ev.sub || '') + (isStudy ? '\nระบบเตือนความจำจาก E-Calendar: อย่าลืมเตรียมชีทสรุปและเริ่มอ่านหนังสือ' : classDesc));
+
+    // Skip the weekly occurrence on any date where a one-time event (e.g. an exam) overlaps it
+    const exdates = (ev.type === 'prayer' ? [] : oneOffEvents)
+      .filter(o => icsDayOf(o.date) === ev.day && timesOverlap(o, ev))
+      .map(o => formatIcsDateTime(o.date, ev.start));
 
     ics.push('BEGIN:VEVENT');
     ics.push(`UID:${uid}`);
     ics.push(`DTSTAMP:${nowStamp}`);
     ics.push(`DTSTART;TZID=Asia/Bangkok:${dtStart}`);
     ics.push(`DTEND;TZID=Asia/Bangkok:${dtEnd}`);
-    ics.push(`RRULE:FREQ=WEEKLY;BYDAY=${ev.day};UNTIL=20261231T235959Z`);
+    ics.push(`RRULE:FREQ=WEEKLY;BYDAY=${ev.day};UNTIL=${isClass ? classUntil : '20261231T235959Z'}`);
+    if (exdates.length) ics.push(`EXDATE;TZID=Asia/Bangkok:${exdates.join(',')}`);
     ics.push(`SUMMARY:${summary}`);
     if (ev.sub && isClass) {
-      ics.push(`LOCATION:${ev.sub}`);
+      ics.push(`LOCATION:${icsText(ev.sub)}`);
     }
     ics.push(`DESCRIPTION:${desc}`);
     ics.push('STATUS:CONFIRMED');
 
     ics.push('BEGIN:VALARM');
     ics.push('ACTION:DISPLAY');
-    ics.push(`DESCRIPTION:เตือนความจำ: อีก 15 นาทีจะถึง ${summary}`);
+    ics.push(`DESCRIPTION:อีก 15 นาทีจะถึง ${summary}`);
     ics.push('TRIGGER:-PT15M');
     ics.push('END:VALARM');
 
     if (isStudy) {
       ics.push('BEGIN:VALARM');
       ics.push('ACTION:DISPLAY');
-      ics.push(`DESCRIPTION:ถึงเวลาแล้ว! เริ่ม ${summary}`);
+      ics.push(`DESCRIPTION:ถึงเวลาเริ่ม ${summary}`);
       ics.push('TRIGGER:-PT0M');
       ics.push('END:VALARM');
     }
@@ -1044,11 +1152,10 @@ async function generateIcsCalendar(userId, includeRoutines = false, includeStudy
     const uid = ev.uidKey
       ? `ecal-${ev.uidKey}-${userId || 'default'}-${ev.date}@daily-study.app`
       : `ecal-once-${userId || 'default'}-${ev.date}-${idx}-${ev.start.replace(':', '')}@daily-study.app`;
-    const icon = ev.isExam ? '📝 ' : ev.emergency ? '🚨 ' : '🗓️ ';
-    const summary = icon + ev.title;
-    const desc = (ev.sub ? ev.sub + '\n' : '') + (ev.isExam
-      ? 'สอบปลายภาค 1/2026 — อย่าลืมบัตรนักศึกษา! (this event appears on this day only)'
-      : '⚠️ Emergency added from E-Calendar: this event appears on this day only.');
+    const summary = icsText(ev.title);
+    const desc = icsText((ev.sub ? ev.sub + '\n' : '') + (ev.isExam
+      ? 'สอบปลายภาค 1/2026 - อย่าลืมบัตรนักศึกษา'
+      : 'นัดครั้งเดียวจาก E-Calendar (เฉพาะวันนี้)'));
 
     ics.push('BEGIN:VEVENT');
     ics.push(`UID:${uid}`);
@@ -1057,20 +1164,20 @@ async function generateIcsCalendar(userId, includeRoutines = false, includeStudy
     ics.push(`DTEND;TZID=Asia/Bangkok:${dtEnd}`);
     // NOTE: no RRULE — the event exists ONLY on this exact date
     ics.push(`SUMMARY:${summary}`);
-    if (ev.location) ics.push(`LOCATION:${ev.location}`);
+    if (ev.location) ics.push(`LOCATION:${icsText(ev.location)}`);
     ics.push(`DESCRIPTION:${desc}`);
     ics.push('STATUS:CONFIRMED');
 
     ics.push('BEGIN:VALARM');
     ics.push('ACTION:DISPLAY');
-    ics.push(`DESCRIPTION:เตือนความจำ: อีก 15 นาทีจะถึง ${summary}`);
+    ics.push(`DESCRIPTION:อีก 15 นาทีจะถึง ${summary}`);
     ics.push('TRIGGER:-PT15M');
     ics.push('END:VALARM');
 
     if (ev.emergency) {
       ics.push('BEGIN:VALARM');
       ics.push('ACTION:DISPLAY');
-      ics.push(`DESCRIPTION:🚨 เหลือเวลาอีก 1 ชั่วโมง: ${summary}`);
+      ics.push(`DESCRIPTION:เหลือเวลาอีก 1 ชั่วโมง: ${summary}`);
       ics.push('TRIGGER:-PT1H');
       ics.push('END:VALARM');
     }
@@ -1699,9 +1806,37 @@ function safeLineUri(rawUrl) {
   }
 }
 
-function buildScheduleFlex(dayTitle, dateStr, classesList, routineList) {
+function buildScheduleFlex(dayTitle, dateStr, classesList, routineList, extra = {}) {
   const contents = [];
-  
+  const oneTime = extra.oneTime || [];
+
+  // Exams and one-time appointments come first: they replace anything that overlaps them
+  if (oneTime.length > 0) {
+    contents.push({ type: 'text', text: oneTime.some(o => o.isExam) ? '📝 สอบ / นัดครั้งเดียว' : '📅 นัดครั้งเดียว', weight: 'bold', color: '#B91C1C', size: 'sm', margin: 'md' });
+    oneTime.forEach(o => {
+      contents.push({
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#FEF2F2',
+        cornerRadius: 'md',
+        paddingAll: '10px',
+        margin: 'sm',
+        contents: [
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: `${o.start} - ${o.end} น.`, size: 'xs', color: '#888888', flex: 0 },
+              { type: 'text', text: o.isExam ? `ห้อง ${o.room} · ที่นั่ง ${o.seat}` : (o.room || ''), size: 'xs', weight: 'bold', color: '#B91C1C', align: 'end', wrap: true }
+            ]
+          },
+          { type: 'text', text: o.title, weight: 'bold', size: 'sm', color: '#1a1a1a', wrap: true, margin: 'xs' }
+        ]
+      });
+    });
+    if (classesList && classesList.length > 0) contents.push({ type: 'separator', margin: 'lg' });
+  }
+
   if (classesList && classesList.length > 0) {
     contents.push({
       type: 'text',
@@ -1741,10 +1876,11 @@ function buildScheduleFlex(dayTitle, dateStr, classesList, routineList) {
         ]
       });
     });
-  } else {
+  } else if (!oneTime.length) {
     contents.push({
       type: 'text',
-      text: '🎉 วันนี้ไม่มีวิชาเรียน พักผ่อนได้เต็มที่!',
+      text: extra.classesEnded ? 'ช่วงสอบ: ไม่มีคาบเรียนปกติแล้ว วันนี้ไม่มีสอบ ใช้ทบทวนได้เต็มที่' : '🎉 วันนี้ไม่มีวิชาเรียน พักผ่อนได้เต็มที่!',
+      wrap: true,
       size: 'sm',
       color: '#666666',
       margin: 'md'
@@ -2244,89 +2380,135 @@ function buildTaskAddedFlex(task, totalPending) {
   };
 }
 
-function buildDDayCountdownFlex() {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
-  
-  const events = [
-    { title: 'สอบกลางภาค (Midterm Exam)', date: '2026-09-28', desc: 'เตรียมตัวทบทวน 7 สัปดาห์แรก' },
-    { title: 'สอบปลายภาค (Final Exam)', date: '2026-11-23', desc: 'สอบวัดผลปลายภาค ภาคการศึกษาที่ 1' }
-  ];
+// ─── Exam messages for LINE (built from the real exam table, days left computed live) ───
+function thaiShortDate(dateStr) {
+  return new Date(dateStr + 'T00:00:00Z').toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+}
 
-  const items = events.map(ev => {
-    const target = new Date(ev.date);
-    const diffTime = target.getTime() - now.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+function daysLeftLabel(n) {
+  if (n < 0) return 'สอบแล้ว';
+  if (n === 0) return 'วันนี้!';
+  if (n === 1) return 'พรุ่งนี้';
+  return `อีก ${n} วัน`;
+}
 
-    const isPast = diffDays < 0;
-    const dayText = isPast ? 'สอบเสร็จแล้ว' : (diffDays === 0 ? '🔥 วันนี้คือวันสอบ!' : `เหลืออีก ${diffDays} วัน`);
+function examCardBox(ex, opts = {}) {
+  const n = daysUntil(ex.date);
+  const past = n < 0;
+  return {
+    type: 'box',
+    layout: 'vertical',
+    backgroundColor: past ? '#F3F4F6' : (n <= 1 ? '#FEE2E2' : '#FEF2F2'),
+    cornerRadius: 'md',
+    paddingAll: '10px',
+    margin: 'sm',
+    contents: [
+      {
+        type: 'box',
+        layout: 'horizontal',
+        contents: [
+          { type: 'text', text: ex.code, weight: 'bold', size: 'sm', color: past ? '#9CA3AF' : '#991B1B', flex: 3 },
+          { type: 'text', text: daysLeftLabel(n), weight: 'bold', size: 'xs', color: past ? '#9CA3AF' : '#DC2626', flex: 2, align: 'end' }
+        ]
+      },
+      { type: 'text', text: `${thaiShortDate(ex.date)} · ${ex.start}–${ex.end} น.`, size: 'xs', color: past ? '#9CA3AF' : '#374151', margin: 'xs' },
+      { type: 'text', text: `ห้อง ${ex.room} · ที่นั่ง ${ex.seat}${opts.campus === false ? '' : ' · Salaya SIM'}`, size: 'xs', weight: 'bold', color: past ? '#9CA3AF' : '#B91C1C', margin: 'xs', wrap: true }
+    ]
+  };
+}
 
-    return {
+function examBubble(headerSmall, headerBig, bodyContents, footerButtons, color = '#B91C1C') {
+  return {
+    type: 'bubble',
+    header: {
       type: 'box',
       layout: 'vertical',
-      backgroundColor: '#FEF2F2',
-      cornerRadius: 'md',
-      paddingAll: '12px',
-      margin: 'sm',
+      backgroundColor: color,
+      paddingAll: '16px',
       contents: [
-        {
-          type: 'box',
-          layout: 'horizontal',
-          contents: [
-            { type: 'text', text: ev.title, weight: 'bold', size: 'xs', color: '#991B1B', flex: 3, wrap: true },
-            { type: 'text', text: dayText, weight: 'bold', size: 'xs', color: '#DC2626', flex: 2, align: 'end' }
-          ]
-        },
-        {
-          type: 'text',
-          text: `📅 กำหนดการ: ${ev.date} — ${ev.desc}`,
-          size: 'xxs',
-          color: '#7F1D1D',
-          margin: 'xs',
-          wrap: true
-        }
+        { type: 'text', text: headerSmall, color: '#ffffff', size: 'xxs', weight: 'bold' },
+        { type: 'text', text: headerBig, color: '#ffffff', size: 'md', weight: 'bold', wrap: true }
       ]
-    };
-  });
+    },
+    body: { type: 'box', layout: 'vertical', paddingAll: '12px', contents: bodyContents },
+    ...(footerButtons && footerButtons.length ? {
+      footer: { type: 'box', layout: 'horizontal', spacing: 'sm', contents: footerButtons }
+    } : {})
+  };
+}
 
+function noExamsMessage() {
+  return { type: 'text', text: 'ยังไม่มีตารางสอบในระบบสำหรับบัญชีนี้ครับ' };
+}
+
+function upcomingExams(userId) {
+  return getExamsForUser(userId).filter(e => daysUntil(e.date) >= 0).sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+}
+
+const EXAM_BUTTONS = [
+  { type: 'button', action: { type: 'message', label: 'สอบถัดไป', text: 'สอบถัดไป' }, style: 'primary', color: '#B91C1C', height: 'sm' },
+  { type: 'button', action: { type: 'message', label: 'นับถอยหลัง', text: 'นับถอยหลัง' }, style: 'secondary', height: 'sm' }
+];
+
+function buildNextExamFlex(userId) {
+  const exams = getExamsForUser(userId);
+  if (!exams.length) return noExamsMessage();
+  const next = upcomingExams(userId)[0];
+  if (!next) return { type: 'text', text: '🎉 สอบครบทุกวิชาแล้ว พักผ่อนได้เต็มที่ครับ!' };
+  const n = daysUntil(next.date);
   return {
     type: 'flex',
-    altText: '⏳ D-Day Countdown: นับถอยหลังวันสอบ',
-    contents: {
-      type: 'bubble',
-      header: {
-        type: 'box',
-        layout: 'vertical',
-        backgroundColor: '#DC2626',
-        paddingAll: '16px',
-        contents: [
-          { type: 'text', text: 'EXAM COUNTDOWN', color: '#ffffff', size: 'xxs', weight: 'bold' },
-          { type: 'text', text: '⏳ นับถอยหลังวันสอบ (D-Day)', color: '#ffffff', size: 'md', weight: 'bold' }
+    altText: `สอบถัดไป: ${next.code} ${thaiShortDate(next.date)} ${next.start} ห้อง ${next.room} ที่นั่ง ${next.seat}`,
+    contents: examBubble('NEXT EXAM', `📝 สอบถัดไป: ${next.code}`, [
+      { type: 'text', text: daysLeftLabel(n), size: 'xxl', weight: 'bold', color: '#DC2626' },
+      { type: 'text', text: `${thaiShortDate(next.date)} · ${next.start}–${next.end} น.`, size: 'md', weight: 'bold', color: '#1F2937', margin: 'md' },
+      { type: 'separator', margin: 'md' },
+      {
+        type: 'box', layout: 'horizontal', margin: 'md', contents: [
+          { type: 'box', layout: 'vertical', contents: [
+            { type: 'text', text: 'ห้อง', size: 'xxs', color: '#6B7280' },
+            { type: 'text', text: next.room, size: 'lg', weight: 'bold', color: '#111827' }
+          ] },
+          { type: 'box', layout: 'vertical', contents: [
+            { type: 'text', text: 'ที่นั่ง', size: 'xxs', color: '#6B7280' },
+            { type: 'text', text: next.seat, size: 'lg', weight: 'bold', color: '#111827' }
+          ] }
         ]
       },
-      body: {
-        type: 'box',
-        layout: 'vertical',
-        paddingAll: '14px',
-        contents: items
-      },
-      footer: {
-        type: 'box',
-        layout: 'vertical',
-        contents: [
-          {
-            type: 'button',
-            action: {
-              type: 'message',
-              label: '📚 ดูตารางทบทวนประจำวัน',
-              text: 'ตารางวันนี้'
-            },
-            style: 'primary',
-            color: '#DC2626',
-            height: 'sm'
-          }
-        ]
-      }
-    }
+      { type: 'text', text: 'Salaya SIM', size: 'xs', color: '#6B7280', margin: 'sm' },
+      { type: 'text', text: 'อย่าลืม: บัตรนักศึกษา · ปากกา/ดินสอ · ไปถึงก่อน 15 นาที', size: 'xs', color: '#B91C1C', margin: 'md', wrap: true }
+    ], [EXAM_BUTTONS[1], { type: 'button', action: { type: 'message', label: 'ตารางสอบทั้งหมด', text: 'ตารางสอบ' }, style: 'secondary', height: 'sm' }])
+  };
+}
+
+function buildExamReminderFlex(ex, when) {
+  const isTomorrow = when === 'tomorrow';
+  const head = isTomorrow ? `พรุ่งนี้สอบ ${ex.code}` : `อีก 1 ชั่วโมงสอบ ${ex.code}`;
+  return {
+    type: 'flex',
+    altText: `${head} ${ex.start} น. ห้อง ${ex.room} ที่นั่ง ${ex.seat}`,
+    contents: examBubble('EXAM REMINDER', `⏰ ${head}`, [
+      examCardBox(ex),
+      { type: 'text', text: isTomorrow
+          ? 'คืนนี้เตรียมบัตรนักศึกษา ปากกา/ดินสอ แล้วนอนให้พอนะครับ'
+          : 'ออกเดินทางได้แล้ว อย่าลืมบัตรนักศึกษา!', size: 'xs', color: '#374151', margin: 'md', wrap: true }
+    ], [EXAM_BUTTONS[0]], '#DC2626')
+  };
+}
+
+function buildDDayCountdownFlex(userId) {
+  const exams = getExamsForUser(userId);
+  if (!exams.length) return noExamsMessage();
+  const upcoming = upcomingExams(userId);
+  if (!upcoming.length) return { type: 'text', text: '🎉 สอบครบทุกวิชาแล้ว พักผ่อนได้เต็มที่ครับ!' };
+  const last = upcoming[upcoming.length - 1];
+  return {
+    type: 'flex',
+    altText: `นับถอยหลังสอบ: ${upcoming[0].code} ${daysLeftLabel(daysUntil(upcoming[0].date))}`,
+    contents: examBubble('EXAM COUNTDOWN', '⏳ นับถอยหลังวันสอบปลายภาค', [
+      { type: 'text', text: `เหลือสอบอีก ${upcoming.length} วิชา · วิชาสุดท้าย ${thaiShortDate(last.date)}`, size: 'xs', color: '#6B7280', wrap: true },
+      ...upcoming.slice(0, 3).map(ex => examCardBox(ex))
+    ], [EXAM_BUTTONS[0], { type: 'button', action: { type: 'message', label: 'ตารางสอบทั้งหมด', text: 'ตารางสอบ' }, style: 'secondary', height: 'sm' }], '#DC2626')
   };
 }
 
@@ -3870,77 +4052,17 @@ function buildUserProfileFlex(user, taskCount = 0, noteCount = 0, webCalUrl = ''
   };
 }
 
-function buildDetailedExamScheduleFlex() {
-  const examSubjects = [
-    { code: 'SCPY161', name: 'General Physics I', date: '28 ก.ย. 2026', time: '09:00 - 12:00', room: 'L-01', type: 'ปรนัย 40 ข้อ + อัตนัย 4 ข้อ', daysLeft: 35 },
-    { code: 'SCMA101', name: 'Calculus I', date: '30 ก.ย. 2026', time: '13:00 - 16:00', room: 'L2-002', type: 'อัตนัยแสดงวิธีทำล้วน', daysLeft: 37 },
-    { code: 'SCCH161', name: 'General Chemistry', date: '02 ต.ค. 2026', time: '09:00 - 12:00', room: 'SC1-152', type: 'ปรนัย 60 ข้อ', daysLeft: 39 },
-    { code: 'EGBI122', name: 'Computer Programming', date: '05 ต.ค. 2026', time: '09:00 - 12:00', room: 'Lab Com 1', type: 'เขียนโค้ดปฏิบัติการบนเครื่อง', daysLeft: 42 },
-    { code: 'LAEN182', name: 'English for Communication', date: '07 ต.ค. 2026', time: '13:30 - 15:30', room: 'L-02', type: 'Reading & Grammar Test', daysLeft: 44 }
-  ];
-
-  const cards = examSubjects.map(sub => ({
-    type: 'box',
-    layout: 'vertical',
-    backgroundColor: '#FEF2F2',
-    cornerRadius: 'md',
-    paddingAll: '10px',
-    margin: 'xs',
-    contents: [
-      {
-        type: 'box',
-        layout: 'horizontal',
-        contents: [
-          { type: 'text', text: `🎯 ${sub.code}`, weight: 'bold', size: 'xs', color: '#991B1B', flex: 3 },
-          { type: 'text', text: `อีก ${sub.daysLeft} วัน`, weight: 'bold', size: 'xs', color: '#DC2626', flex: 2, align: 'end' }
-        ]
-      },
-      { type: 'text', text: sub.name, size: 'xs', weight: 'bold', color: '#1F2937', margin: 'xs', wrap: true },
-      {
-        type: 'box',
-        layout: 'horizontal',
-        margin: 'xs',
-        contents: [
-          { type: 'text', text: `📅 ${sub.date} (${sub.time})`, size: 'xxs', color: '#6B7280', flex: 3 },
-          { type: 'text', text: `📍 ห้อง ${sub.room}`, size: 'xxs', weight: 'bold', color: '#DC2626', flex: 2, align: 'end' }
-        ]
-      },
-      { type: 'text', text: `💡 รูปแบบ: ${sub.type}`, size: 'xxs', color: '#B91C1C', margin: 'xs', wrap: true }
-    ]
-  }));
-
+function buildDetailedExamScheduleFlex(userId) {
+  const exams = getExamsForUser(userId);
+  if (!exams.length) return noExamsMessage();
+  const sorted = [...exams].sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
   return {
     type: 'flex',
-    altText: '🗓️ ตารางสอบกลางภาคแบบละเอียดทุกรายวิชา (Midterm Exam)',
-    contents: {
-      type: 'bubble',
-      header: {
-        type: 'box',
-        layout: 'vertical',
-        backgroundColor: '#B91C1C',
-        paddingAll: '16px',
-        contents: [
-          { type: 'text', text: 'OFFICIAL MIDTERM EXAM SCHEDULE', color: '#ffffff', size: 'xxs', weight: 'bold' },
-          { type: 'text', text: '🗓️ ตารางสอบกลางภาครายวิชา', color: '#ffffff', size: 'md', weight: 'bold' },
-          { type: 'text', text: 'ภาคการศึกษาที่ 1 • คณะวิศวกรรมศาสตร์ BME', color: '#ffffff', size: 'xs', margin: 'xs' }
-        ]
-      },
-      body: {
-        type: 'box',
-        layout: 'vertical',
-        paddingAll: '12px',
-        contents: cards
-      },
-      footer: {
-        type: 'box',
-        layout: 'horizontal',
-        spacing: 'sm',
-        contents: [
-          { type: 'button', action: { type: 'message', label: '⏳ D-Day Countdown', text: 'สอบ' }, style: 'primary', color: '#B91C1C', height: 'sm' },
-          { type: 'button', action: { type: 'message', label: '📚 คลาสรูมชีท', text: 'คลาสรูม' }, style: 'secondary', height: 'sm' }
-        ]
-      }
-    }
+    altText: 'ตารางสอบปลายภาค 1/2026',
+    contents: examBubble('FINAL EXAM SCHEDULE', '🗓️ ตารางสอบปลายภาค 1/2026', [
+      { type: 'text', text: 'Salaya SIM · วิชาเรียนปกติจบแล้วก่อนช่วงสอบ', size: 'xs', color: '#6B7280', wrap: true },
+      ...sorted.map(ex => examCardBox(ex, { campus: false }))
+    ], EXAM_BUTTONS)
   };
 }
 
@@ -4487,6 +4609,18 @@ function buildHelpMenuFlex() {
   };
 }
 
+// Exams/one-time events first, then classes, in the { start, end, code, name, room } shape the digests use
+function digestItems(sched) {
+  const oneTime = sched.oneTime.map(o => ({
+    start: o.start,
+    end: o.end,
+    code: o.isExam ? `สอบ ${o.code}` : o.title,
+    name: o.isExam ? '(Final Exam)' : '',
+    room: o.isExam ? `${o.room} · ที่นั่ง ${o.seat}` : (o.room || '-')
+  }));
+  return [...oneTime, ...sched.classes];
+}
+
 // ─── Automated Notification & Smart Context Scheduler Loop (Runs every 60s) ──────────
 const sentReminderKeys = new Set();
 
@@ -4530,9 +4664,10 @@ setInterval(async () => {
             const curriculum = (userData.curriculum && Array.isArray(userData.curriculum) && userData.curriculum.length > 0)
               ? userData.curriculum
               : (isBmeUserObj ? DEFAULT_BME_CURRICULUM : []);
-            const todayClasses = curriculum.filter(c => c.day === currentDay).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
+            const sched = getScheduleForDate(userId, userData, bangkokDateStr(0), curriculum, []);
+            const todayClasses = digestItems(sched);
             const pendingTasks = (userData.tasks || []).filter(t => !t.done);
-            const customAppointments = (userData.customBlocks && userData.customBlocks[currentDay]) || [];
+            const customAppointments = sched.weekly;
 
             const lineUserId = store._userLine && store._userLine[userId];
             if (lineUserId && hasLine) {
@@ -4565,8 +4700,7 @@ setInterval(async () => {
             const curriculum = (userData.curriculum && Array.isArray(userData.curriculum) && userData.curriculum.length > 0)
               ? userData.curriculum
               : (isBmeUserObj ? DEFAULT_BME_CURRICULUM : []);
-            const tomorrowDay = days[(now.getDay() + 1) % 7];
-            const tomorrowClasses = curriculum.filter(c => c.day === tomorrowDay).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
+            const tomorrowClasses = digestItems(getScheduleForDate(userId, userData, bangkokDateStr(1), curriculum, []));
             const completedTasks = (userData.tasks || []).filter(t => t.done && t.completedAt && t.completedAt.startsWith(todayDateStr));
             const remainingTasks = (userData.tasks || []).filter(t => !t.done);
 
@@ -4582,6 +4716,31 @@ setInterval(async () => {
             }
           }
         }
+      }
+    }
+
+    // ─── 2b. Exam reminders: 20:00 the night before, and 1 hour before the start ───
+    // Sent to anyone with an exam table and a linked LINE account, even when class
+    // reminders are off: missing an exam costs far more than one extra message.
+    for (const userId of activeUserIds) {
+      const exams = getExamsForUser(userId);
+      if (!exams.length) continue;
+      const lineUserId = store._userLine && store._userLine[userId];
+      if (!lineUserId || !hasLine) continue;
+      const today = bangkokDateStr(0);
+      const tomorrow = bangkokDateStr(1);
+      const inOneHour = new Date(Date.now() + 60 * 60 * 1000).toLocaleTimeString('en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', hour12: false });
+
+      for (const ex of exams) {
+        let when = null;
+        if (currentHHMM === '20:00' && ex.date === tomorrow) when = 'tomorrow';
+        else if (ex.date === today && ex.start === inOneHour) when = '1h';
+        if (!when) continue;
+        const key = `exam_${when}_${ex.date}_${ex.code}_${userId}`;
+        if (sentReminderKeys.has(key)) continue;
+        sentReminderKeys.add(key);
+        console.log(`📝 [Exam-Reminder] ${when} for ${ex.code} to user [${userId}]`);
+        await sendLinePush(lineUserId, [buildExamReminderFlex(ex, when)]);
       }
     }
 
@@ -4608,12 +4767,15 @@ setInterval(async () => {
         ? notiSettings.offsets
         : [15];
 
+      // Only classes that still happen today: none once exams start, none that an exam replaces
+      const todaysCourses = getScheduleForDate(userId, userData, bangkokDateStr(0), curriculum, []).classes;
+
       for (const offsetMin of offsets) {
         const targetTime = new Date(now.getTime() + offsetMin * 60 * 1000);
         const targetHHMM = String(targetTime.getHours()).padStart(2, '0') + ':' + String(targetTime.getMinutes()).padStart(2, '0');
 
-        for (const course of curriculum) {
-          if (course.day === currentDay && course.start === targetHHMM) {
+        for (const course of todaysCourses) {
+          if (course.start === targetHHMM) {
             const reminderKey = `${todayDateStr}_${userId}_${course.code}_${course.start}_${offsetMin}m`;
             if (sentReminderKeys.has(reminderKey)) continue;
             sentReminderKeys.add(reminderKey);
@@ -6883,14 +7045,15 @@ const server = http.createServer(async (req, res) => {
       }
 
       // ─── 4. Command: คาบต่อไป / วิชาต่อไป / next / next class / upcoming / now ───
-      if (/^(คาบต่อไป|วิชาต่อไป|next|next class|upcoming|now|เรียนไรต่อ|ห้องต่อไป|คาบถัดไป)/i.test(text)) {
+      if (!/^next\s*exam/i.test(text) && /^(คาบต่อไป|วิชาต่อไป|next|next class|upcoming|now|เรียนไรต่อ|ห้องต่อไป|คาบถัดไป)/i.test(text)) {
         const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
         const currentMinutes = now.getHours() * 60 + now.getMinutes();
         const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
         const dayCode = days[now.getDay()];
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
         const curriculum = userData.curriculum || defaultCurriculum;
-        const todayClasses = curriculum.filter(c => c.day === dayCode).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
+        const todaySched = getScheduleForDate(linkedUserId, userData, bangkokDateStr(0), curriculum, defaultRoutines);
+        const todayClasses = digestItems(todaySched).sort((a, b) => a.start.localeCompare(b.start));
 
         const classesWithMin = todayClasses.map(c => {
           const [sh, sm] = (c.start || '00:00').split(':').map(Number);
@@ -6985,7 +7148,8 @@ const server = http.createServer(async (req, res) => {
 
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
         const curriculum = userData.curriculum || defaultCurriculum;
-        const todayClasses = curriculum.filter(c => c.day === dayCode).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
+        const todaySched = getScheduleForDate(linkedUserId, userData, bangkokDateStr(0), curriculum, defaultRoutines);
+        const todayClasses = digestItems(todaySched).sort((a, b) => a.start.localeCompare(b.start));
 
         const freeSlots = [];
         for (let i = 0; i < todayClasses.length - 1; i++) {
@@ -7009,8 +7173,7 @@ const server = http.createServer(async (req, res) => {
           }
         }
 
-        const dayMapCode = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
-        const todayRoutines = defaultRoutines.filter(r => r.day === dayMapCode[dayCode]);
+        const todayRoutines = todaySched.routines;
 
         await sendLineReply(replyToken, [buildFreeTimeFlex(dayName, dateStr, freeSlots, todayRoutines)]);
         return;
@@ -7055,11 +7218,9 @@ const server = http.createServer(async (req, res) => {
 
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
         const curriculum = userData.curriculum || defaultCurriculum;
-        const tomorrowClasses = curriculum.filter(c => c.day === dayCode).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
-        const dayMapCode = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
-        const tomorrowRoutines = defaultRoutines.filter(r => r.day === dayMapCode[dayCode]);
+        const sched = getScheduleForDate(linkedUserId, userData, bangkokDateStr(1), curriculum, defaultRoutines);
 
-        await sendLineReply(replyToken, [buildScheduleFlex(`${dayName} (พรุ่งนี้/Tomorrow)`, dateStr, tomorrowClasses, tomorrowRoutines)]);
+        await sendLineReply(replyToken, [buildScheduleFlex(`${dayName} (พรุ่งนี้/Tomorrow)`, dateStr, sched.classes, sched.routines, sched)]);
         return;
       }
 
@@ -7083,11 +7244,13 @@ const server = http.createServer(async (req, res) => {
         };
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
         const curriculum = userData.curriculum || defaultCurriculum;
-        const targetClasses = curriculum.filter(c => c.day === targetDayCode).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
-        const dayMapCode = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
-        const targetRoutines = defaultRoutines.filter(r => r.day === dayMapCode[targetDayCode]);
+        // The next date that falls on this weekday (today counts)
+        let offset = 0;
+        while (offset < 7 && weekdayOfDate(bangkokDateStr(offset)) !== targetDayCode) offset++;
+        const targetDate = bangkokDateStr(offset);
+        const sched = getScheduleForDate(linkedUserId, userData, targetDate, curriculum, defaultRoutines);
 
-        await sendLineReply(replyToken, [buildScheduleFlex(`${dayNamesTH[targetDayCode]}`, `Schedule`, targetClasses, targetRoutines)]);
+        await sendLineReply(replyToken, [buildScheduleFlex(`${dayNamesTH[targetDayCode]}`, thaiShortDate(targetDate), sched.classes, sched.routines, sched)]);
         return;
       }
 
@@ -7105,11 +7268,9 @@ const server = http.createServer(async (req, res) => {
 
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
         const curriculum = userData.curriculum || defaultCurriculum;
-        const todayClasses = curriculum.filter(c => c.day === dayCode).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
-        const dayMapCode = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
-        const todayRoutines = defaultRoutines.filter(r => r.day === dayMapCode[dayCode]);
+        const sched = getScheduleForDate(linkedUserId, userData, bangkokDateStr(0), curriculum, defaultRoutines);
 
-        await sendLineReply(replyToken, [buildScheduleFlex(`${dayName}`, dateStr, todayClasses, todayRoutines)]);
+        await sendLineReply(replyToken, [buildScheduleFlex(`${dayName}`, dateStr, sched.classes, sched.routines, sched)]);
         return;
       }
 
@@ -7140,15 +7301,21 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      // ─── 14b. Command: สอบถัดไป / next exam (the one exam coming up, with room and seat) ───
+      if (/^(สอบถัดไป|สอบต่อไป|สอบอะไรต่อ|สอบวิชาต่อไป|ที่นั่งสอบ|next\s*exam)/i.test(text)) {
+        await sendLineReply(replyToken, [buildNextExamFlex(linkedUserId)]);
+        return;
+      }
+
       // ─── 15. Command: ตารางสอบรายวิชา (Detailed Exam Schedule / exam / exams) ───
-      if (/^(ตาราง\s*สอบ|สอบวิชาไรบ้าง|ตารางสอบกลางภาค|สอบกลางภาค|วันสอบวิชา|exam|exams|midterm)/i.test(text)) {
-        await sendLineReply(replyToken, [buildDetailedExamScheduleFlex()]);
+      if (/^(ตาราง\s*สอบ|สอบวิชาไรบ้าง|ตารางสอบปลายภาค|ตารางสอบกลางภาค|สอบปลายภาค|สอบกลางภาค|วันสอบวิชา|exam|exams|final|midterm)/i.test(text)) {
+        await sendLineReply(replyToken, [buildDetailedExamScheduleFlex(linkedUserId)]);
         return;
       }
 
       // ─── 16. Command: D-Day / สอบ / วันสอบ / นับถอยหลัง / dday / countdown ───
       if (/^(สอบ|วันสอบ|dday|d-day|นับถอยหลัง|countdown)/i.test(text)) {
-        await sendLineReply(replyToken, [buildDDayCountdownFlex()]);
+        await sendLineReply(replyToken, [buildDDayCountdownFlex(linkedUserId)]);
         return;
       }
 
@@ -7190,9 +7357,9 @@ const server = http.createServer(async (req, res) => {
 
         const userData = (await dbAdapter.getUserData(linkedUserId)) || {};
         const curriculum = userData.curriculum || defaultCurriculum;
-        const todayClasses = curriculum.filter(c => c.day === dayCode).sort((a, b) => (a.start || '00:00').localeCompare(b.start || '00:00'));
-        const dayMapCode = { monday: 'MO', tuesday: 'TU', wednesday: 'WE', thursday: 'TH', friday: 'FR', saturday: 'SA', sunday: 'SU' };
-        const todayRoutines = defaultRoutines.filter(r => r.day === dayMapCode[dayCode]);
+        const todaySched = getScheduleForDate(linkedUserId, userData, bangkokDateStr(0), curriculum, defaultRoutines);
+        const todayClasses = digestItems(todaySched).sort((a, b) => a.start.localeCompare(b.start));
+        const todayRoutines = todaySched.routines;
         const tasks = userData.tasks || userData.todos || [];
         const pendingTasks = tasks.filter(t => !t.done);
 

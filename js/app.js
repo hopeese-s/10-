@@ -1147,7 +1147,36 @@
     }
     const overrideIds = new Set(customExtra.filter(b => b._override).map(b => b.id));
     const mergedBase = baseBlocks.filter(b => !overrideIds.has(b.id));
-    return [...mergedBase, ...customExtra].sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+    let all = [...mergedBase, ...customExtra];
+
+    // Regular classes are over once the final exam period starts
+    if (isWitchayaUser() && typeof CLASSES_END_DATE !== 'undefined' && dateKey > CLASSES_END_DATE) {
+      all = all.filter(b => b.date || !(b.isClass || b.tag === 'class'));
+    }
+    // A one-time event (exam, appointment) replaces any weekly block it overlaps that day
+    const oneTime = all.filter(b => b.date);
+    if (oneTime.length) {
+      const overlaps = (a, b) => {
+        const as = timeToMinutes(a.start), bs = timeToMinutes(b.start);
+        return as < bs + blockMinutes(b) && bs < as + blockMinutes(a);
+      };
+      const keep = new Set(['prayer', 'food', 'sleep']); // never changed, even when they touch an exam
+      const toHHMM = m => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+      all = all.flatMap(b => {
+        if (b.date || keep.has(b.tag)) return [b];
+        let blk = b;
+        for (const o of oneTime) {
+          if (!overlaps(o, blk)) continue;
+          const bs = timeToMinutes(blk.start), be = bs + blockMinutes(blk);
+          const os = timeToMinutes(o.start), oe = os + blockMinutes(o);
+          if (bs < os && os - bs >= 15) blk = { ...blk, end: o.start };        // shorten: ends when the exam starts
+          else if (be > oe && be - oe >= 15) blk = { ...blk, start: toHHMM(oe) }; // or starts after it ends
+          else return [];                                                      // fully inside the exam: drop
+        }
+        return [blk];
+      });
+    }
+    return all.sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
   }
 
   // All one-time (dated) events from today onward, soonest first: user-added + final exams
